@@ -210,7 +210,10 @@ export class Renderer {
       this.zoneMeters = m;
       const zi = Math.floor(m / 350);
       const frac = m / 350 - zi;
-      const t = frac > 0.92 ? (frac - 0.92) / 0.08 : 0;
+      // Start crossfading at 80% through the zone (was 92%) for a smoother
+      // colour blend — the 40 quantised steps are now spread over 70m
+      // instead of 28m, so the sky/parallax shift feels gradual.
+      const t = frac > 0.80 ? (frac - 0.80) / 0.20 : 0;
       const tq = Math.round(t * 40); // quantised to 40 steps across the fade
       if (zi !== this.lastZoneZi || tq !== this.lastZoneTQ) {
         const ziChanged = zi !== this.lastZoneZi;
@@ -1015,7 +1018,8 @@ export class Renderer {
       c.fillStyle = flash ? '#ffffff' : '#7ef7ff';
       c.fillRect(cx - 8, cy - 15, 7, 2);
       c.fillRect(cx + 1, cy - 15, 7, 2);
-      c.fillRect(cx - 1, cy - 19, 2, 4);
+      // Wider stub (4px, matches band) reaching down to the wings.
+      c.fillRect(cx - 2, cy - 19, 4, 5);
       c.fillStyle = '#ffffff';
       c.fillRect(cx - 1, cy - 15, 2, 2);
     }
@@ -1150,7 +1154,7 @@ export class Renderer {
       }
     } else if (this.g.eventKind === 'desert') {
       for (let i = 0; i < 20; i++) {
-        const x = wrap(this.g.frame * (1.4 + i * 0.08) + this.g.eventSeed + i * 31, VW + 64) - 32;
+        const x = wrap(-this.g.frame * (1.4 + i * 0.08) + this.g.eventSeed + i * 31, VW + 64) - 32;
         const y = 24 + hash(this.g.eventSeed + i * 9.3) * Math.max(90, VH - 48);
         const len = 10 + Math.round(hash(this.g.eventSeed + i * 5.2) * 24);
         c.globalAlpha = alpha * 0.9;
@@ -1159,7 +1163,7 @@ export class Renderer {
         if (i % 4 === 0) c.fillRect(Math.round(x + len * 0.35), Math.round(y + 1), 6, 1);
       }
     } else if (this.g.eventKind === 'tundra') {
-      for (let i = 0; i < 60; i++) {
+      for (let i = 0; i < 120; i++) {
         const x = wrap(hash(this.g.eventSeed + i * 4.2) * VW - this.g.frame * (0.5 + (i % 4) * 0.12), VW);
         const y = wrap(hash(this.g.eventSeed + i * 11.6) * (VH + 30) + this.g.frame * (1.1 + (i % 3) * 0.22), VH + 30) - 15;
         c.globalAlpha = Math.min(0.62, alpha * (1.45 + (i % 3) * 0.15));
