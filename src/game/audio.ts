@@ -80,8 +80,8 @@ export class Sfx {
   muted = false;
   musicMuted = false;
   sfxMuted = false;
-  private static readonly MASTER_VOL = 0.38;
-  private static readonly MUSIC_VOL = 0.28;
+  private static readonly MASTER_VOL = 0.5;
+  private static readonly MUSIC_VOL = 0.45;
 
   init() {
     if (this.ctx) {
@@ -148,6 +148,7 @@ export class Sfx {
     this.init();
     const ctx = this.ctx;
     if (!ctx || ctx.state === 'closed' || !this.musicGain) return;
+    if (ctx.state === 'suspended') void ctx.resume().catch(() => undefined);
     this.musicBiome = biome;
     this.musicIntensity = Math.max(0, Math.min(1, intensity));
     this.musicPlaying = true;
@@ -243,7 +244,7 @@ export class Sfx {
       osc.type = 'sine';
       osc.frequency.setValueAtTime(150, t);
       osc.frequency.exponentialRampToValueAtTime(40, t + 0.1);
-      gain.gain.setValueAtTime(0.4, t);
+      gain.gain.setValueAtTime(0.7, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
       osc.connect(gain);
       gain.connect(this.musicGain);
@@ -256,7 +257,7 @@ export class Sfx {
       filt.type = 'highpass';
       filt.frequency.value = 1000;
       const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.3, t);
+      gain.gain.setValueAtTime(0.5, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
       src.connect(filt);
       filt.connect(gain);
@@ -268,7 +269,7 @@ export class Sfx {
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(200, t);
       osc.frequency.exponentialRampToValueAtTime(100, t + 0.05);
-      oscGain.gain.setValueAtTime(0.2, t);
+      oscGain.gain.setValueAtTime(0.35, t);
       oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
       osc.connect(oscGain);
       oscGain.connect(this.musicGain);
@@ -281,7 +282,7 @@ export class Sfx {
       filt.type = 'highpass';
       filt.frequency.value = 5000;
       const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.14, t);
+      gain.gain.setValueAtTime(0.22, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
       src.connect(filt);
       filt.connect(gain);
@@ -300,7 +301,7 @@ export class Sfx {
     const pattern = BIOME_MUSIC[this.musicBiome];
     const base = 196;
     const interval = 0.24 - this.musicIntensity * 0.04;
-    const noteVol = 0.07 + this.musicIntensity * 0.025;
+    const noteVol = 0.12 + this.musicIntensity * 0.04;
     while (this.musicNextTime < now + 0.24) {
       const step = this.musicStep++ % 16;
       const delay = Math.max(0, this.musicNextTime - now);
@@ -316,7 +317,7 @@ export class Sfx {
       const bassNote = pattern.bass[step];
       if (bassNote !== -1) {
         const freq = base * Math.pow(2, bassNote / 12);
-        this.musicTone('triangle', freq, freq, interval * 1.5, 0.055, delay);
+        this.musicTone('triangle', freq, freq, interval * 1.5, 0.1, delay);
       }
 
       // drums — kick/snare/hihat
@@ -333,7 +334,7 @@ export class Sfx {
       const arpNote = pattern.arp[step];
       if (arpNote !== -1) {
         const freq = base * Math.pow(2, arpNote / 12);
-        this.musicTone('square', freq, freq, interval * 0.3, noteVol * 0.8, delay);
+        this.musicTone('square', freq, freq, interval * 0.3, noteVol * 0.7, delay);
       }
 
       this.musicNextTime += interval;

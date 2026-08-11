@@ -780,10 +780,6 @@ export class Game implements GenHost, RenderHost {
       this.coyote = COYOTE;
       this.diving = false;
       this.spin = 0;
-      if (this.propellerFlashing && this.propellerFlashTimer <= 0) {
-        this.propellerHat = 0;
-        this.propellerFlashing = false;
-      }
       if (impact > 2) {
         this.sx = 1 + Math.min(0.45, impact * 0.045);
         this.sy = 1 - Math.min(0.4, impact * 0.04);
@@ -1079,8 +1075,6 @@ export class Game implements GenHost, RenderHost {
         this.jumps = 0;
         this.cut = true; // a pad launch is never chopped by releasing jump
         this.diving = false;
-        this.propellerHat = 0;
-        this.propellerFlashing = false;
         sp.press = sp.mega ? 16 : 14;
         this.sx = 0.6;
         this.sy = 1.6;
