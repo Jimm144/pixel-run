@@ -1010,7 +1010,8 @@ export class Renderer {
       const flash = this.g.propellerFlashing && Math.sin(this.g.frame * 0.75) > 0;
       c.fillStyle = flash ? '#ffffff' : '#b32a4d';
       c.fillRect(cx - 4, cy - 10, 8, 2);
-      c.fillRect(cx - 2, cy - 12, 4, 2);
+      // One row taller than the old band so the mast touches the dot above.
+      c.fillRect(cx - 2, cy - 13, 4, 3);
       c.fillStyle = flash ? '#ffffff' : '#7ef7ff';
       c.fillRect(cx - 8, cy - 15, 7, 2);
       c.fillRect(cx + 1, cy - 15, 7, 2);
@@ -1307,18 +1308,19 @@ export class Renderer {
       c.fillRect(cx0 - 1, 30, 1, 1);
       c.fillRect(cx0 + 7, 30, 1, 1);
     } else if (this.g.zone.bg === 'jungle') {
-      // fruit coin — round (matches world coin shape)
+      // fruit coin — round (matches world coin shape), stem aligned with the
+      // other biome icons' tops (y 22) so the icon doesn't sit higher.
       c.fillStyle = this.g.zone.coinEdge;
-      c.fillRect(cx0 + 1, 23, 6, 1);
-      c.fillRect(cx0, 24, 8, 5);
-      c.fillRect(cx0 + 1, 29, 6, 1);
+      c.fillRect(cx0 + 1, 24, 6, 1);
+      c.fillRect(cx0, 25, 8, 5);
+      c.fillRect(cx0 + 1, 30, 6, 1);
       c.fillStyle = this.g.zone.coinFill;
-      c.fillRect(cx0 + 1, 24, 6, 4);
+      c.fillRect(cx0 + 1, 25, 6, 4);
       c.fillStyle = this.g.zone.coinShine;
-      c.fillRect(cx0 + 2, 25, 2, 2);
+      c.fillRect(cx0 + 2, 26, 2, 2);
       c.fillStyle = this.g.zone.accent2;
-      c.fillRect(cx0 + 3, 21, 1, 2);
-      c.fillRect(cx0 + 4, 21, 2, 1);
+      c.fillRect(cx0 + 3, 22, 1, 2);
+      c.fillRect(cx0 + 4, 22, 2, 1);
     } else {
       c.fillStyle = this.g.zone.coinEdge;
       c.fillRect(cx0, 23, 7, 7);

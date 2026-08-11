@@ -79,7 +79,6 @@ interface GameState {
   slowAcc: number;
   flash: number;
   flashCol: string;
-  frame: number;
   deathTimer: number;
   deathReported: boolean;
   px: number;
@@ -103,7 +102,6 @@ interface GameState {
   sx: number;
   sy: number;
   spin: number;
-  animT: number;
   ghosts: Ghost[];
   startX: number;
   distance: number;
@@ -165,7 +163,8 @@ export class Game implements GenHost, RenderHost {
   private slowAcc!: number;
   flash!: number;
   flashCol!: string;
-  frame!: number;
+  /** Kept running across runs like the original — not reset by reset(). */
+  frame = 0;
   private deathTimer!: number;
   private deathReported!: boolean;
 
@@ -191,7 +190,8 @@ export class Game implements GenHost, RenderHost {
   sx!: number;
   sy!: number;
   spin!: number;
-  animT!: number;
+  /** Kept running across runs like the original — not reset by reset(). */
+  animT = 0;
   ghosts!: Ghost[];
   startX!: number;
 
@@ -257,14 +257,15 @@ export class Game implements GenHost, RenderHost {
       slowAcc: 0,
       flash: 0,
       flashCol: '#ffffff',
-      frame: 0,
       deathTimer: 0,
       deathReported: false,
       px: 0,
       py: 0,
       vx: 0,
       vy: 0,
-      onGround: false,
+      // The player is grounded at the start of a run — a false value here
+      // shows the air pose during the countdown and lets dive fire early.
+      onGround: true,
       coyote: 0,
       jumps: 0,
       cut: false,
@@ -281,7 +282,6 @@ export class Game implements GenHost, RenderHost {
       sx: 1,
       sy: 1,
       spin: 0,
-      animT: 0,
       ghosts: [],
       startX: 0,
       distance: 0,
@@ -1138,9 +1138,10 @@ export class Game implements GenHost, RenderHost {
     if (this.tripleJump > 0) this.tripleJump--;
     if (this.propellerHat > 0) {
       this.propellerHat--;
-      if (this.propellerHat === 0) {
+      // The final second is the expiry warning blink; at zero the hat is gone.
+      if (this.propellerHat === 60) {
         this.propellerFlashing = true;
-        this.propellerFlashTimer = 120;
+        this.propellerFlashTimer = 60;
       }
     }
     if (this.propellerFlashing && this.propellerFlashTimer > 0) {

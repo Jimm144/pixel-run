@@ -32,12 +32,10 @@ export class FloatTexts {
     cv.width = tw + 4;
     cv.height = h + 4;
     const c = cv.getContext('2d')!;
-    const out = '#1a0a2a';
-    drawText(c, text, 1, 1, scale, out);
-    drawText(c, text, 3, 1, scale, out);
-    drawText(c, text, 2, 0, scale, out);
-    drawText(c, text, 2, 2, scale, out);
-    drawText(c, text, 2, 1, scale, col);
+    // Single offset shadow (same as the HUD) — the old 4-directional outline
+    // cross-hatched the 1px strokes and read as blurry when upscaled.
+    // Fill at local (2,2): the draw call maps that pixel to the text anchor.
+    drawText(c, text, 2, 2, scale, col, '#1a0a2a');
     return cv;
   }
 
