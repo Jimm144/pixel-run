@@ -39,7 +39,11 @@ export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private zoneMeters = -1;
   private lastZoneZi = -1;
-  private lastZoneTQ = -1;
+  private lastZoneT = -1;
+  /** Continuous 0..1 crossfade progress into the next biome. */
+  private zoneFadeT = 0;
+  private transOut: Zone = ZONES[0];
+  private transIn: Zone = ZONES[1];
   /** Bumped at each zone boundary; platform caches rebuild against the new
    *  pure palette exactly once (see getPlatformCache). */
   private platformEpoch = 0;
@@ -62,7 +66,6 @@ export class Renderer {
   private cRockLit = shade(ZONES[0].ground, 0.1);
   private cRivet = shade(ZONES[0].accent, -0.35);
   private cCloud = shade(ZONES[0].far, 0.07);
-  private cBack = mix(ZONES[0].far, ZONES[0].mid, 0.5);
   // HUD strings are only rebuilt when their values change (perf).
   private hudScore = -1;
   private hudScoreStr = '';
@@ -89,7 +92,8 @@ export class Renderer {
   reset() {
     this.zoneMeters = -1;
     this.lastZoneZi = -1;
-    this.lastZoneTQ = -1;
+    this.lastZoneT = -1;
+    this.zoneFadeT = 0;
     this.platformEpoch = 0;
   }
 
@@ -112,9 +116,9 @@ export class Renderer {
     this.cRockLit = shade(Z.ground, 0.1);
     this.cRivet = shade(Z.accent, -0.35);
     this.cCloud = shade(Z.far, 0.07);
-    this.cBack = mix(Z.far, Z.mid, 0.5);
-    // Baked band tiles are colour-keyed — drop them when the palette changes.
-    this.bandCache.clear();
+    // Band tiles are immutable and keyed by (geometry, pure zone colour) —
+    // the fade draws each biome with its own pure colours, so the cache
+    // stays bounded (one tile per biome band) and never needs clearing.
     this.bakeSun();
   }
 
@@ -202,36 +206,35 @@ export class Renderer {
   render() {
     const c = this.ctx;
     const m = Math.floor(this.g.distance / 10);
-    // Recompute zone colours only when the visible result would actually
-    // change (new zone, or a coarse step through the crossfade window).
-    // `m` ticks every 10 distance units — recomputing on every tick was
-    // rebuilding ~25 hex-parsed colours + 15 sky bands for no visual change.
-    if (m !== this.zoneMeters) {
+    // Continuous crossfade into the next biome: colours, sky and the whole
+    // parallax structure morph over the last 20% of a zone instead of the
+    // sky fading while trees pop into cacti at the boundary. The refresh is
+    // cheap (band tiles are pure-colour keyed and cached forever), so the
+    // fade runs unquantised — sky bands update every frame, no stepping.
+    const df = this.g.distance / 10;
+    const zi = Math.floor(df / 350);
+    const frac = df / 350 - zi;
+    const t = frac > 0.8 ? Math.min(1, (frac - 0.8) / 0.2) : 0;
+    if (m !== this.zoneMeters || t !== this.lastZoneT) {
       this.zoneMeters = m;
-      const zi = Math.floor(m / 350);
-      const frac = m / 350 - zi;
-      // Start crossfading at 80% through the zone (was 92%) for a smoother
-      // colour blend — the 40 quantised steps are now spread over 70m
-      // instead of 28m, so the sky/parallax shift feels gradual.
-      const t = frac > 0.80 ? (frac - 0.80) / 0.20 : 0;
-      const tq = Math.round(t * 40); // quantised to 40 steps across the fade
-      if (zi !== this.lastZoneZi || tq !== this.lastZoneTQ) {
-        const ziChanged = zi !== this.lastZoneZi;
+      this.lastZoneT = t;
+      if (zi !== this.lastZoneZi) {
         this.lastZoneZi = zi;
-        this.lastZoneTQ = tq;
-        const i = this.g.zoneOrder[zi % ZONES.length];
-        const ni = this.g.zoneOrder[(zi + 1) % ZONES.length];
-        this.g.zone = lerpZone(ZONES[i], ZONES[ni], tq / 40);
-        // Zone name flips halfway through the crossfade while colours keep
-        // lerping, so keying the platform cache on the name froze every
-        // platform at the half-blended palette. Rebuild only at the boundary
-        // where the zone colours are pure.
-        if (ziChanged) this.platformEpoch++;
-        this.refreshZoneColors(this.g.zone);
-        this.skyBands.length = 0;
-        for (let b = 0; b < 15; b++) {
-          this.skyBands.push(sampleSky(this.g.zone.sky, (b + 0.5) / 15));
-        }
+        // Zone name flips while colours keep lerping, so keying the platform
+        // cache on the name froze every platform at the half-blended palette.
+        // Rebuild platform art only at the boundary where the zone is pure.
+        this.platformEpoch++;
+      }
+      const i = this.g.zoneOrder[zi % ZONES.length];
+      const ni = this.g.zoneOrder[(zi + 1) % ZONES.length];
+      this.g.zone = lerpZone(ZONES[i], ZONES[ni], t);
+      this.transOut = ZONES[i];
+      this.transIn = ZONES[ni];
+      this.zoneFadeT = t;
+      this.refreshZoneColors(this.g.zone);
+      this.skyBands.length = 0;
+      for (let b = 0; b < 15; b++) {
+        this.skyBands.push(sampleSky(this.g.zone.sky, (b + 0.5) / 15));
       }
     }
 
@@ -372,7 +375,6 @@ export class Renderer {
 
   private drawParallax() {
     const c = this.ctx;
-    const Z = this.g.zone;
 
     // soft distant clouds — always subtle, low contrast
     c.globalAlpha = 0.6;
@@ -387,32 +389,49 @@ export class Renderer {
     }
     c.globalAlpha = 1;
 
-    // Every biome: a soft far band for depth, then two scattered landmark
-    // rows at different depths/scales so the scene never reads as one flat row.
+    // Biome structure crossfade: outside the transition window one layer is
+    // drawn; inside it the outgoing biome is drawn fully and the incoming one
+    // fades in on top — a clean weighted blend with no sky bleed-through.
+    const t = this.zoneFadeT;
+    if (t <= 0 || t >= 1) {
+      this.drawParallaxLayer(this.g.zone, 1);
+    } else {
+      this.drawParallaxLayer(this.transOut, 1);
+      this.drawParallaxLayer(this.transIn, t);
+    }
+  }
+
+  // One biome's far band + landmark rows. alpha blends the layer over what is
+  // already on screen (used to crossfade the old biome out / new one in).
+  private drawParallaxLayer(Z: Zone, alpha: number) {
+    const c = this.ctx;
     const bg = Z.bg;
-    const back = this.cBack;
+    const back = mix(Z.far, Z.mid, 0.5);
+    c.globalAlpha = alpha;
     if (bg === 'jungle') {
       this.seeBand(0.12, 128, 30, 0.02, 0.15, 0, Z.far);
-      this.drawLandmarks(back, 0.19, 166, 47, 29, Z.decoMid, 0.65);
-      this.drawLandmarks(Z.mid, 0.28, 180, 56, 73, Z.decoMid, 1);
+      this.drawLandmarks(Z, back, 0.19, 166, 47, 29, Z.decoMid, 0.65);
+      this.drawLandmarks(Z, Z.mid, 0.28, 180, 56, 73, Z.decoMid, 1);
     } else if (bg === 'desert') {
       this.seeBand(0.12, 132, 24, 0.014, 0.08, 0, Z.far);
-      this.drawLandmarks(back, 0.19, 168, 72, 23, Z.decoMid, 0.65);
-      this.drawLandmarks(Z.mid, 0.28, 182, 84, 67, Z.decoMid, 1);
+      this.drawLandmarks(Z, back, 0.19, 168, 72, 23, Z.decoMid, 0.65);
+      this.drawLandmarks(Z, Z.mid, 0.28, 182, 84, 67, Z.decoMid, 1);
     } else if (bg === 'tundra') {
       this.seeBand(0.11, 126, 30, 0.018, 1.6, 0.5, Z.far);
-      this.drawLandmarks(back, 0.18, 168, 53, 41, Z.decoMid, 0.65);
-      this.drawLandmarks(Z.mid, 0.28, 182, 58, 59, Z.decoMid, 1);
+      this.drawLandmarks(Z, back, 0.18, 168, 53, 41, Z.decoMid, 0.65);
+      this.drawLandmarks(Z, Z.mid, 0.28, 182, 58, 59, Z.decoMid, 1);
     } else {
       this.seeBand(0.13, 130, 38, 0.05, 0.2, 0.9, Z.far);
-      this.drawLandmarks(back, 0.18, 166, 55, 19, Z.decoFar, 0.7);
-      this.drawLandmarks(Z.mid, 0.28, 180, 62, 37, Z.decoFar, 1);
+      this.drawLandmarks(Z, back, 0.18, 166, 55, 19, Z.decoFar, 0.7);
+      this.drawLandmarks(Z, Z.mid, 0.28, 180, 62, 37, Z.decoFar, 1);
     }
+    c.globalAlpha = 1;
   }
 
   // Grounded landmark silhouettes — trees / cacti / icebergs / buildings share
   // one calm treeline base so nothing floats and everything reads as a set.
   private drawLandmarks(
+    Z: Zone,
     col: string,
     spd: number,
     baseY: number,
@@ -422,7 +441,7 @@ export class Renderer {
     scale = 1,
   ) {
     const c = this.ctx;
-    const bg = this.g.zone.bg;
+    const bg = Z.bg;
 
     // Flat grounded strip under landmarks — integer-scrolled, no live sampling.
     // Landmarks sit on a fixed baseY so they never swim relative to the ground.
