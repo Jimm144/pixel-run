@@ -29,6 +29,10 @@ import {
   type RenderHost,
 } from './types';
 
+/** Ground-palette fade granularity — steps of the platform re-bake across
+ *  a biome crossfade. Small enough that the steps read as one smooth fade. */
+const PLATFORM_FADE_STEPS = 12;
+
 /**
  * Everything that paints a frame: all draw* methods, the baked sprite caches
  * (sun, power-up icons, band tiles, platform art, sky bands, HUD strings) and
@@ -47,6 +51,9 @@ export class Renderer {
   /** Bumped at each zone boundary; platform caches rebuild against the new
    *  pure palette exactly once (see getPlatformCache). */
   private platformEpoch = 0;
+  /** Quantised fade step (0..PLATFORM_FADE_STEPS) — bumps platformEpoch so
+   *  the ground palette steps along with the sky during the crossfade. */
+  private platformFadeStep = -1;
   private stars: number[] = [];
   private motes: number[] = [];
   private skyBands: string[] = [];
@@ -95,6 +102,7 @@ export class Renderer {
     this.lastZoneT = -1;
     this.zoneFadeT = 0;
     this.platformEpoch = 0;
+    this.platformFadeStep = -1;
   }
 
   /** Called when the canvas size changes — drops size-dependent art caches. */
@@ -207,14 +215,14 @@ export class Renderer {
     const c = this.ctx;
     const m = Math.floor(this.g.distance / 10);
     // Continuous crossfade into the next biome: colours, sky and the whole
-    // parallax structure morph over the last 20% of a zone instead of the
-    // sky fading while trees pop into cacti at the boundary. The refresh is
-    // cheap (band tiles are pure-colour keyed and cached forever), so the
-    // fade runs unquantised — sky bands update every frame, no stepping.
+    // parallax structure morph over the last 8% of a zone (~28m, brisk) and
+    // the ground palette steps along with them so nothing snaps at the
+    // boundary. The refresh is cheap (band tiles are pure-colour keyed and
+    // cached forever), so the fade runs unquantised — no stepping in the sky.
     const df = this.g.distance / 10;
     const zi = Math.floor(df / 350);
     const frac = df / 350 - zi;
-    const t = frac > 0.8 ? Math.min(1, (frac - 0.8) / 0.2) : 0;
+    const t = frac > 0.92 ? Math.min(1, (frac - 0.92) / 0.08) : 0;
     if (m !== this.zoneMeters || t !== this.lastZoneT) {
       this.zoneMeters = m;
       this.lastZoneT = t;
@@ -222,7 +230,7 @@ export class Renderer {
         this.lastZoneZi = zi;
         // Zone name flips while colours keep lerping, so keying the platform
         // cache on the name froze every platform at the half-blended palette.
-        // Rebuild platform art only at the boundary where the zone is pure.
+        // Rebuild platform art at the boundary where the zone is pure.
         this.platformEpoch++;
       }
       const i = this.g.zoneOrder[zi % ZONES.length];
@@ -235,6 +243,17 @@ export class Renderer {
       this.skyBands.length = 0;
       for (let b = 0; b < 15; b++) {
         this.skyBands.push(sampleSky(this.g.zone.sky, (b + 0.5) / 15));
+      }
+      // Platform art is baked with the palette at bake time. Bump the epoch
+      // in quantised steps across the fade so the ground re-bakes with the
+      // mid-blend colours and fades like the sky instead of snapping at the
+      // boundary — a dozen small steps are invisible as "stepping".
+      if (t > 0 && t < 1) {
+        const step = Math.floor(t * PLATFORM_FADE_STEPS);
+        if (step !== this.platformFadeStep) {
+          this.platformFadeStep = step;
+          this.platformEpoch++;
+        }
       }
     }
 
