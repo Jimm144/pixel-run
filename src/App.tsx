@@ -6,7 +6,8 @@ import { Game, type Stats } from './game/engine';
 import { sfx } from './game/audio';
 import { bestScore, loadHighScore, saveHighScore } from './game/storage';
 
-const MUTE_KEY = 'pixeldash.muted';
+const MUSIC_KEY = 'pixeldash.music';
+const SFX_KEY = 'pixeldash.sfx';
 
 export function App() {
   const gameRef = useRef<Game | null>(null);
@@ -14,11 +15,18 @@ export function App() {
   const [stats, setStats] = useState<Stats>({ score: 0, meters: 0, coins: 0, kills: 0, combo: 0 });
   const [best, setBest] = useState(() => bestScore());
   const [newBest, setNewBest] = useState(false);
-  const [muted, setMuted] = useState(() => {
+  const [musicOn, setMusicOn] = useState(() => {
     try {
-      return localStorage.getItem(MUTE_KEY) === '1';
+      return localStorage.getItem(MUSIC_KEY) !== '0';
     } catch {
-      return false;
+      return true;
+    }
+  });
+  const [sfxOn, setSfxOn] = useState(() => {
+    try {
+      return localStorage.getItem(SFX_KEY) !== '0';
+    } catch {
+      return true;
     }
   });
   const [touch, setTouch] = useState(false);
@@ -29,23 +37,31 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    sfx.setMuted(muted);
+    sfx.setMusicMuted(!musicOn);
     try {
-      localStorage.setItem(MUTE_KEY, muted ? '1' : '0');
+      localStorage.setItem(MUSIC_KEY, musicOn ? '1' : '0');
     } catch {}
-  }, [muted]);
+  }, [musicOn]);
+
+  useEffect(() => {
+    sfx.setSfxMuted(!sfxOn);
+    try {
+      localStorage.setItem(SFX_KEY, sfxOn ? '1' : '0');
+    } catch {}
+  }, [sfxOn]);
 
   /* --------------------------------------------------------------- actions */
   const start = useCallback(() => {
     sfx.init();
-    sfx.setMuted(muted);
+    sfx.setMusicMuted(!musicOn);
+    sfx.setSfxMuted(!sfxOn);
     const g = gameRef.current;
     if (!g) return;
     g.best = bestScore();
     g.startRun();
     setNewBest(false);
     setUi('playing');
-  }, [muted]);
+  }, [musicOn, sfxOn]);
 
   const pause = useCallback((feedback = true) => {
     const g = gameRef.current;
@@ -113,11 +129,23 @@ export function App() {
           onPause={pause}
           onResume={resume}
           onStart={start}
-          onToggleMute={() => setMuted((m) => !m)}
+          onToggleMute={() => {
+            const bothOff = !musicOn && !sfxOn;
+            setMusicOn(bothOff ? true : !musicOn);
+            setSfxOn(bothOff ? true : !sfxOn);
+          }}
         />
 
         {ui === 'start' && (
-          <StartScreen best={best} onStart={start} touch={touch} />
+          <StartScreen
+            best={best}
+            onStart={start}
+            touch={touch}
+            musicOn={musicOn}
+            sfxOn={sfxOn}
+            onToggleMusic={() => setMusicOn((v) => !v)}
+            onToggleSfx={() => setSfxOn((v) => !v)}
+          />
         )}
         {ui === 'paused' && (
           <PauseScreen

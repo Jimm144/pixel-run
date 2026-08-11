@@ -55,10 +55,18 @@ export function StartScreen({
   best,
   onStart,
   touch,
+  musicOn,
+  sfxOn,
+  onToggleMusic,
+  onToggleSfx,
 }: {
   best: number;
   onStart: () => void;
   touch: boolean;
+  musicOn: boolean;
+  sfxOn: boolean;
+  onToggleMusic: () => void;
+  onToggleSfx: () => void;
 }) {
   return (
     <div
@@ -107,6 +115,57 @@ export function StartScreen({
             </div>
           </div>
         </Panel>
+        <div className="flex w-full max-w-[420px] gap-2">
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleMusic(); }}
+            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] transition-colors ${
+              musicOn
+                ? 'border-[#3ef2c8]/40 bg-[#3ef2c8]/10 text-[#3ef2c8]'
+                : 'border-[#6f5fa8]/30 bg-[#0d0619] text-[#6f5fa8]'
+            }`}
+          >
+            <svg viewBox="0 0 16 16" className="h-3 w-3" fill="currentColor">
+              {musicOn ? (
+                <>
+                  <path d="M2 5h2l3-3v12l-3-3H2V5z" />
+                  <path d="M10 3.5a5 5 0 0 1 0 9" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M12 1.5a8 8 0 0 1 0 13" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                </>
+              ) : (
+                <>
+                  <path d="M2 5h2l3-3v12l-3-3H2V5z" />
+                  <line x1="11" y1="5" x2="15" y2="11" stroke="currentColor" strokeWidth="1.5" />
+                  <line x1="15" y1="5" x2="11" y2="11" stroke="currentColor" strokeWidth="1.5" />
+                </>
+              )}
+            </svg>
+            {musicOn ? 'MUSIC ON' : 'MUSIC OFF'}
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleSfx(); }}
+            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] transition-colors ${
+              sfxOn
+                ? 'border-[#ffd166]/40 bg-[#ffd166]/10 text-[#ffd166]'
+                : 'border-[#6f5fa8]/30 bg-[#0d0619] text-[#6f5fa8]'
+            }`}
+          >
+            <svg viewBox="0 0 16 16" className="h-3 w-3" fill="currentColor">
+              {sfxOn ? (
+                <>
+                  <path d="M2 5h2l3-3v12l-3-3H2V5z" />
+                  <path d="M10 5.5a2.5 2.5 0 0 1 0 5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                </>
+              ) : (
+                <>
+                  <path d="M2 5h2l3-3v12l-3-3H2V5z" />
+                  <line x1="10" y1="5.5" x2="14" y2="10.5" stroke="currentColor" strokeWidth="1.5" />
+                  <line x1="14" y1="5.5" x2="10" y2="10.5" stroke="currentColor" strokeWidth="1.5" />
+                </>
+              )}
+            </svg>
+            {sfxOn ? 'SFX ON' : 'SFX OFF'}
+          </button>
+        </div>
         <span onClick={(e) => e.stopPropagation()}>
           <PixelButton onClick={onStart} className="flex min-w-[280px] items-center justify-center gap-3">
             <PlayIcon />

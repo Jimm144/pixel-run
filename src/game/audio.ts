@@ -78,6 +78,10 @@ export class Sfx {
   private musicPlaying = false;
   private musicPaused = false;
   muted = false;
+  musicMuted = false;
+  sfxMuted = false;
+  private static readonly MASTER_VOL = 0.38;
+  private static readonly MUSIC_VOL = 0.28;
 
   init() {
     if (this.ctx) {
@@ -91,10 +95,10 @@ export class Sfx {
     try {
       const ctx = new AC();
       const master = ctx.createGain();
-      master.gain.value = 0.32;
+      master.gain.value = Sfx.MASTER_VOL;
       master.connect(ctx.destination);
       const musicGain = ctx.createGain();
-      musicGain.gain.value = 0.11;
+      musicGain.gain.value = Sfx.MUSIC_VOL;
       musicGain.connect(master);
 
       const len = Math.floor(ctx.sampleRate * 0.4);
@@ -116,8 +120,28 @@ export class Sfx {
 
   setMuted(m: boolean) {
     this.muted = m;
-    if (this.master) this.master.gain.value = m ? 0 : 0.32;
+    this.applyVolumes();
     if (!m && this.musicPlaying) this.scheduleMusic();
+  }
+
+  setMusicMuted(m: boolean) {
+    this.musicMuted = m;
+    this.applyMusicGain();
+    if (!m && this.musicPlaying) this.scheduleMusic();
+  }
+
+  setSfxMuted(m: boolean) {
+    this.sfxMuted = m;
+  }
+
+  private applyVolumes() {
+    this.applyMusicGain();
+  }
+
+  private applyMusicGain() {
+    if (!this.musicGain || !this.ctx || this.ctx.state === 'closed') return;
+    const vol = this.muted || this.musicMuted ? 0 : Sfx.MUSIC_VOL;
+    this.musicGain.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.04);
   }
 
   startMusic(biome: MusicBiome, intensity = 0) {
@@ -131,7 +155,7 @@ export class Sfx {
     this.musicStep = 0;
     this.musicNextTime = ctx.currentTime + 0.05;
     this.musicGain.gain.cancelScheduledValues(ctx.currentTime);
-    this.musicGain.gain.setTargetAtTime(0.11, ctx.currentTime, 0.05);
+    this.applyMusicGain();
     this.ensureMusicTimer();
     this.scheduleMusic();
   }
@@ -159,7 +183,7 @@ export class Sfx {
     if (!ctx || ctx.state === 'closed' || !this.musicGain) return;
     this.musicPaused = false;
     this.musicNextTime = ctx.currentTime + 0.05;
-    this.musicGain.gain.setTargetAtTime(0.11, ctx.currentTime, 0.05);
+    this.applyMusicGain();
     this.ensureMusicTimer();
     this.scheduleMusic();
   }
@@ -192,7 +216,7 @@ export class Sfx {
     delay: number,
   ) {
     const ctx = this.ctx;
-    if (!ctx || ctx.state === 'closed' || !this.musicGain || this.muted) return;
+    if (!ctx || ctx.state === 'closed' || !this.musicGain || this.muted || this.musicMuted) return;
     const t = ctx.currentTime + delay;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -210,7 +234,7 @@ export class Sfx {
 
   private musicDrum(type: 'kick' | 'snare' | 'hihat', delay: number) {
     const ctx = this.ctx;
-    if (!ctx || ctx.state === 'closed' || !this.musicGain || this.muted) return;
+    if (!ctx || ctx.state === 'closed' || !this.musicGain || this.muted || this.musicMuted) return;
     const t = ctx.currentTime + delay;
 
     if (type === 'kick') {
@@ -219,7 +243,7 @@ export class Sfx {
       osc.type = 'sine';
       osc.frequency.setValueAtTime(150, t);
       osc.frequency.exponentialRampToValueAtTime(40, t + 0.1);
-      gain.gain.setValueAtTime(0.25, t);
+      gain.gain.setValueAtTime(0.4, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
       osc.connect(gain);
       gain.connect(this.musicGain);
@@ -232,7 +256,7 @@ export class Sfx {
       filt.type = 'highpass';
       filt.frequency.value = 1000;
       const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.18, t);
+      gain.gain.setValueAtTime(0.3, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
       src.connect(filt);
       filt.connect(gain);
@@ -244,7 +268,7 @@ export class Sfx {
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(200, t);
       osc.frequency.exponentialRampToValueAtTime(100, t + 0.05);
-      oscGain.gain.setValueAtTime(0.12, t);
+      oscGain.gain.setValueAtTime(0.2, t);
       oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
       osc.connect(oscGain);
       oscGain.connect(this.musicGain);
@@ -257,7 +281,7 @@ export class Sfx {
       filt.type = 'highpass';
       filt.frequency.value = 5000;
       const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.08, t);
+      gain.gain.setValueAtTime(0.14, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
       src.connect(filt);
       filt.connect(gain);
@@ -269,14 +293,14 @@ export class Sfx {
 
   private scheduleMusic() {
     const ctx = this.ctx;
-    if (!this.musicPlaying || this.musicPaused || !ctx || ctx.state === 'closed' || this.muted)
+    if (!this.musicPlaying || this.musicPaused || !ctx || ctx.state === 'closed' || this.muted || this.musicMuted)
       return;
     const now = ctx.currentTime;
     if (this.musicNextTime < now - 0.3) this.musicNextTime = now + 0.02;
     const pattern = BIOME_MUSIC[this.musicBiome];
     const base = 196;
     const interval = 0.24 - this.musicIntensity * 0.04;
-    const noteVol = 0.035 + this.musicIntensity * 0.018;
+    const noteVol = 0.07 + this.musicIntensity * 0.025;
     while (this.musicNextTime < now + 0.24) {
       const step = this.musicStep++ % 16;
       const delay = Math.max(0, this.musicNextTime - now);
@@ -292,7 +316,7 @@ export class Sfx {
       const bassNote = pattern.bass[step];
       if (bassNote !== -1) {
         const freq = base * Math.pow(2, bassNote / 12);
-        this.musicTone('triangle', freq, freq, interval * 1.5, 0.025, delay);
+        this.musicTone('triangle', freq, freq, interval * 1.5, 0.055, delay);
       }
 
       // drums — kick/snare/hihat
@@ -309,7 +333,7 @@ export class Sfx {
       const arpNote = pattern.arp[step];
       if (arpNote !== -1) {
         const freq = base * Math.pow(2, arpNote / 12);
-        this.musicTone('square', freq, freq, interval * 0.3, noteVol * 0.6, delay);
+        this.musicTone('square', freq, freq, interval * 0.3, noteVol * 0.8, delay);
       }
 
       this.musicNextTime += interval;
@@ -362,7 +386,7 @@ export class Sfx {
   }
 
   play(name: SfxName, param = 0) {
-    if (!this.ctx || this.ctx.state === 'closed' || this.muted) return;
+    if (!this.ctx || this.ctx.state === 'closed' || this.muted || this.sfxMuted) return;
     switch (name) {
       case 'jump':
         this.tone('square', 340, 700, 0.11, 0.22);
