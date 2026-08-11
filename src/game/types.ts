@@ -166,9 +166,8 @@ export interface FloatText {
   text: string;
   col: string;
   scale: number;
-  /** Pre-rendered 5-layer glyphs (4 outline + fill) at normal and pop scale. */
+  /** Pre-rendered glyphs (shadow + fill) — drawn at native scale, scaled up via canvas transform for the pop. */
   sprite: HTMLCanvasElement;
-  spritePop: HTMLCanvasElement;
 }
 export interface Ghost {
   x: number;

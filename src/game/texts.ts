@@ -1,7 +1,7 @@
 import { drawText, FONT_H, textWidth } from './font';
 import { T_CAP, type FloatText } from './types';
 
-/** Floating score/combo texts, each baked once into a 5-layer glyph sprite. */
+/** Floating score/combo texts, baked once into a crisp sprite. */
 export class FloatTexts {
   private texts: FloatText[] = [];
 
@@ -21,7 +21,6 @@ export class FloatTexts {
       col,
       scale,
       sprite: this.bakeFloatText(text, col, scale),
-      spritePop: this.bakeFloatText(text, col, scale + 1),
     });
   }
 
@@ -32,9 +31,9 @@ export class FloatTexts {
     cv.width = tw + 4;
     cv.height = h + 4;
     const c = cv.getContext('2d')!;
-    // Single offset shadow (same as the HUD) — the old 4-directional outline
-    // cross-hatched the 1px strokes and read as blurry when upscaled.
-    // Fill at local (2,2): the draw call maps that pixel to the text anchor.
+    // Prevent the font atlas from being bilinearly interpolated when blitted
+    // onto this small canvas — without this the 1px strokes blur on upscale.
+    c.imageSmoothingEnabled = false;
     drawText(c, text, 2, 2, scale, col, '#1a0a2a');
     return cv;
   }
@@ -54,11 +53,26 @@ export class FloatTexts {
     for (const t of this.texts) {
       const a = t.life / t.max;
       c.globalAlpha = a > 0.4 ? 1 : a / 0.4;
-      const pop = t.life > t.max - 6;
-      const img = pop ? t.spritePop : t.sprite;
       const tx = Math.round(t.x - cam);
-      const tw = textWidth(t.text, pop ? t.scale + 1 : t.scale);
-      c.drawImage(img, Math.round(tx - tw / 2) - 2, Math.round(t.y) - 2);
+      const tw = textWidth(t.text, t.scale);
+      const anchorX = Math.round(tx - tw / 2);
+      const anchorY = Math.round(t.y);
+
+      // Smooth ease-out pop: scale from (scale+1) down to scale over the
+      // first 6 frames, anchored at the text center so the glyph stays put.
+      const age = t.max - t.life;
+      if (age < 6) {
+        const popT = age / 6;
+        const sf = (t.scale + (1 - popT) * (1 - popT)) / t.scale;
+        c.save();
+        c.translate(anchorX, anchorY);
+        c.scale(sf, sf);
+        c.translate(-2, -2);
+        c.drawImage(t.sprite, 0, 0);
+        c.restore();
+      } else {
+        c.drawImage(t.sprite, anchorX - 2, anchorY - 2);
+      }
       c.globalAlpha = 1;
     }
   }
