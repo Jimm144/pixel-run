@@ -1192,7 +1192,7 @@ export class Renderer {
       }
     } else if (this.g.eventKind === 'desert') {
       for (let i = 0; i < 20; i++) {
-        const x = wrap(-this.g.frame * (1.4 + i * 0.08) + this.g.eventSeed + i * 31, VW + 64) - 32;
+        const x = wrap(this.g.frame * (1.4 + i * 0.08) + this.g.eventSeed + i * 31, VW + 64) - 32;
         const y = 24 + hash(this.g.eventSeed + i * 9.3) * Math.max(90, VH - 48);
         const len = 10 + Math.round(hash(this.g.eventSeed + i * 5.2) * 24);
         c.globalAlpha = alpha * 0.9;
