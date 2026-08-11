@@ -1,0 +1,119 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: #08040f;
+}
+
+body {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.font-pixel {
+  font-family: "Press Start 2P", ui-monospace, "Courier New", monospace;
+  letter-spacing: 0.02em;
+}
+
+/* CRT flavour ------------------------------------------------------------- */
+.scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.26) 0px,
+    rgba(0, 0, 0, 0.26) 1px,
+    rgba(0, 0, 0, 0) 1px,
+    rgba(0, 0, 0, 0) 3px
+  );
+  opacity: 0.45;
+}
+
+.vignette {
+  background: radial-gradient(ellipse at 50% 50%, rgba(0, 0, 0, 0) 52%, rgba(0, 0, 0, 0.6) 100%);
+}
+
+/* Animations -------------------------------------------------------------- */
+@keyframes blinkKF {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  61%,
+  100% {
+    opacity: 0.25;
+  }
+}
+.animate-blink {
+  animation: blinkKF 1.05s steps(1, end) infinite;
+}
+
+@keyframes titleKF {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+.animate-title {
+  animation: titleKF 2.4s ease-in-out infinite;
+}
+.animate-title-2 {
+  animation: titleKF 2.4s ease-in-out 0.25s infinite;
+}
+
+@keyframes shakeInKF {
+  0% {
+    transform: scale(2.2) rotate(-6deg);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1) rotate(2deg);
+    opacity: 1;
+  }
+  55% {
+    transform: translateX(-5px) rotate(-2deg);
+  }
+  70% {
+    transform: translateX(5px) rotate(1deg);
+  }
+  85% {
+    transform: translateX(-2px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+.animate-shake-in {
+  animation: shakeInKF 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+@keyframes popKF {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.animate-pop {
+  animation: popKF 0.22s ease-out both;
+}

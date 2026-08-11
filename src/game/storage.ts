@@ -1,0 +1,67 @@
+export interface HighScore {
+  score: number;
+  meters: number;
+  coins: number;
+  ts: number;
+}
+
+const KEY = 'pixeldash.best.v2';
+const LEGACY_KEY = 'pixeldash.scores.v1';
+
+function nonNegativeInt(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback;
+}
+
+function normalizeHighScore(value: unknown): HighScore | null {
+  if (!value || typeof value !== 'object') return null;
+  const entry = value as Partial<HighScore>;
+  if (typeof entry.score !== 'number' || !Number.isFinite(entry.score) || entry.score < 0) return null;
+  return {
+    score: Math.floor(entry.score),
+    meters: nonNegativeInt(entry.meters, 0),
+    coins: nonNegativeInt(entry.coins, 0),
+    ts: nonNegativeInt(entry.ts, Date.now()),
+  };
+}
+
+export function loadHighScore(): HighScore | null {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const parsed = normalizeHighScore(JSON.parse(raw));
+      if (parsed) return parsed;
+    }
+
+    // Carry the best result forward from the old leaderboard format.
+    const legacy = JSON.parse(localStorage.getItem(LEGACY_KEY) || '[]');
+    if (Array.isArray(legacy)) {
+      let best: HighScore | null = null;
+      for (const entry of legacy) {
+        const candidate = normalizeHighScore(entry);
+        if (candidate && (!best || candidate.score > best.score)) best = candidate;
+      }
+      if (best) {
+        try {
+          localStorage.setItem(KEY, JSON.stringify(best));
+        } catch {}
+        return best;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+export function bestScore(): number {
+  return loadHighScore()?.score ?? 0;
+}
+
+export function saveHighScore(entry: HighScore): HighScore | null {
+  const candidate = normalizeHighScore(entry);
+  if (!candidate) return null;
+  const current = loadHighScore();
+  const best = !current || candidate.score > current.score ? candidate : current;
+  try {
+    localStorage.setItem(KEY, JSON.stringify(best));
+  } catch {}
+  return best;
+}
