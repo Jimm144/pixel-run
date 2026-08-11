@@ -4,7 +4,7 @@ import { GameOverScreen, PauseScreen, StartScreen } from './components/Overlays'
 import { type UI } from './components/useGameInput';
 import { Game, type Stats } from './game/engine';
 import { sfx } from './game/audio';
-import { bestScore, loadHighScore, saveHighScore } from './game/storage';
+import { bestScore, loadHighScore, loadLastRun, saveHighScore, saveLastRun } from './game/storage';
 
 const MUSIC_KEY = 'pixeldash.music';
 const SFX_KEY = 'pixeldash.sfx';
@@ -14,6 +14,7 @@ export function App() {
   const [ui, setUi] = useState<UI>('start');
   const [stats, setStats] = useState<Stats>({ score: 0, meters: 0, coins: 0, kills: 0, combo: 0 });
   const [best, setBest] = useState(() => bestScore());
+  const [lastRun, setLastRun] = useState(() => loadLastRun());
   const [newBest, setNewBest] = useState(false);
   const [musicOn, setMusicOn] = useState(() => {
     try {
@@ -49,6 +50,11 @@ export function App() {
       localStorage.setItem(SFX_KEY, sfxOn ? '1' : '0');
     } catch {}
   }, [sfxOn]);
+
+  // Main-menu SFX (button clicks, toggles) sound muffled — like the music.
+  useEffect(() => {
+    sfx.setMuffled(ui === 'start');
+  }, [ui]);
 
   /* --------------------------------------------------------------- actions */
   const start = useCallback(() => {
@@ -87,6 +93,7 @@ export function App() {
 
   const handleDeath = useCallback((s: Stats) => {
     setStats(s);
+    setLastRun(saveLastRun({ score: s.score, meters: s.meters, coins: s.coins, ts: Date.now() }));
     const previous = loadHighScore();
     const beatBest = !previous || s.score > previous.score;
     if (beatBest && s.score > 0) {
@@ -139,6 +146,7 @@ export function App() {
         {ui === 'start' && (
           <StartScreen
             best={best}
+            lastRun={lastRun?.score ?? 0}
             onStart={start}
             touch={touch}
             musicOn={musicOn}

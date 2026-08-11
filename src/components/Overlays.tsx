@@ -53,6 +53,7 @@ function RetryIcon({ className = 'h-[16px] w-[16px]' }: { className?: string }) 
 /* -------------------------------------------------------------------- start */
 export function StartScreen({
   best,
+  lastRun,
   onStart,
   touch,
   musicOn,
@@ -61,6 +62,7 @@ export function StartScreen({
   onToggleSfx,
 }: {
   best: number;
+  lastRun: number;
   onStart: () => void;
   touch: boolean;
   musicOn: boolean;
@@ -88,9 +90,6 @@ export function StartScreen({
 
         <Panel className="w-full">
           <div className="flex flex-col items-center gap-3">
-            <p className="animate-blink font-pixel text-[10px] text-[#ffd166]">
-              {touch ? 'TAP TO START' : 'PRESS SPACE TO START'}
-            </p>
             <div className="grid w-full grid-cols-2 gap-x-3 gap-y-2">
               {touch ? (
                 <>
@@ -110,8 +109,9 @@ export function StartScreen({
                 </>
               )}
             </div>
-            <div className="mt-1 w-full border-t-2 border-[#221741] pt-3 text-center font-pixel text-[8px] text-[#6f5fa8]">
-              PERSONAL BEST <span className="text-[#ffd166]">{pad(best, 6)}</span>
+            <div className="mt-1 flex w-full items-center justify-center gap-4 border-t-2 border-[#221741] pt-3 font-pixel text-[8px] text-[#6f5fa8]">
+              <span>LAST RUN <span className="text-[#9d8fd6]">{pad(lastRun, 6)}</span></span>
+              <span>BEST <span className="text-[#ffd166]">{pad(best, 6)}</span></span>
             </div>
           </div>
         </Panel>
@@ -172,6 +172,15 @@ export function StartScreen({
             <span>START RUN</span>
           </PixelButton>
         </span>
+        <a
+          href="https://github.com/Jimm144/pixel-run"
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="font-pixel text-[7px] text-[#5c4f8e] transition-colors hover:text-[#9d8fd6]"
+        >
+          GITHUB
+        </a>
       </div>
     </div>
   );

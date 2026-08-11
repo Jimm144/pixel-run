@@ -69,6 +69,7 @@ export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private musicGain: GainNode | null = null;
+  private sfxFilter: BiquadFilterNode | null = null;
   private noiseBuf: AudioBuffer | null = null;
   private musicTimer: number | null = null;
   private musicNextTime = 0;
@@ -100,6 +101,12 @@ export class Sfx {
       const musicGain = ctx.createGain();
       musicGain.gain.value = Sfx.MUSIC_VOL;
       musicGain.connect(master);
+      // Lowpass on the SFX chain — `setMuffled` drops it for the main menu so
+      // UI blips sound like they come from another room.
+      const sfxFilter = ctx.createBiquadFilter();
+      sfxFilter.type = 'lowpass';
+      sfxFilter.frequency.value = 22000;
+      sfxFilter.connect(master);
 
       const len = Math.floor(ctx.sampleRate * 0.4);
       const buf = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -109,11 +116,13 @@ export class Sfx {
       this.ctx = ctx;
       this.master = master;
       this.musicGain = musicGain;
+      this.sfxFilter = sfxFilter;
       this.noiseBuf = buf;
     } catch {
       this.ctx = null;
       this.master = null;
       this.musicGain = null;
+      this.sfxFilter = null;
       this.noiseBuf = null;
     }
   }
@@ -132,6 +141,12 @@ export class Sfx {
 
   setSfxMuted(m: boolean) {
     this.sfxMuted = m;
+  }
+
+  /** Drops the SFX lowpass so menu sounds sound muffled (from another room). */
+  setMuffled(m: boolean) {
+    if (!this.sfxFilter || !this.ctx) return;
+    this.sfxFilter.frequency.setTargetAtTime(m ? 520 : 22000, this.ctx.currentTime, 0.04);
   }
 
   private applyVolumes() {
@@ -350,7 +365,7 @@ export class Sfx {
     delay = 0,
   ) {
     const ctx = this.ctx;
-    if (!ctx || ctx.state === 'closed' || !this.master || this.muted) return;
+    if (!ctx || ctx.state === 'closed' || !this.master || !this.sfxFilter || this.muted) return;
     const t = ctx.currentTime + delay;
     const osc = ctx.createOscillator();
     const g = ctx.createGain();
@@ -361,14 +376,14 @@ export class Sfx {
     g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     osc.connect(g);
-    g.connect(this.master);
+    g.connect(this.sfxFilter);
     osc.start(t);
     osc.stop(t + dur + 0.02);
   }
 
   private noise(dur: number, vol = 0.25, freq = 1200, delay = 0) {
     const ctx = this.ctx;
-    if (!ctx || ctx.state === 'closed' || !this.master || !this.noiseBuf || this.muted) return;
+    if (!ctx || ctx.state === 'closed' || !this.master || !this.sfxFilter || !this.noiseBuf || this.muted) return;
     const t = ctx.currentTime + delay;
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuf;
@@ -381,7 +396,7 @@ export class Sfx {
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     src.connect(filt);
     filt.connect(g);
-    g.connect(this.master);
+    g.connect(this.sfxFilter);
     src.start(t);
     src.stop(t + dur + 0.02);
   }

@@ -7,6 +7,7 @@ export interface HighScore {
 
 const KEY = 'pixeldash.best.v2';
 const LEGACY_KEY = 'pixeldash.scores.v1';
+const LAST_KEY = 'pixeldash.lastrun.v1';
 
 function nonNegativeInt(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback;
@@ -64,4 +65,21 @@ export function saveHighScore(entry: HighScore): HighScore | null {
     localStorage.setItem(KEY, JSON.stringify(best));
   } catch {}
   return best;
+}
+
+export function loadLastRun(): HighScore | null {
+  try {
+    const raw = localStorage.getItem(LAST_KEY);
+    if (raw) return normalizeHighScore(JSON.parse(raw));
+  } catch {}
+  return null;
+}
+
+export function saveLastRun(entry: HighScore): HighScore | null {
+  const candidate = normalizeHighScore(entry);
+  if (!candidate) return null;
+  try {
+    localStorage.setItem(LAST_KEY, JSON.stringify(candidate));
+  } catch {}
+  return candidate;
 }
