@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import GameCanvas from './components/GameCanvas';
+import { GameCanvas } from './components/GameCanvas';
 import { GameOverScreen, PauseScreen, StartScreen } from './components/Overlays';
+import { type UI } from './components/useGameInput';
 import { Game, type Stats } from './game/engine';
 import { sfx } from './game/audio';
 import { bestScore, loadHighScore, saveHighScore } from './game/storage';
 
-type UI = 'start' | 'playing' | 'paused' | 'over';
-
 const MUTE_KEY = 'pixeldash.muted';
 
-export default function App() {
+export function App() {
   const gameRef = useRef<Game | null>(null);
   const [ui, setUi] = useState<UI>('start');
   const [stats, setStats] = useState<Stats>({ score: 0, meters: 0, coins: 0, kills: 0, combo: 0 });
@@ -87,37 +86,7 @@ export default function App() {
     setUi('over');
   }, []);
 
-  /* -------------------------------------------------------------- keyboard */
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const code = e.code;
-      if (code === 'KeyM') {
-        setMuted((m) => !m);
-        return;
-      }
-      if (ui === 'start') {
-        if (code === 'Space' || code === 'Enter' || code === 'KeyW' || code === 'ArrowUp') start();
-        return;
-      }
-      if (ui === 'playing') {
-        if (code === 'Escape' || code === 'KeyP') pause();
-        else if (code === 'KeyR') start();
-        return;
-      }
-      if (ui === 'paused') {
-        if (code === 'Escape' || code === 'KeyP' || code === 'Space' || code === 'Enter') resume();
-        else if (code === 'KeyR') start();
-        return;
-      }
-      if (ui === 'over') {
-        if (code === 'Space' || code === 'Enter' || code === 'KeyR' || code === 'ArrowUp') start();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [ui, start, pause, resume]);
-
-  /* ------------------------------------------------------------ auto-pause */
+  /* -------------------------------------------------------------- auto-pause */
   // Auto pause when the page or its window loses focus
   useEffect(() => {
     const onVis = () => {
@@ -136,7 +105,16 @@ export default function App() {
     <div className="fixed inset-0 flex items-center justify-center overflow-hidden bg-[#08040f] font-pixel">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(62,242,200,0.10),transparent_60%)]" />
       <div className="relative h-full w-full max-w-[1600px]">
-        <GameCanvas gameRef={gameRef} onDeath={handleDeath} onPause={pause} showTouch={touch && ui === 'playing'} />
+        <GameCanvas
+          gameRef={gameRef}
+          ui={ui}
+          showTouch={touch && ui === 'playing'}
+          onDeath={handleDeath}
+          onPause={pause}
+          onResume={resume}
+          onStart={start}
+          onToggleMute={() => setMuted((m) => !m)}
+        />
 
         {ui === 'start' && (
           <StartScreen best={best} onStart={start} touch={touch} />
