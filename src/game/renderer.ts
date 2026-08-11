@@ -855,7 +855,7 @@ export class Renderer {
       if (power.dead) continue;
       const x = Math.round(power.x - cam);
       if (x > VW + 14 || x < -14) continue;
-      const y = Math.round(power.y + Math.sin(power.t) * 2);
+      const y = Math.round(power.y - Math.max(0, Math.sin(power.t)) * 2);
       const col = POWERUP_COLORS[power.kind];
       const pulse = 0.28 + (Math.sin(power.t * 1.7) + 1) * 0.1;
       c.globalAlpha = pulse;
@@ -1145,7 +1145,7 @@ export class Renderer {
 
     if (this.g.eventKind === 'jungle') {
       for (let i = 0; i < 22; i++) {
-        const x = wrap(hash(this.g.eventSeed + i * 7.1) * (VW + 30) + this.g.frame * (0.45 + (i % 3) * 0.12), VW + 30) - 15;
+        const x = wrap(hash(this.g.eventSeed + i * 7.1) * (VW + 30) - this.g.frame * (0.45 + (i % 3) * 0.12), VW + 30) - 15;
         const y = 24 + hash(this.g.eventSeed + i * 13.7) * Math.max(80, VH * 0.7);
         c.globalAlpha = alpha * (0.65 + 0.35 * Math.sin(this.g.frame * 0.08 + i));
         c.fillStyle = i % 3 === 0 ? Z.accent : Z.deco;
@@ -1214,12 +1214,12 @@ export class Renderer {
       const col = POWERUP_COLORS[kind];
       c.fillStyle = col;
       if (kind === 'shield') {
-        c.fillRect(x, y, 5, 1);
-        c.fillRect(x - 1, y + 1, 7, 1);
-        c.fillRect(x - 1, y + 2, 7, 1);
-        c.fillRect(x - 1, y + 3, 7, 1);
-        c.fillRect(x, y + 4, 5, 1);
-        c.fillRect(x + 1, y + 5, 3, 1);
+        c.fillRect(x, y, 4, 1);
+        c.fillRect(x - 1, y + 1, 6, 1);
+        c.fillRect(x - 1, y + 2, 6, 1);
+        c.fillRect(x - 1, y + 3, 6, 1);
+        c.fillRect(x, y + 4, 4, 1);
+        c.fillRect(x + 1, y + 5, 2, 1);
       } else if (kind === 'shoes') {
         c.fillRect(x, y + 3, 3, 2);
         c.fillRect(x, y + 1, 2, 2);
@@ -1230,8 +1230,8 @@ export class Renderer {
         c.fillRect(x + 1, y + 1, 1, 2);
         c.fillRect(x + 3, y + 2, 2, 1);
         c.fillRect(x + 4, y + 3, 1, 2);
-        c.fillRect(x + 6, y + 5, 2, 1);
-        c.fillRect(x + 7, y + 6, 1, 1);
+        c.fillRect(x + 6, y + 4, 2, 1);
+        c.fillRect(x + 7, y + 5, 1, 2);
       } else {
         c.fillRect(x + 2, y + 2, 3, 3);
         c.fillRect(x + 3, y, 1, 2);

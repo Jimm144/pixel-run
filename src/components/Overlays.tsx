@@ -118,7 +118,7 @@ export function StartScreen({
         <div className="flex w-full max-w-[420px] gap-2">
           <button
             onClick={(e) => { e.stopPropagation(); onToggleMusic(); }}
-            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] transition-colors ${
+            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] ${
               musicOn
                 ? 'border-[#3ef2c8]/40 bg-[#3ef2c8]/10 text-[#3ef2c8]'
                 : 'border-[#6f5fa8]/30 bg-[#0d0619] text-[#6f5fa8]'
@@ -143,7 +143,7 @@ export function StartScreen({
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onToggleSfx(); }}
-            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] transition-colors ${
+            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] ${
               sfxOn
                 ? 'border-[#ffd166]/40 bg-[#ffd166]/10 text-[#ffd166]'
                 : 'border-[#6f5fa8]/30 bg-[#0d0619] text-[#6f5fa8]'

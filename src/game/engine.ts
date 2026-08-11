@@ -207,6 +207,8 @@ export class Game implements GenHost, RenderHost {
   countdown!: number;
   /** Frames the "GO" flash stays up after the countdown reaches zero. */
   goTimer!: number;
+  /** Beep the countdown ticks — true for run starts, false for unpause resumes. */
+  private countdownTicks = false;
   private bestCombo!: number;
   private nextMilestone!: number;
   eventTimer!: number;
@@ -334,6 +336,7 @@ export class Game implements GenHost, RenderHost {
     this.reset();
     this.phase = 'playing';
     this.countdown = 180;
+    this.countdownTicks = true;
     this.flash = 0.35;
     this.flashCol = '#ffffff';
     sfx.startMusic(this.zone.bg, 0);
@@ -370,6 +373,7 @@ export class Game implements GenHost, RenderHost {
       this.savedMoveDir = 0;
       if (this.jumpHeld) this.jumpBuf = BUFFER; // buffered for GO
       this.countdown = 180; // 3s of "3-2-1-GO" before control resumes
+      this.countdownTicks = false; // silent countdown after unpause
       sfx.resumeMusic();
     }
   }
@@ -528,7 +532,12 @@ export class Game implements GenHost, RenderHost {
     // it must not be reset here or held keys across pause would deaden.
     if (this.countdown > 0) {
       this.countdown--;
-      if (this.countdown === 0) this.goTimer = 30;
+      if (this.countdown === 0) {
+        this.goTimer = 30;
+        if (this.countdownTicks) sfx.play('start'); // GO
+      } else if (this.countdownTicks && this.countdown % 60 === 0) {
+        sfx.play('ui'); // 2, 1 ticks
+      }
       this.particles.update(1);
       return;
     }
