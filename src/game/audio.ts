@@ -1,4 +1,18 @@
-// Minimal WebAudio synth for chiptune-flavoured SFX. No assets, no latency.
+// This file is part of pixel-run.
+// Copyright (C) 2026
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 type MusicBiome = 'jungle' | 'desert' | 'tundra' | 'city';
 type SfxName =
@@ -17,11 +31,38 @@ type SfxName =
   | 'powerup'
   | 'shield';
 
-const MUSIC_PATTERNS: Record<MusicBiome, readonly number[]> = {
-  jungle: [0, 3, 5, 7, 10, 7, 5, 3],
-  desert: [0, 2, 3, 7, 9, 7, 3, 2],
-  tundra: [0, 2, 5, 7, 9, 7, 5, 2],
-  city: [0, 3, 7, 10, 12, 10, 7, 3],
+interface BiomeMusic {
+  melody: readonly number[];
+  bass: readonly number[];
+  drums: readonly number[];
+  arp: readonly number[];
+}
+
+const BIOME_MUSIC: Record<MusicBiome, BiomeMusic> = {
+  jungle: {
+    melody: [2, 5, 9, 12, 14, 12, 9, 5, 2, 0, 2, 5, 7, 5, 3, 5],
+    bass: [0, -1, -5, -1, -12, -1, -7, -1, 0, -1, -5, -1, -12, -1, -7, -1],
+    drums: [1, -1, 3, -1, 1, -1, 3, 2, 1, -1, 3, -1, 1, -1, 3, 2],
+    arp: [0, 4, 7, 12, 7, 4, 0, 4, 7, 12, 7, 4, 0, 4, 7, 12],
+  },
+  desert: {
+    melody: [0, 3, 7, 10, 12, 10, 7, 3, 0, 5, 7, 10, 12, 10, 7, 5],
+    bass: [-12, -1, -1, -1, -7, -1, -1, -1, -14, -1, -1, -1, -12, -1, -1, -1],
+    drums: [1, -1, -1, 2, -1, -1, 1, 3, 1, -1, -1, 2, -1, -1, 1, 3],
+    arp: [0, 3, 7, 10, 7, 3, 0, 3, 7, 10, 7, 3, 0, 3, 7, 10],
+  },
+  tundra: {
+    melody: [0, 4, 7, 12, 14, 12, 7, 4, 0, 3, 7, 10, 12, 10, 7, 3],
+    bass: [-12, -1, -1, -1, -12, -1, -1, -1, -7, -1, -1, -1, -5, -1, -1, -1],
+    drums: [1, -1, -1, -1, 1, -1, -1, -1, 1, -1, -1, 2, 1, -1, -1, -1],
+    arp: [0, 4, 7, 12, 7, 4, 0, 4, 7, 12, 7, 4, 0, 4, 7, 12],
+  },
+  city: {
+    melody: [0, 4, 7, 12, 10, 7, 4, 0, 2, 5, 9, 12, 10, 7, 5, 2],
+    bass: [-12, -1, -12, -1, -9, -1, -9, -1, -5, -1, -5, -1, -7, -1, -7, -1],
+    drums: [1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3, 1, 3],
+    arp: [0, 4, 7, 12, 7, 4, 0, 4, 7, 12, 7, 4, 0, 4, 7, 12],
+  },
 };
 
 export class Sfx {
@@ -66,8 +107,6 @@ export class Sfx {
       this.musicGain = musicGain;
       this.noiseBuf = buf;
     } catch {
-      // Audio is optional; a browser policy or unavailable device must not
-      // prevent the game itself from starting.
       this.ctx = null;
       this.master = null;
       this.musicGain = null;
@@ -169,23 +208,110 @@ export class Sfx {
     osc.stop(t + dur + 0.02);
   }
 
+  private musicDrum(type: 'kick' | 'snare' | 'hihat', delay: number) {
+    const ctx = this.ctx;
+    if (!ctx || ctx.state === 'closed' || !this.musicGain || this.muted) return;
+    const t = ctx.currentTime + delay;
+
+    if (type === 'kick') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(150, t);
+      osc.frequency.exponentialRampToValueAtTime(40, t + 0.1);
+      gain.gain.setValueAtTime(0.25, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+      osc.connect(gain);
+      gain.connect(this.musicGain);
+      osc.start(t);
+      osc.stop(t + 0.12);
+    } else if (type === 'snare') {
+      const src = ctx.createBufferSource();
+      src.buffer = this.noiseBuf;
+      const filt = ctx.createBiquadFilter();
+      filt.type = 'highpass';
+      filt.frequency.value = 1000;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.18, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+      src.connect(filt);
+      filt.connect(gain);
+      gain.connect(this.musicGain);
+      src.start(t);
+      src.stop(t + 0.12);
+      const osc = ctx.createOscillator();
+      const oscGain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(200, t);
+      osc.frequency.exponentialRampToValueAtTime(100, t + 0.05);
+      oscGain.gain.setValueAtTime(0.12, t);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+      osc.connect(oscGain);
+      oscGain.connect(this.musicGain);
+      osc.start(t);
+      osc.stop(t + 0.07);
+    } else if (type === 'hihat') {
+      const src = ctx.createBufferSource();
+      src.buffer = this.noiseBuf;
+      const filt = ctx.createBiquadFilter();
+      filt.type = 'highpass';
+      filt.frequency.value = 5000;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.08, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+      src.connect(filt);
+      filt.connect(gain);
+      gain.connect(this.musicGain);
+      src.start(t);
+      src.stop(t + 0.07);
+    }
+  }
+
   private scheduleMusic() {
     const ctx = this.ctx;
-    if (!this.musicPlaying || this.musicPaused || !ctx || ctx.state === 'closed' || this.muted) return;
+    if (!this.musicPlaying || this.musicPaused || !ctx || ctx.state === 'closed' || this.muted)
+      return;
     const now = ctx.currentTime;
     if (this.musicNextTime < now - 0.3) this.musicNextTime = now + 0.02;
-    const pattern = MUSIC_PATTERNS[this.musicBiome];
+    const pattern = BIOME_MUSIC[this.musicBiome];
     const base = 196;
     const interval = 0.24 - this.musicIntensity * 0.04;
+    const noteVol = 0.035 + this.musicIntensity * 0.018;
     while (this.musicNextTime < now + 0.24) {
-      const step = this.musicStep++;
-      const note = pattern[step % pattern.length] + (step % 8 === 4 ? 12 : 0);
-      const freq = base * Math.pow(2, note / 12);
+      const step = this.musicStep++ % 16;
       const delay = Math.max(0, this.musicNextTime - now);
-      const noteVol = 0.035 + this.musicIntensity * 0.018;
-      this.musicTone('square', freq, freq * 1.01, interval * 0.78, noteVol, delay);
-      if (step % 4 === 0)
-        this.musicTone('triangle', base * 0.5, base * 0.5, interval * 1.5, 0.025, delay);
+
+      // melody — square lead
+      const melodyNote = pattern.melody[step];
+      if (melodyNote !== -1) {
+        const freq = base * Math.pow(2, melodyNote / 12);
+        this.musicTone('square', freq, freq * 1.01, interval * 0.78, noteVol, delay);
+      }
+
+      // bass — triangle, lower octave
+      const bassNote = pattern.bass[step];
+      if (bassNote !== -1) {
+        const freq = base * Math.pow(2, bassNote / 12);
+        this.musicTone('triangle', freq, freq, interval * 1.5, 0.025, delay);
+      }
+
+      // drums — kick/snare/hihat
+      const drum = pattern.drums[step];
+      if (drum === 1) this.musicDrum('kick', delay);
+      else if (drum === 2) this.musicDrum('snare', delay);
+      else if (drum === 3) this.musicDrum('hihat', delay);
+      else if (drum === 4) {
+        this.musicDrum('kick', delay);
+        this.musicDrum('hihat', delay);
+      }
+
+      // arpeggio — fast square, quiet
+      const arpNote = pattern.arp[step];
+      if (arpNote !== -1) {
+        const freq = base * Math.pow(2, arpNote / 12);
+        this.musicTone('square', freq, freq, interval * 0.3, noteVol * 0.6, delay);
+      }
+
       this.musicNextTime += interval;
     }
   }
