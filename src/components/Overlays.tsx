@@ -201,20 +201,22 @@ export function PauseScreen({
   meters: number;
 }) {
   return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-[#08040f]/80 p-4">
-      <Panel className="w-full max-w-[320px]">
-        <h2 className="mb-4 text-center font-pixel text-[18px] text-[#3ef2c8]">PAUSED</h2>
-        <div className="mb-4 grid grid-cols-2 gap-2">
+    <div className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-[#08040f]/80 p-3 [@media(max-height:640px)]:items-end [@media(max-height:640px)]:pb-8">
+      <Panel className="w-full max-w-[300px] p-4">
+        <h2 className="mb-3 text-center font-pixel text-[16px] text-[#3ef2c8]">PAUSED</h2>
+        <div className="mb-3 grid grid-cols-2 gap-2">
           <Stat label="SCORE" value={pad(score, 6)} color="#ffffff" />
           <Stat label="DIST" value={meters + 'M'} color="#3ef2c8" />
         </div>
         <div className="flex flex-col gap-2">
-          <PixelButton onClick={onResume}>RESUME</PixelButton>
+          <PixelButton onClick={onResume} small className="py-2.5">
+            RESUME
+          </PixelButton>
           <div className="grid grid-cols-2 gap-2">
-            <PixelButton variant="danger" onClick={onRestart} small className="py-3">
+            <PixelButton variant="danger" onClick={onRestart} small className="py-2.5">
               RESTART
             </PixelButton>
-            <PixelButton variant="ghost" onClick={onQuit} small className="py-3">
+            <PixelButton variant="ghost" onClick={onQuit} small className="py-2.5">
               MENU
             </PixelButton>
           </div>

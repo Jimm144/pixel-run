@@ -73,6 +73,12 @@ export class Renderer {
   private cRockLit = shade(ZONES[0].ground, 0.1);
   private cRivet = shade(ZONES[0].accent, -0.35);
   private cCloud = shade(ZONES[0].far, 0.07);
+  /** HUD zoom (1 on desktop) — keeps the score/distance text readable on
+   *  phones, where the whole canvas is scaled up from a small buffer. */
+  private hudScale = 1;
+  /** Extra top offset for the right-side HUD (meters/coins/power-ups), in
+   *  HUD space — clears the DOM touch pause button in the top-right corner. */
+  private hudTopShift = 0;
   // HUD strings are only rebuilt when their values change (perf).
   private hudScore = -1;
   private hudScoreStr = '';
@@ -112,6 +118,14 @@ export class Renderer {
       p.cache = undefined;
       p.cacheEpoch = undefined;
     }
+  }
+
+  setHudScale(v: number) {
+    this.hudScale = Math.max(1, v);
+  }
+
+  setHudTopShift(v: number) {
+    this.hudTopShift = Math.max(0, Math.round(v));
   }
 
   // Cache every derived platform colour once per zone change (never per frame).
@@ -1243,12 +1257,14 @@ export class Renderer {
   private drawPowerUpHud() {
     const c = this.ctx;
     let x = 6;
-    const y = 45;
+    // HUD space is scaled by hudScale; W is the virtual width in that space.
+    const y = 45 + this.hudTopShift;
+    const W = Math.floor(VW / this.hudScale);
     const status = (remaining: number, kind: PowerUpKind) => {
       // The propeller flashes with 0s left — draw the icon alone, no "0".
       const text = remaining > 0 ? String(Math.ceil(remaining / 60)) : '';
       const width = textWidth(text, 1) + 12;
-      if (x + width > VW - 6) return;
+      if (x + width > W - 6) return;
       const col = POWERUP_COLORS[kind];
       c.fillStyle = col;
       if (kind === 'shield') {
@@ -1289,6 +1305,14 @@ export class Renderer {
     const c = this.ctx;
     if (this.g.phase === 'ready') return;
     const m = Math.floor(this.g.distance / 10);
+    // The HUD draws in its own scaled space so the text zooms up on phones
+    // while the world keeps its pixel grid; W is the virtual width there.
+    const hs = this.hudScale;
+    c.save();
+    if (hs !== 1) c.scale(hs, hs);
+    const W = Math.floor(VW / hs);
+    // Right-side stats drop below the touch pause button when it is shown.
+    const dTop = this.hudTopShift;
 
     // score — only rebuild the padded strings when the values change
     drawText(c, 'SCORE', 6, 6, 1, this.g.zone.accent2, '#150a24');
@@ -1319,59 +1343,59 @@ export class Renderer {
       this.hudMText = m + 'M';
     }
     const dtxt = this.hudMText;
-    drawText(c, dtxt, VW - 6 - textWidth(dtxt, 2), 6, 2, this.g.zone.accent, '#150a24');
+    drawText(c, dtxt, W - 6 - textWidth(dtxt, 2), 6 + dTop, 2, this.g.zone.accent, '#150a24');
     if (this.hudCoins !== this.g.coins) {
       this.hudCoins = this.g.coins;
       this.hudCoinsText = 'X' + pad(this.g.coins, 3);
     }
     const ctxt = this.hudCoinsText;
     const cw = textWidth(ctxt, 1) + 10;
-    const cx0 = VW - 6 - cw;
+    const cx0 = W - 6 - cw;
     // HUD coin matches world coin shape per biome
     if (this.g.zone.bg === 'tundra') {
       c.fillStyle = this.g.zone.coinEdge;
-      c.fillRect(cx0, 22, 8, 7);
+      c.fillRect(cx0, 22 + dTop, 8, 7);
       c.fillStyle = this.g.zone.coinFill;
-      c.fillRect(cx0 + 1, 23, 6, 5);
+      c.fillRect(cx0 + 1, 23 + dTop, 6, 5);
       c.fillStyle = this.g.zone.coinShine;
-      c.fillRect(cx0 + 3, 22, 2, 1);
-      c.fillRect(cx0 + 3, 29, 2, 1);
-      c.fillRect(cx0, 25, 1, 2);
-      c.fillRect(cx0 + 7, 25, 1, 2);
+      c.fillRect(cx0 + 3, 22 + dTop, 2, 1);
+      c.fillRect(cx0 + 3, 29 + dTop, 2, 1);
+      c.fillRect(cx0, 25 + dTop, 1, 2);
+      c.fillRect(cx0 + 7, 25 + dTop, 1, 2);
     } else if (this.g.zone.bg === 'desert') {
       c.fillStyle = this.g.zone.coinEdge;
-      c.fillRect(cx0, 23, 7, 7);
+      c.fillRect(cx0, 23 + dTop, 7, 7);
       c.fillStyle = this.g.zone.coinFill;
-      c.fillRect(cx0, 23, 7, 6);
+      c.fillRect(cx0, 23 + dTop, 7, 6);
       c.fillStyle = this.g.zone.coinShine;
-      c.fillRect(cx0 + 1, 24, 1, 3);
-      c.fillRect(cx0 - 1, 22, 1, 1);
-      c.fillRect(cx0 + 7, 22, 1, 1);
-      c.fillRect(cx0 - 1, 30, 1, 1);
-      c.fillRect(cx0 + 7, 30, 1, 1);
+      c.fillRect(cx0 + 1, 24 + dTop, 1, 3);
+      c.fillRect(cx0 - 1, 22 + dTop, 1, 1);
+      c.fillRect(cx0 + 7, 22 + dTop, 1, 1);
+      c.fillRect(cx0 - 1, 30 + dTop, 1, 1);
+      c.fillRect(cx0 + 7, 30 + dTop, 1, 1);
     } else if (this.g.zone.bg === 'jungle') {
       // fruit coin — round (matches world coin shape), stem aligned with the
       // other biome icons' tops (y 22) so the icon doesn't sit higher.
       c.fillStyle = this.g.zone.coinEdge;
-      c.fillRect(cx0 + 1, 24, 6, 1);
-      c.fillRect(cx0, 25, 8, 5);
-      c.fillRect(cx0 + 1, 30, 6, 1);
+      c.fillRect(cx0 + 1, 24 + dTop, 6, 1);
+      c.fillRect(cx0, 25 + dTop, 8, 5);
+      c.fillRect(cx0 + 1, 30 + dTop, 6, 1);
       c.fillStyle = this.g.zone.coinFill;
-      c.fillRect(cx0 + 1, 25, 6, 4);
+      c.fillRect(cx0 + 1, 25 + dTop, 6, 4);
       c.fillStyle = this.g.zone.coinShine;
-      c.fillRect(cx0 + 2, 26, 2, 2);
+      c.fillRect(cx0 + 2, 26 + dTop, 2, 2);
       c.fillStyle = this.g.zone.accent2;
-      c.fillRect(cx0 + 3, 22, 1, 2);
-      c.fillRect(cx0 + 4, 22, 2, 1);
+      c.fillRect(cx0 + 3, 22 + dTop, 1, 2);
+      c.fillRect(cx0 + 4, 22 + dTop, 2, 1);
     } else {
       c.fillStyle = this.g.zone.coinEdge;
-      c.fillRect(cx0, 23, 7, 7);
+      c.fillRect(cx0, 23 + dTop, 7, 7);
       c.fillStyle = this.g.zone.coinFill;
-      c.fillRect(cx0, 23, 7, 6);
+      c.fillRect(cx0, 23 + dTop, 7, 6);
       c.fillStyle = this.g.zone.coinShine;
-      c.fillRect(cx0 + 1, 24, 1, 3);
+      c.fillRect(cx0 + 1, 24 + dTop, 1, 3);
     }
-    drawText(c, ctxt, cx0 + 10, 23, 1, this.g.zone.coinFill, '#150a24');
+    drawText(c, ctxt, cx0 + 10, 23 + dTop, 1, this.g.zone.coinFill, '#150a24');
 
     // combo — fixed layout, colour-only pulse (no size jitter)
     if (this.g.combo > 1) {
@@ -1380,11 +1404,12 @@ export class Renderer {
       const flash = this.g.comboPulse;
       const col = flash > 0.4 ? '#ffffff' : '#ffd166';
       const bw = 78;
-      drawTextCentered(c, label, VW / 2, 8, 1, col, '#150a24');
+      drawTextCentered(c, label, W / 2, 8, 1, col, '#150a24');
       c.fillStyle = '#150a24';
-      c.fillRect(VW / 2 - bw / 2 - 1, 18, bw + 2, 5);
+      c.fillRect(W / 2 - bw / 2 - 1, 18, bw + 2, 5);
       c.fillStyle = t > 0.3 ? this.g.zone.accent : '#ff4d6d';
-      c.fillRect(VW / 2 - bw / 2, 19, Math.round(bw * t), 3);
+      c.fillRect(W / 2 - bw / 2, 19, Math.round(bw * t), 3);
     }
+    c.restore();
   }
 }

@@ -100,10 +100,10 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       // shifts, so only rebuild after an orientation switch.
       let viewport = viewportRef.current;
       if (!viewport || viewport.portrait !== portrait) {
-        const w = portrait ? 260 : BASE_VW;
+        const w = portrait ? 240 : BASE_VW;
         const ratio = portrait
           ? Math.min(2.2, Math.max(1.45, r.height / r.width))
-          : Math.min(1.15, Math.max(0.55, r.height / r.width));
+          : Math.min(1.15, Math.max(0.45, r.height / r.width));
         const h = Math.round(w * ratio);
         viewport = { portrait, w, h };
         viewportRef.current = viewport;
@@ -113,6 +113,15 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       const s = Math.min(r.width / VW, r.height / VH);
       cv.style.width = Math.round(VW * s) + 'px';
       cv.style.height = Math.round(VH * s) + 'px';
+      // Keep the HUD at a steady on-screen size: it is drawn inside the
+      // buffer, so it zooms with the canvas — compensate by scaling it up
+      // when the canvas is small (phones), never down (desktop stays 1).
+      gameRef.current?.setHudScale(Math.max(1, Math.min(1.9, 2.9 / s)));
+      // On touch devices the DOM pause button sits in the top-right corner,
+      // right on top of the meters/coins — shift the right-side HUD down so
+      // it sits below the button.
+      const coarse = window.matchMedia('(pointer: coarse)').matches;
+      gameRef.current?.setHudTopShift(coarse ? Math.max(0, Math.ceil(72 / s) - 6) : 0);
     };
     fit();
     window.addEventListener('resize', fit);

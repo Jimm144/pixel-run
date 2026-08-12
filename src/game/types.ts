@@ -5,6 +5,8 @@ export const BASE_VW = 400;
 export const BASE_VH = 225;
 /** Tallest internal buffer — beyond this the ground dirt can't reach bottom. */
 export const MAX_VH = 575;
+/** Shortest internal buffer — used by landscape phones to zoom the game in. */
+export const MIN_VH = 170;
 
 /** Live canvas size. Desktop keeps the base size; portrait zooms in. */
 export let VW = 400;
@@ -21,7 +23,7 @@ export function worldOffsetY() {
 
 export function setViewportSize(w: number, h: number) {
   VW = Math.max(220, Math.round(w));
-  VH = Math.min(MAX_VH, Math.max(BASE_VH, Math.round(h)));
+  VH = Math.min(MAX_VH, Math.max(MIN_VH, Math.round(h)));
 }
 
 export type Phase = 'ready' | 'playing' | 'paused' | 'dead';

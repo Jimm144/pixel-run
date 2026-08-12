@@ -348,6 +348,16 @@ export class Game implements GenHost, RenderHost {
     this.renderer.invalidateViewport();
   }
 
+  /** HUD zoom (1 on desktop) — larger on phones where the canvas is scaled up. */
+  setHudScale(v: number) {
+    this.renderer.setHudScale(v);
+  }
+
+  /** Extra top offset for the right-side HUD — clears the touch pause button. */
+  setHudTopShift(v: number) {
+    this.renderer.setHudTopShift(v);
+  }
+
   pause() {
     if (this.phase !== 'playing') return;
     this.phase = 'paused';
