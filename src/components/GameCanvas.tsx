@@ -149,27 +149,39 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
 
       {showTouch && (
         <>
-          <button
-            type="button"
-            aria-label="Pause"
-            className="absolute top-4 right-4 z-20 flex h-12 w-12 items-center justify-center rounded-none border-2 border-[#08040f] bg-[#3ef2c8] text-[#0b0616] shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow,background-color] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
-            {...pauseHandlers}
-          >
-            <svg aria-hidden="true" viewBox="0 0 16 16" className="h-5 w-5" fill="currentColor" shapeRendering="crispEdges">
-              <rect x="3" y="2" width="3" height="12" />
-              <rect x="10" y="2" width="3" height="12" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            aria-label="Dive"
-            className="absolute bottom-4 left-4 z-20 flex h-16 w-16 items-center justify-center rounded-none border-2 border-[#08040f] bg-[#ffd166] text-[#0b0616] shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow,background-color] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
-            {...diveHandlers}
-          >
-            <svg aria-hidden="true" viewBox="0 0 32 32" className="h-9 w-9" fill="currentColor" shapeRendering="crispEdges">
-              <path d="M12 4h8v14h7L16 29 5 18h7V4z" />
-            </svg>
-          </button>
+          <div className="animate-bob absolute top-[92px] right-4 z-20">
+            <button
+              type="button"
+              aria-label="Pause"
+              className="relative flex h-12 w-12 items-center justify-center border-2 border-[#3ef2c8] bg-[#140a26]/95 text-[#3ef2c8] shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
+              {...pauseHandlers}
+            >
+              <span className="pointer-events-none absolute -top-[4px] -left-[4px] h-2 w-2 bg-[#3ef2c8]" />
+              <span className="pointer-events-none absolute -top-[4px] -right-[4px] h-2 w-2 bg-[#3ef2c8]" />
+              <span className="pointer-events-none absolute -bottom-[4px] -left-[4px] h-2 w-2 bg-[#3ef2c8]" />
+              <span className="pointer-events-none absolute -bottom-[4px] -right-[4px] h-2 w-2 bg-[#3ef2c8]" />
+              <svg aria-hidden="true" viewBox="0 0 16 16" className="h-5 w-5" fill="currentColor" shapeRendering="crispEdges">
+                <rect x="3" y="2" width="3" height="12" />
+                <rect x="10" y="2" width="3" height="12" />
+              </svg>
+            </button>
+          </div>
+          <div className="animate-bob-delayed absolute bottom-4 left-4 z-20">
+            <button
+              type="button"
+              aria-label="Dive"
+              className="relative flex h-16 w-16 items-center justify-center border-2 border-[#ffd166] bg-[#140a26]/95 text-[#ffd166] shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
+              {...diveHandlers}
+            >
+              <span className="pointer-events-none absolute -top-[4px] -left-[4px] h-2 w-2 bg-[#ffd166]" />
+              <span className="pointer-events-none absolute -top-[4px] -right-[4px] h-2 w-2 bg-[#ffd166]" />
+              <span className="pointer-events-none absolute -bottom-[4px] -left-[4px] h-2 w-2 bg-[#ffd166]" />
+              <span className="pointer-events-none absolute -bottom-[4px] -right-[4px] h-2 w-2 bg-[#ffd166]" />
+              <svg aria-hidden="true" viewBox="0 0 32 32" className="h-9 w-9" fill="currentColor" shapeRendering="crispEdges">
+                <path d="M12 4h8v14h7L16 29 5 18h7V4z" />
+              </svg>
+            </button>
+          </div>
         </>
       )}
     </div>

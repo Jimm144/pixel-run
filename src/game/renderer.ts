@@ -335,13 +335,8 @@ export class Renderer {
     const period = VW + 140;
     const sunX = (((300 - this.g.camX * 0.04) % period) + period) % period - 70;
     if (this.sunSprite) {
-      if (this.mobileView) {
-        // Smaller and lower on phones so it never rides up into the HUD;
-        // its bottom edge tucks behind the ridge like a setting sun.
-        c.drawImage(this.sunSprite, Math.round(sunX) - 20, 38, 40, 40);
-      } else {
-        c.drawImage(this.sunSprite, Math.round(sunX) - 32, 36);
-      }
+      // Mobile puts it well below the HUD block, just above the ridge.
+      c.drawImage(this.sunSprite, Math.round(sunX) - 32, (this.mobileView ? 84 : 68) - 32);
     }
     // stars
     c.fillStyle = this.g.zone.star;
@@ -455,19 +450,19 @@ export class Renderer {
     // rows sink, giving each parallax layer clear vertical breathing room.
     const m = this.mobileView;
     if (bg === 'jungle') {
-      this.seeBand(0.12, m ? 112 : 120, 30, 0.02, 0.15, 0, Z.far);
+      this.seeBand(0.12, m ? 140 : 120, 30, 0.02, 0.15, 0, Z.far);
       this.drawLandmarks(Z, back, 0.19, m ? 136 : 152, 47, 29, Z.decoMid, m ? 0.8 : 0.65);
       this.drawLandmarks(Z, Z.mid, 0.28, m ? 168 : 172, 56, 73, Z.decoMid, 1);
     } else if (bg === 'desert') {
-      this.seeBand(0.12, m ? 116 : 124, 24, 0.014, 0.08, 0, Z.far);
+      this.seeBand(0.12, m ? 144 : 124, 24, 0.014, 0.08, 0, Z.far);
       this.drawLandmarks(Z, back, 0.19, m ? 138 : 154, 72, 23, Z.decoMid, m ? 0.8 : 0.65);
       this.drawLandmarks(Z, Z.mid, 0.28, m ? 170 : 174, 84, 67, Z.decoMid, 1);
     } else if (bg === 'tundra') {
-      this.seeBand(0.11, m ? 110 : 118, 30, 0.018, 1.6, 0.5, Z.far);
+      this.seeBand(0.11, m ? 140 : 118, 30, 0.018, 1.6, 0.5, Z.far);
       this.drawLandmarks(Z, back, 0.18, m ? 138 : 154, 53, 41, Z.decoMid, m ? 0.8 : 0.65);
       this.drawLandmarks(Z, Z.mid, 0.28, m ? 170 : 174, 58, 59, Z.decoMid, 1);
     } else {
-      this.seeBand(0.13, m ? 114 : 122, 38, 0.05, 0.2, 0.9, Z.far);
+      this.seeBand(0.13, m ? 142 : 122, 38, 0.05, 0.2, 0.9, Z.far);
       this.drawLandmarks(Z, back, 0.18, m ? 136 : 152, 55, 19, Z.decoFar, m ? 0.8 : 0.7);
       this.drawLandmarks(Z, Z.mid, 0.28, m ? 168 : 172, 62, 37, Z.decoFar, 1);
     }
@@ -1301,13 +1296,11 @@ export class Renderer {
         c.fillRect(x + 6, y + 4, 2, 1);
         c.fillRect(x + 7, y + 5, 1, 2);
       } else {
-        // propeller — one connected piece: top wings, mast through the hub,
-        // band at the bottom (mirrors the world sprite's silhouette)
-        c.fillRect(x + 4, y + 2, 1, 4);
-        c.fillRect(x + 2, y + 1, 2, 1);
-        c.fillRect(x + 5, y + 1, 2, 1);
+        // propeller — 3-blade rotor, same shape as the pickup sprite
+        c.fillRect(x + 4, y, 1, 3);
         c.fillRect(x + 3, y + 2, 3, 3);
-        c.fillRect(x + 2, y + 6, 6, 1);
+        c.fillRect(x + 2, y + 3, 2, 1);
+        c.fillRect(x + 5, y + 3, 2, 1);
       }
       if (text) drawText(c, text, x + 9, y, 1, col, '#150a24');
       x += width + 4;
@@ -1359,9 +1352,8 @@ export class Renderer {
     }
     this.drawPowerUpHud();
 
-    // distance + coins (right) — hidden on mobile; the touch pause button
-    // owns the top-right corner there
-    if (!mobile) {
+    // distance + coins (right)
+    {
       if (this.hudM !== m) {
         this.hudM = m;
         this.hudMText = m + 'M';
@@ -1422,11 +1414,11 @@ export class Renderer {
       drawText(c, ctxt, cx0 + 10, 23, 1, this.g.zone.coinFill, '#150a24');
     }
 
-    // combo — fixed layout, colour-only pulse (no size jitter). Mobile draws
-    // it in raw screen space, low enough to stay clear of the score block.
+    // combo — fixed layout, colour-only pulse (no size jitter). Mobile keeps
+    // it at the top too, just left of centre so it clears the meters.
     if (mobile) {
       c.restore();
-      this.drawCombo(VW / 2, 40);
+      this.drawCombo(VW * 0.45, 8);
     } else {
       this.drawCombo(W / 2, 8);
       c.restore();
