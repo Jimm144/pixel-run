@@ -335,7 +335,13 @@ export class Renderer {
     const period = VW + 140;
     const sunX = (((300 - this.g.camX * 0.04) % period) + period) % period - 70;
     if (this.sunSprite) {
-      c.drawImage(this.sunSprite, Math.round(sunX) - 32, (this.mobileView ? 54 : 68) - 32);
+      if (this.mobileView) {
+        // Smaller and lower on phones so it never rides up into the HUD;
+        // its bottom edge tucks behind the ridge like a setting sun.
+        c.drawImage(this.sunSprite, Math.round(sunX) - 20, 38, 40, 40);
+      } else {
+        c.drawImage(this.sunSprite, Math.round(sunX) - 32, 36);
+      }
     }
     // stars
     c.fillStyle = this.g.zone.star;
@@ -1417,17 +1423,17 @@ export class Renderer {
     }
 
     // combo — fixed layout, colour-only pulse (no size jitter). Mobile draws
-    // it in raw screen space (slim) so it can never collide with the score.
+    // it in raw screen space, low enough to stay clear of the score block.
     if (mobile) {
       c.restore();
-      this.drawCombo(VW / 2);
+      this.drawCombo(VW / 2, 40);
     } else {
-      this.drawCombo(W / 2);
+      this.drawCombo(W / 2, 8);
       c.restore();
     }
   }
 
-  private drawCombo(labelCenterX: number) {
+  private drawCombo(labelCenterX: number, y: number) {
     if (this.g.combo <= 1) return;
     const c = this.ctx;
     const t = this.g.comboT / COMBO_TIME;
@@ -1435,10 +1441,10 @@ export class Renderer {
     const flash = this.g.comboPulse;
     const col = flash > 0.4 ? '#ffffff' : '#ffd166';
     const bw = 78;
-    drawTextCentered(c, label, labelCenterX, 8, 1, col, '#150a24');
+    drawTextCentered(c, label, labelCenterX, y, 1, col, '#150a24');
     c.fillStyle = '#150a24';
-    c.fillRect(labelCenterX - bw / 2 - 1, 18, bw + 2, 5);
+    c.fillRect(labelCenterX - bw / 2 - 1, y + 10, bw + 2, 5);
     c.fillStyle = t > 0.3 ? this.g.zone.accent : '#ff4d6d';
-    c.fillRect(labelCenterX - bw / 2, 19, Math.round(bw * t), 3);
+    c.fillRect(labelCenterX - bw / 2, y + 11, Math.round(bw * t), 3);
   }
 }

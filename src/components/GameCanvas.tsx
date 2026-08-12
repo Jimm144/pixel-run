@@ -152,10 +152,10 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
           <button
             type="button"
             aria-label="Pause"
-            className="absolute top-4 right-4 z-20 flex h-12 w-12 items-center justify-center rounded-full border-2 border-[#9d8fd6]/70 bg-[#2a0f2e]/70 text-[#c4b5e8] shadow-[0_0_18px_rgba(157,143,214,0.35)] active:scale-95 active:bg-[#9d8fd6]/40"
+            className="absolute top-4 right-4 z-20 flex h-12 w-12 items-center justify-center rounded-none border-2 border-[#08040f] bg-[#3ef2c8] text-[#0b0616] shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow,background-color] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
             {...pauseHandlers}
           >
-            <svg aria-hidden="true" viewBox="0 0 16 16" className="h-5 w-5" fill="currentColor">
+            <svg aria-hidden="true" viewBox="0 0 16 16" className="h-5 w-5" fill="currentColor" shapeRendering="crispEdges">
               <rect x="3" y="2" width="3" height="12" />
               <rect x="10" y="2" width="3" height="12" />
             </svg>
@@ -163,10 +163,10 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
           <button
             type="button"
             aria-label="Dive"
-            className="absolute bottom-4 left-4 z-20 flex h-16 w-16 items-center justify-center rounded-full border-2 border-[#ff4d6d]/70 bg-[#2a0f2e]/70 text-[#ff9db1] shadow-[0_0_18px_rgba(255,77,109,0.35)] active:scale-95 active:bg-[#ff4d6d]/40"
+            className="absolute bottom-4 left-4 z-20 flex h-16 w-16 items-center justify-center rounded-none border-2 border-[#08040f] bg-[#ffd166] text-[#0b0616] shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow,background-color] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
             {...diveHandlers}
           >
-            <svg aria-hidden="true" viewBox="0 0 32 32" className="h-9 w-9" fill="currentColor">
+            <svg aria-hidden="true" viewBox="0 0 32 32" className="h-9 w-9" fill="currentColor" shapeRendering="crispEdges">
               <path d="M12 4h8v14h7L16 29 5 18h7V4z" />
             </svg>
           </button>
