@@ -21,6 +21,9 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
   /** Zone accent for the touch pause button — follows the biome. */
   const [biomeAccent, setBiomeAccent] = useState('#3ef2c8');
   const lastZoneName = useRef('');
+  /** True while the 3-2-1 countdown dims the scene — buttons dim too. */
+  const [counting, setCounting] = useState(false);
+  const countingRef = useRef(false);
 
   const { wrapHandlers, diveHandlers, pauseHandlers } = useGameInput({
     gameRef,
@@ -72,6 +75,12 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       if (game.zone.name !== lastZoneName.current) {
         lastZoneName.current = game.zone.name;
         setBiomeAccent(game.zone.accent);
+      }
+      // Dim the touch buttons while the countdown dims the scene.
+      const countingNow = game.countdown > 0 || game.goTimer > 0;
+      if (countingNow !== countingRef.current) {
+        countingRef.current = countingNow;
+        setCounting(countingNow);
       }
     };
     raf = requestAnimationFrame(loop);
@@ -161,7 +170,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
             <button
               type="button"
               aria-label="Pause"
-              style={{ borderColor: biomeAccent, color: biomeAccent, opacity: 0.75 }}
+              style={{ borderColor: biomeAccent, color: biomeAccent, opacity: counting ? 0.35 : 0.75 }}
               className="relative flex h-12 w-12 items-center justify-center border-2 bg-[#140a26]/80 shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
               {...pauseHandlers}
             >
@@ -179,7 +188,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
             <button
               type="button"
               aria-label="Dive"
-              style={{ borderColor: '#ffd166', color: '#ffd166', opacity: 0.75 }}
+              style={{ borderColor: '#ffd166', color: '#ffd166', opacity: counting ? 0.35 : 0.75 }}
               className="relative flex h-16 w-16 items-center justify-center border-2 bg-[#140a26]/80 shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
               {...diveHandlers}
             >

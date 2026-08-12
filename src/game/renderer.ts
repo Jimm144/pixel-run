@@ -335,8 +335,8 @@ export class Renderer {
     const period = VW + 140;
     const sunX = (((300 - this.g.camX * 0.04) % period) + period) % period - 70;
     if (this.sunSprite) {
-      // Mobile: low in the sky, its top peeking above the mountains.
-      c.drawImage(this.sunSprite, Math.round(sunX) - 32, (this.mobileView ? 96 : 68) - 32);
+      // Mobile: low behind the mountains — only its top peeks over them.
+      c.drawImage(this.sunSprite, Math.round(sunX) - 32, (this.mobileView ? 108 : 68) - 32);
     }
     // stars
     c.fillStyle = this.g.zone.star;
@@ -450,19 +450,19 @@ export class Renderer {
     // rows sink, giving each parallax layer clear vertical breathing room.
     const m = this.mobileView;
     if (bg === 'jungle') {
-      this.seeBand(0.12, m ? 150 : 120, m ? 40 : 30, 0.02, 0.15, 0, Z.far);
+      this.seeBand(0.12, m ? 130 : 120, m ? 40 : 30, 0.02, 0.15, 0, Z.far);
       this.drawLandmarks(Z, back, 0.19, m ? 124 : 142, 47, 29, Z.decoMid, m ? 0.8 : 0.65);
       this.drawLandmarks(Z, Z.mid, 0.28, m ? 158 : 160, 56, 73, Z.decoMid, 1);
     } else if (bg === 'desert') {
-      this.seeBand(0.12, m ? 154 : 124, m ? 40 : 24, 0.014, 0.08, 0, Z.far);
+      this.seeBand(0.12, m ? 134 : 124, m ? 40 : 24, 0.014, 0.08, 0, Z.far);
       this.drawLandmarks(Z, back, 0.19, m ? 126 : 144, 72, 23, Z.decoMid, m ? 0.8 : 0.65);
       this.drawLandmarks(Z, Z.mid, 0.28, m ? 160 : 162, 84, 67, Z.decoMid, 1);
     } else if (bg === 'tundra') {
-      this.seeBand(0.11, m ? 150 : 118, m ? 40 : 30, 0.018, 1.6, 0.5, Z.far);
+      this.seeBand(0.11, m ? 130 : 118, m ? 40 : 30, 0.018, 1.6, 0.5, Z.far);
       this.drawLandmarks(Z, back, 0.18, m ? 126 : 144, 53, 41, Z.decoMid, m ? 0.8 : 0.65);
       this.drawLandmarks(Z, Z.mid, 0.28, m ? 160 : 162, 58, 59, Z.decoMid, 1);
     } else {
-      this.seeBand(0.13, m ? 152 : 122, m ? 40 : 38, 0.05, 0.2, 0.9, Z.far);
+      this.seeBand(0.13, m ? 132 : 122, m ? 40 : 38, 0.05, 0.2, 0.9, Z.far);
       this.drawLandmarks(Z, back, 0.18, m ? 124 : 142, 55, 19, Z.decoFar, m ? 0.8 : 0.7);
       this.drawLandmarks(Z, Z.mid, 0.28, m ? 158 : 160, 62, 37, Z.decoFar, 1);
     }
@@ -1415,11 +1415,11 @@ export class Renderer {
       drawText(c, ctxt, cx0 + 10, 23, 1, this.g.zone.coinFill, '#150a24');
     }
 
-    // combo — fixed layout, colour-only pulse (no size jitter). Mobile keeps
-    // it centred but drops it below the score/best block.
+    // combo — fixed layout, colour-only pulse (no size jitter). Mobile sits
+    // it right-aligned, just below the touch pause button.
     if (mobile) {
       c.restore();
-      this.drawCombo(VW / 2, 54);
+      this.drawCombo(VW - 45, 46);
     } else {
       this.drawCombo(W / 2, 8);
       c.restore();
