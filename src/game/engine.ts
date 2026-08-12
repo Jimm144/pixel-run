@@ -353,9 +353,9 @@ export class Game implements GenHost, RenderHost {
     this.renderer.setHudScale(v);
   }
 
-  /** Extra top offset for the right-side HUD — clears the touch pause button. */
-  setHudTopShift(v: number) {
-    this.renderer.setHudTopShift(v);
+  /** Mobile view: compact score, no meters/coins, world lifted higher. */
+  setMobileView(v: boolean) {
+    this.renderer.setMobileView(v);
   }
 
   pause() {

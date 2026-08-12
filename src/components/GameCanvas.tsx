@@ -117,11 +117,10 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       // buffer, so it zooms with the canvas — compensate by scaling it up
       // when the canvas is small (phones), never down (desktop stays 1).
       gameRef.current?.setHudScale(Math.max(1, Math.min(1.9, 2.9 / s)));
-      // On touch devices the DOM pause button sits in the top-right corner,
-      // right on top of the meters/coins — shift the right-side HUD down so
-      // it sits below the button.
+      // Mobile layout: compact score, no meters/coins, world lifted higher
+      // and parallax planes spread out — all desktop views stay untouched.
       const coarse = window.matchMedia('(pointer: coarse)').matches;
-      gameRef.current?.setHudTopShift(coarse ? Math.max(0, Math.ceil(72 / s) - 6) : 0);
+      gameRef.current?.setMobileView(coarse);
     };
     fit();
     window.addEventListener('resize', fit);

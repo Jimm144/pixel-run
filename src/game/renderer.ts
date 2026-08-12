@@ -76,9 +76,11 @@ export class Renderer {
   /** HUD zoom (1 on desktop) — keeps the score/distance text readable on
    *  phones, where the whole canvas is scaled up from a small buffer. */
   private hudScale = 1;
-  /** Extra top offset for the right-side HUD (meters/coins/power-ups), in
-   *  HUD space — clears the DOM touch pause button in the top-right corner. */
-  private hudTopShift = 0;
+  /** Mobile layout: hides the right-side meters/coins, compacts the score and
+   *  lifts the world so the play field sits higher in the view. */
+  private mobileView = false;
+  /** Extra world translate applied only in mobile view (negative = up). */
+  private worldLift = 0;
   // HUD strings are only rebuilt when their values change (perf).
   private hudScore = -1;
   private hudScoreStr = '';
@@ -124,8 +126,9 @@ export class Renderer {
     this.hudScale = Math.max(1, v);
   }
 
-  setHudTopShift(v: number) {
-    this.hudTopShift = Math.max(0, Math.round(v));
+  setMobileView(v: boolean) {
+    this.mobileView = v;
+    this.worldLift = v ? -22 : 0;
   }
 
   // Cache every derived platform colour once per zone change (never per frame).
@@ -279,9 +282,10 @@ export class Renderer {
     // Integer shake only — subpixel translate would blur the whole scene.
     // worldOffsetY pushes the world down on tall screens so the ground sits
     // near the bottom and the extra space becomes sky instead of black bars.
+    // worldLift raises the world on phones so the play field sits higher.
     c.translate(
       Math.round(this.g.shakeX),
-      Math.round(this.g.shakeY) + worldOffsetY(),
+      Math.round(this.g.shakeY) + worldOffsetY() + this.worldLift,
     );
     this.drawParallax();
     this.drawWorld();
@@ -331,7 +335,7 @@ export class Renderer {
     const period = VW + 140;
     const sunX = (((300 - this.g.camX * 0.04) % period) + period) % period - 70;
     if (this.sunSprite) {
-      c.drawImage(this.sunSprite, Math.round(sunX) - 32, 68 - 32);
+      c.drawImage(this.sunSprite, Math.round(sunX) - 32, (this.mobileView ? 46 : 68) - 32);
     }
     // stars
     c.fillStyle = this.g.zone.star;
@@ -441,22 +445,25 @@ export class Renderer {
     const bg = Z.bg;
     const back = mix(Z.far, Z.mid, 0.5);
     c.globalAlpha = alpha;
+    // Mobile view spreads the planes: the ridge sits higher and the landmark
+    // rows sink, giving each parallax layer clear vertical breathing room.
+    const m = this.mobileView;
     if (bg === 'jungle') {
-      this.seeBand(0.12, 128, 30, 0.02, 0.15, 0, Z.far);
-      this.drawLandmarks(Z, back, 0.19, 166, 47, 29, Z.decoMid, 0.65);
-      this.drawLandmarks(Z, Z.mid, 0.28, 180, 56, 73, Z.decoMid, 1);
+      this.seeBand(0.12, m ? 106 : 128, 30, 0.02, 0.15, 0, Z.far);
+      this.drawLandmarks(Z, back, 0.19, m ? 150 : 166, 47, 29, Z.decoMid, m ? 0.8 : 0.65);
+      this.drawLandmarks(Z, Z.mid, 0.28, m ? 176 : 180, 56, 73, Z.decoMid, 1);
     } else if (bg === 'desert') {
-      this.seeBand(0.12, 132, 24, 0.014, 0.08, 0, Z.far);
-      this.drawLandmarks(Z, back, 0.19, 168, 72, 23, Z.decoMid, 0.65);
-      this.drawLandmarks(Z, Z.mid, 0.28, 182, 84, 67, Z.decoMid, 1);
+      this.seeBand(0.12, m ? 110 : 132, 24, 0.014, 0.08, 0, Z.far);
+      this.drawLandmarks(Z, back, 0.19, m ? 152 : 168, 72, 23, Z.decoMid, m ? 0.8 : 0.65);
+      this.drawLandmarks(Z, Z.mid, 0.28, m ? 178 : 182, 84, 67, Z.decoMid, 1);
     } else if (bg === 'tundra') {
-      this.seeBand(0.11, 126, 30, 0.018, 1.6, 0.5, Z.far);
-      this.drawLandmarks(Z, back, 0.18, 168, 53, 41, Z.decoMid, 0.65);
-      this.drawLandmarks(Z, Z.mid, 0.28, 182, 58, 59, Z.decoMid, 1);
+      this.seeBand(0.11, m ? 104 : 126, 30, 0.018, 1.6, 0.5, Z.far);
+      this.drawLandmarks(Z, back, 0.18, m ? 152 : 168, 53, 41, Z.decoMid, m ? 0.8 : 0.65);
+      this.drawLandmarks(Z, Z.mid, 0.28, m ? 178 : 182, 58, 59, Z.decoMid, 1);
     } else {
-      this.seeBand(0.13, 130, 38, 0.05, 0.2, 0.9, Z.far);
-      this.drawLandmarks(Z, back, 0.18, 166, 55, 19, Z.decoFar, 0.7);
-      this.drawLandmarks(Z, Z.mid, 0.28, 180, 62, 37, Z.decoFar, 1);
+      this.seeBand(0.13, m ? 108 : 130, 38, 0.05, 0.2, 0.9, Z.far);
+      this.drawLandmarks(Z, back, 0.18, m ? 150 : 166, 55, 19, Z.decoFar, m ? 0.8 : 0.7);
+      this.drawLandmarks(Z, Z.mid, 0.28, m ? 176 : 180, 62, 37, Z.decoFar, 1);
     }
     c.globalAlpha = 1;
   }
@@ -1258,7 +1265,7 @@ export class Renderer {
     const c = this.ctx;
     let x = 6;
     // HUD space is scaled by hudScale; W is the virtual width in that space.
-    const y = 45 + this.hudTopShift;
+    const y = 45;
     const W = Math.floor(VW / this.hudScale);
     const status = (remaining: number, kind: PowerUpKind) => {
       // The propeller flashes with 0s left — draw the icon alone, no "0".
@@ -1308,14 +1315,19 @@ export class Renderer {
     // The HUD draws in its own scaled space so the text zooms up on phones
     // while the world keeps its pixel grid; W is the virtual width there.
     const hs = this.hudScale;
+    const mobile = this.mobileView;
+    // Mobile: score/best shrink so the top-center combo banner stays clear.
+    const lblS = mobile ? 0.75 : 1;
+    const digS = mobile ? 1.5 : 2;
+    const bestS = mobile ? 0.75 : 1;
+    const bestY = mobile ? 30 : 32;
+    const adv = 6 * digS;
     c.save();
     if (hs !== 1) c.scale(hs, hs);
     const W = Math.floor(VW / hs);
-    // Right-side stats drop below the touch pause button when it is shown.
-    const dTop = this.hudTopShift;
 
     // score — only rebuild the padded strings when the values change
-    drawText(c, 'SCORE', 6, 6, 1, this.g.zone.accent2, '#150a24');
+    drawText(c, 'SCORE', 6, 6, lblS, this.g.zone.accent2, '#150a24');
     if (this.hudScore !== this.g.score) {
       this.hudScore = this.g.score;
       this.hudScoreStr = pad(this.g.score, 6);
@@ -1325,91 +1337,104 @@ export class Renderer {
     while (leadingZeroes < scoreStr.length && scoreStr[leadingZeroes] === '0') leadingZeroes++;
     if (leadingZeroes > 0) {
       c.globalAlpha = 0.35;
-      drawText(c, scoreStr.slice(0, leadingZeroes), 6, 15, 2, '#8f7fd0', '#150a24');
+      drawText(c, scoreStr.slice(0, leadingZeroes), 6, 15, digS, '#8f7fd0', '#150a24');
       c.globalAlpha = 1;
     }
-    drawText(c, scoreStr.slice(leadingZeroes), 6 + leadingZeroes * 12, 15, 2, '#ffffff', '#150a24');
+    drawText(c, scoreStr.slice(leadingZeroes), 6 + leadingZeroes * adv, 15, digS, '#ffffff', '#150a24');
 
     // best
     if (this.g.best > 0) {
-      drawText(c, 'BEST', 6, 32, 1, this.g.zone.accent, '#150a24');
-      drawText(c, pad(this.g.best, 6), 36, 32, 1, this.g.zone.accent, '#150a24');
+      drawText(c, 'BEST', 6, bestY, bestS, this.g.zone.accent, '#150a24');
+      drawText(c, pad(this.g.best, 6), 36, bestY, bestS, this.g.zone.accent, '#150a24');
     }
     this.drawPowerUpHud();
 
-    // distance + coins (right)
-    if (this.hudM !== m) {
-      this.hudM = m;
-      this.hudMText = m + 'M';
+    // distance + coins (right) — hidden on mobile; the touch pause button
+    // owns the top-right corner there
+    if (!mobile) {
+      if (this.hudM !== m) {
+        this.hudM = m;
+        this.hudMText = m + 'M';
+      }
+      const dtxt = this.hudMText;
+      drawText(c, dtxt, W - 6 - textWidth(dtxt, 2), 6, 2, this.g.zone.accent, '#150a24');
+      if (this.hudCoins !== this.g.coins) {
+        this.hudCoins = this.g.coins;
+        this.hudCoinsText = 'X' + pad(this.g.coins, 3);
+      }
+      const ctxt = this.hudCoinsText;
+      const cw = textWidth(ctxt, 1) + 10;
+      const cx0 = W - 6 - cw;
+      // HUD coin matches world coin shape per biome
+      if (this.g.zone.bg === 'tundra') {
+        c.fillStyle = this.g.zone.coinEdge;
+        c.fillRect(cx0, 22, 8, 7);
+        c.fillStyle = this.g.zone.coinFill;
+        c.fillRect(cx0 + 1, 23, 6, 5);
+        c.fillStyle = this.g.zone.coinShine;
+        c.fillRect(cx0 + 3, 22, 2, 1);
+        c.fillRect(cx0 + 3, 29, 2, 1);
+        c.fillRect(cx0, 25, 1, 2);
+        c.fillRect(cx0 + 7, 25, 1, 2);
+      } else if (this.g.zone.bg === 'desert') {
+        c.fillStyle = this.g.zone.coinEdge;
+        c.fillRect(cx0, 23, 7, 7);
+        c.fillStyle = this.g.zone.coinFill;
+        c.fillRect(cx0, 23, 7, 6);
+        c.fillStyle = this.g.zone.coinShine;
+        c.fillRect(cx0 + 1, 24, 1, 3);
+        c.fillRect(cx0 - 1, 22, 1, 1);
+        c.fillRect(cx0 + 7, 22, 1, 1);
+        c.fillRect(cx0 - 1, 30, 1, 1);
+        c.fillRect(cx0 + 7, 30, 1, 1);
+      } else if (this.g.zone.bg === 'jungle') {
+        // fruit coin — round (matches world coin shape), stem aligned with the
+        // other biome icons' tops (y 22) so the icon doesn't sit higher.
+        c.fillStyle = this.g.zone.coinEdge;
+        c.fillRect(cx0 + 1, 24, 6, 1);
+        c.fillRect(cx0, 25, 8, 5);
+        c.fillRect(cx0 + 1, 30, 6, 1);
+        c.fillStyle = this.g.zone.coinFill;
+        c.fillRect(cx0 + 1, 25, 6, 4);
+        c.fillStyle = this.g.zone.coinShine;
+        c.fillRect(cx0 + 2, 26, 2, 2);
+        c.fillStyle = this.g.zone.accent2;
+        c.fillRect(cx0 + 3, 22, 1, 2);
+        c.fillRect(cx0 + 4, 22, 2, 1);
+      } else {
+        c.fillStyle = this.g.zone.coinEdge;
+        c.fillRect(cx0, 23, 7, 7);
+        c.fillStyle = this.g.zone.coinFill;
+        c.fillRect(cx0, 23, 7, 6);
+        c.fillStyle = this.g.zone.coinShine;
+        c.fillRect(cx0 + 1, 24, 1, 3);
+      }
+      drawText(c, ctxt, cx0 + 10, 23, 1, this.g.zone.coinFill, '#150a24');
     }
-    const dtxt = this.hudMText;
-    drawText(c, dtxt, W - 6 - textWidth(dtxt, 2), 6 + dTop, 2, this.g.zone.accent, '#150a24');
-    if (this.hudCoins !== this.g.coins) {
-      this.hudCoins = this.g.coins;
-      this.hudCoinsText = 'X' + pad(this.g.coins, 3);
-    }
-    const ctxt = this.hudCoinsText;
-    const cw = textWidth(ctxt, 1) + 10;
-    const cx0 = W - 6 - cw;
-    // HUD coin matches world coin shape per biome
-    if (this.g.zone.bg === 'tundra') {
-      c.fillStyle = this.g.zone.coinEdge;
-      c.fillRect(cx0, 22 + dTop, 8, 7);
-      c.fillStyle = this.g.zone.coinFill;
-      c.fillRect(cx0 + 1, 23 + dTop, 6, 5);
-      c.fillStyle = this.g.zone.coinShine;
-      c.fillRect(cx0 + 3, 22 + dTop, 2, 1);
-      c.fillRect(cx0 + 3, 29 + dTop, 2, 1);
-      c.fillRect(cx0, 25 + dTop, 1, 2);
-      c.fillRect(cx0 + 7, 25 + dTop, 1, 2);
-    } else if (this.g.zone.bg === 'desert') {
-      c.fillStyle = this.g.zone.coinEdge;
-      c.fillRect(cx0, 23 + dTop, 7, 7);
-      c.fillStyle = this.g.zone.coinFill;
-      c.fillRect(cx0, 23 + dTop, 7, 6);
-      c.fillStyle = this.g.zone.coinShine;
-      c.fillRect(cx0 + 1, 24 + dTop, 1, 3);
-      c.fillRect(cx0 - 1, 22 + dTop, 1, 1);
-      c.fillRect(cx0 + 7, 22 + dTop, 1, 1);
-      c.fillRect(cx0 - 1, 30 + dTop, 1, 1);
-      c.fillRect(cx0 + 7, 30 + dTop, 1, 1);
-    } else if (this.g.zone.bg === 'jungle') {
-      // fruit coin — round (matches world coin shape), stem aligned with the
-      // other biome icons' tops (y 22) so the icon doesn't sit higher.
-      c.fillStyle = this.g.zone.coinEdge;
-      c.fillRect(cx0 + 1, 24 + dTop, 6, 1);
-      c.fillRect(cx0, 25 + dTop, 8, 5);
-      c.fillRect(cx0 + 1, 30 + dTop, 6, 1);
-      c.fillStyle = this.g.zone.coinFill;
-      c.fillRect(cx0 + 1, 25 + dTop, 6, 4);
-      c.fillStyle = this.g.zone.coinShine;
-      c.fillRect(cx0 + 2, 26 + dTop, 2, 2);
-      c.fillStyle = this.g.zone.accent2;
-      c.fillRect(cx0 + 3, 22 + dTop, 1, 2);
-      c.fillRect(cx0 + 4, 22 + dTop, 2, 1);
-    } else {
-      c.fillStyle = this.g.zone.coinEdge;
-      c.fillRect(cx0, 23 + dTop, 7, 7);
-      c.fillStyle = this.g.zone.coinFill;
-      c.fillRect(cx0, 23 + dTop, 7, 6);
-      c.fillStyle = this.g.zone.coinShine;
-      c.fillRect(cx0 + 1, 24 + dTop, 1, 3);
-    }
-    drawText(c, ctxt, cx0 + 10, 23 + dTop, 1, this.g.zone.coinFill, '#150a24');
 
-    // combo — fixed layout, colour-only pulse (no size jitter)
-    if (this.g.combo > 1) {
-      const t = this.g.comboT / COMBO_TIME;
-      const label = 'X' + this.g.mult() + ' COMBO ' + this.g.combo;
-      const flash = this.g.comboPulse;
-      const col = flash > 0.4 ? '#ffffff' : '#ffd166';
-      const bw = 78;
-      drawTextCentered(c, label, W / 2, 8, 1, col, '#150a24');
-      c.fillStyle = '#150a24';
-      c.fillRect(W / 2 - bw / 2 - 1, 18, bw + 2, 5);
-      c.fillStyle = t > 0.3 ? this.g.zone.accent : '#ff4d6d';
-      c.fillRect(W / 2 - bw / 2, 19, Math.round(bw * t), 3);
+    // combo — fixed layout, colour-only pulse (no size jitter). Mobile draws
+    // it in raw screen space (slim) so it can never collide with the score.
+    if (mobile) {
+      c.restore();
+      this.drawCombo(VW / 2);
+    } else {
+      this.drawCombo(W / 2);
+      c.restore();
     }
-    c.restore();
+  }
+
+  private drawCombo(labelCenterX: number) {
+    if (this.g.combo <= 1) return;
+    const c = this.ctx;
+    const t = this.g.comboT / COMBO_TIME;
+    const label = 'X' + this.g.mult() + ' COMBO ' + this.g.combo;
+    const flash = this.g.comboPulse;
+    const col = flash > 0.4 ? '#ffffff' : '#ffd166';
+    const bw = 78;
+    drawTextCentered(c, label, labelCenterX, 8, 1, col, '#150a24');
+    c.fillStyle = '#150a24';
+    c.fillRect(labelCenterX - bw / 2 - 1, 18, bw + 2, 5);
+    c.fillStyle = t > 0.3 ? this.g.zone.accent : '#ff4d6d';
+    c.fillRect(labelCenterX - bw / 2, 19, Math.round(bw * t), 3);
   }
 }
