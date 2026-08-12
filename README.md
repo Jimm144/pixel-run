@@ -12,7 +12,7 @@ The player runs automatically. Jump, double jump and dive through four biomes: j
 - Dive-slam to break rooted hazards
 - Collect coins and gems for score
 - Grab power-ups: shield, jump shoes, triple jump, propeller
-- The combo meter multiplies score while enemies are defeated in quick succession
+- The combo meter builds with every score event (enemy stomps, coins, gems, power-ups) and multiplies the points from each while it lasts
 
 The best run and the last run are stored locally (localStorage).
 
@@ -20,11 +20,11 @@ The best run and the last run are stored locally (localStorage).
 
 Keyboard:
 
-- SPACE or W: jump
-- SPACE twice: double jump
-- Hold SPACE: higher jump
-- S or DOWN: dive
-- D: boost
+- SPACE, W, UP, Z or K: jump
+- Jump key twice: double jump
+- Hold jump: higher jump
+- S, DOWN or J: dive
+- D or RIGHT: boost
 - P or ESC: pause
 
 Touch:
@@ -37,7 +37,7 @@ Touch:
 
 ## Biomes
 
-Four zones repeat in order. Each zone has its own palette, parallax background, enemies, coins and music. Zone transitions fade gradually.
+Four zones repeat in a shuffled order each run. Each zone has its own palette, parallax background, enemies, coins and music. Zone transitions fade gradually.
 
 ## Technical
 
@@ -66,4 +66,4 @@ Output: `dist/index.html`. Pushing to master deploys it to GitHub Pages via the 
 
 ## License
 
-GPL-3.0-or-later. See the header in `src/game/audio.ts`.
+GPL-3.0. See the header in `src/game/audio.ts`.
