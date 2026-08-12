@@ -4,6 +4,13 @@ An endless runner that plays in the browser. No install, no account.
 
 Play: https://jimm144.github.io/pixel-run/
 
+## Screenshots
+
+![NEON JUNGLE](public/screenshots/jungle.png)
+![SCORCHED DESERT](public/screenshots/desert.png)
+![FROZEN TUNDRA](public/screenshots/tundra.png)
+![NEON CITY](public/screenshots/city.png)
+
 ## Gameplay
 
 The player runs automatically. Jump, double jump and dive through four biomes: jungle, desert, tundra and neon city.
