@@ -31,6 +31,10 @@ interface GenState {
   eventBiomeRolls: Set<number>;
 }
 
+/** Physics horizon used by the trajectory simulators — far beyond the longest
+ *  possible pad arc, so the integration always reaches the landing surface. */
+const TRAJECTORY_FRAMES = 150;
+
 /**
  * Procedural world builder: emits platforms, pickups, power-ups, enemies,
  * spikes and springs into the host's arrays. Owns its generation cursor
@@ -286,7 +290,15 @@ export class WorldGen {
       case PAT.UPPER: {
         const fw = clamp(p.w - 40, 30, 64);
         const fx = p.x + (p.w - fw) * rnd(0.35, 0.6);
-        const fy = clamp(p.y - ri(40, 52), 72, VH - 66);
+        // Rise is capped at 55px — under the 64px hold-jump ceiling — so the
+        // float is always reachable even on the shortest viewports where the
+        // old VH-66 headroom clamp shoved it out of jump range. When the
+        // headroom and the rise conflict, reachability wins.
+        const fy = clamp(
+          p.y - ri(40, 52),
+          Math.max(72, p.y - 55),
+          Math.max(VH - 66, p.y - 40),
+        );
         this.h.platforms.push({ x: fx, y: fy, w: fw, float: true, seed: Math.random() * 999 });
         this.addCoinLine(fx + 8, fx + fw - 8, fy - 14, 3);
         if (Math.random() < 0.35)
@@ -309,7 +321,7 @@ export class WorldGen {
     let py = startY - 9 - PLAYER_H;
     let vy = -v;
     let dx = 0;
-    for (let f = 0; f < 150; f++) {
+    for (let f = 0; f < TRAJECTORY_FRAMES; f++) {
       vy = Math.min(MAX_FALL, vy + (vy < 0 ? GRAV : GRAV_FALL));
       dx += vx;
       py += vy;
@@ -331,7 +343,7 @@ export class WorldGen {
     let py = startY - 9 - PLAYER_H;
     let vy = -v;
     const pts: number[] = [x, py + PLAYER_H / 2];
-    for (let f = 1; f < 150; f++) {
+    for (let f = 1; f < TRAJECTORY_FRAMES; f++) {
       vy = Math.min(MAX_FALL, vy + (vy < 0 ? GRAV : GRAV_FALL));
       x += vx;
       py += vy;

@@ -56,11 +56,13 @@ export function bestScore(): number {
   return loadHighScore()?.score ?? 0;
 }
 
-export function saveHighScore(entry: HighScore): HighScore | null {
+export function saveHighScore(entry: HighScore, current: HighScore | null = null): HighScore | null {
   const candidate = normalizeHighScore(entry);
   if (!candidate) return null;
-  const current = loadHighScore();
-  const best = !current || candidate.score > current.score ? candidate : current;
+  // `current` lets callers that already loaded the stored best avoid a
+  // redundant second read; when omitted it is loaded here.
+  const prev = current ?? loadHighScore();
+  const best = !prev || candidate.score > prev.score ? candidate : prev;
   try {
     localStorage.setItem(KEY, JSON.stringify(best));
   } catch {}

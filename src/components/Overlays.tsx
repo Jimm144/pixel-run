@@ -1,5 +1,5 @@
 import type { Stats } from '../game/engine';
-import { PixelButton, Panel, Stat } from './ui';
+import { PauseIcon, PixelButton, Panel, Stat } from './ui';
 
 const pad = (n: number, l: number) => Math.max(0, Math.floor(n)).toString().padStart(l, '0');
 
@@ -12,7 +12,7 @@ function ControlIcon({ kind }: { kind: ControlIconKind }) {
         {kind === 'jump' && <path d="M2 7 8 1l6 6h-4v8H6V7H2z" />}
         {kind === 'dive' && <path d="M2 9h4V1h4v8h4l-6 6-6-6z" />}
         {kind === 'boost' && <path d="m15 8-6-6v4H1v4h8v4l6-6z" />}
-        {kind === 'pause' && <><rect x="3" y="2" width="3" height="12" /><rect x="10" y="2" width="3" height="12" /></>}
+        {kind === 'pause' && <PauseIcon className="h-3.5 w-3.5" />}
         {kind === 'hold' && <><path d="M2 8l6-5 6 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" /><path d="M2 14l6-5 6 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" /></>}
         {kind === 'double' && <><path d="M1 6 4 3l3 3H5v6H3V6H1z" /><path d="M9 6l3-3 3 3h-2v6h-2V6H9z" /></>}
         {kind === 'tap' && <><rect x="7" y="2" width="3" height="7" /><rect x="4" y="7" width="3" height="3" /><rect x="3" y="10" width="10" height="3" /></>}
@@ -77,11 +77,9 @@ export function StartScreen({
     >
       <div className="flex w-full max-w-[340px] flex-col items-center gap-3 tablet:max-w-[800px]">
         <div className="text-center">
-          <h1 className="font-pixel text-[26px] leading-none text-[#3ef2c8] drop-shadow-[0_4px_0_#08040f] sm:text-[34px] tablet:text-[48px]">
-            <span className="animate-title inline-block">PIXEL</span>
-          </h1>
-          <h1 className="font-pixel text-[26px] leading-none text-[#ff4d6d] drop-shadow-[0_4px_0_#08040f] sm:text-[34px] tablet:text-[48px]">
-            <span className="animate-title-2 inline-block">RUN</span>
+          <h1 className="font-pixel text-[26px] leading-none drop-shadow-[0_4px_0_#08040f] sm:text-[34px] tablet:text-[48px]">
+            <span className="animate-title block text-[#3ef2c8]">PIXEL</span>
+            <span className="animate-title-2 block text-[#ff4d6d]">RUN</span>
           </h1>
           <p className="mt-2 font-pixel text-[8px] tracking-[0.25em] text-[#9d8fd6] tablet:text-[10px]">
             RUN &middot; STOMP &middot; SURVIVE
@@ -118,6 +116,7 @@ export function StartScreen({
         <div className="flex w-full max-w-[340px] gap-2 tablet:max-w-[800px]">
           <button
             onClick={(e) => { e.stopPropagation(); onToggleMusic(); }}
+            aria-pressed={musicOn}
             className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] tablet:px-5 tablet:py-3 tablet:text-[10px] ${
               musicOn
                 ? 'border-[#3ef2c8]/40 bg-[#3ef2c8]/10 text-[#3ef2c8]'
@@ -143,6 +142,7 @@ export function StartScreen({
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onToggleSfx(); }}
+            aria-pressed={sfxOn}
             className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] tablet:px-5 tablet:py-3 tablet:text-[10px] ${
               sfxOn
                 ? 'border-[#ffd166]/40 bg-[#ffd166]/10 text-[#ffd166]'
@@ -175,7 +175,7 @@ export function StartScreen({
         <a
           href="https://github.com/Jimm144/pixel-run"
           target="_blank"
-          rel="noreferrer"
+          rel="noreferrer noopener"
           onClick={(e) => e.stopPropagation()}
           className="font-pixel text-[7px] text-[#5c4f8e] transition-colors hover:text-[#9d8fd6] tablet:text-[9px]"
         >

@@ -38,8 +38,17 @@ export function PixelButton({
   );
 }
 
-export function Panel({ children, className }: { children: ReactNode; className?: string }) {
+/** Shared pause glyph — used by the touch pause button and the control hints. */
+export function PauseIcon({ className = 'h-5 w-5' }: { className?: string }) {
   return (
+    <svg aria-hidden="true" viewBox="0 0 16 16" className={className} fill="currentColor" shapeRendering="crispEdges">
+      <rect x="3" y="2" width="3" height="12" />
+      <rect x="10" y="2" width="3" height="12" />
+    </svg>
+  );
+}
+
+export function Panel({ children, className }: { children: ReactNode; className?: string }) {  return (
     <div
       className={cn(
         'relative border-4 border-[#3ef2c8] bg-[#140a26]/95 p-5 shadow-[0_0_0_4px_#08040f,0_0_40px_rgba(62,242,200,0.22)] backdrop-blur-[2px]',

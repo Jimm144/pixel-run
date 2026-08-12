@@ -5,12 +5,12 @@ import { Renderer } from './renderer';
 import { FloatTexts } from './texts';
 import {
   anchorX,
-  BASE_VH,
   BUFFER,
   clamp,
   COIN_PTS,
   COMBO_TIME,
   COYOTE,
+  DEATH_REPORT_FRAME,
   DJUMP_V,
   GEM_PTS,
   GRAV,
@@ -22,6 +22,7 @@ import {
   MAX_FALL,
   MEGA_PAD_V,
   PAD_V,
+  PIT_DEATH_Y,
   PLAYER_H,
   PLAYER_W,
   POWERUP_COLORS,
@@ -30,8 +31,12 @@ import {
   ri,
   rnd,
   SLAM_PTS,
+  SLAM_RADIUS,
+  SLAM_VERT,
   STOMP_PTS,
   VW,
+  WALL_MARGIN,
+  ZONE_LEN_M,
   type Enemy,
   type GenHost,
   type Ghost,
@@ -50,80 +55,34 @@ import { WorldGen } from './worldGen';
 export { BASE_VW, BASE_VH, MAX_VH, VW, VH, worldOffsetY, setViewportSize } from './types';
 export type { Phase, Stats } from './types';
 
-/** Initial values for every mutable piece of run state. reset() re-applies
- *  this object, so adding a field to defaults() (and declaring it on Game)
- *  automatically resets it — no manual re-zero list to drift out of sync.
- *  Excluded on purpose: ctx/onDeath (set from outside), best (persists across
- *  runs, App-owned), and the renderer caches (bandCache/sunSprite/
- *  powerupSprites/skyBands/stars/motes re-derived lazily or per zone change). */
-interface GameState {
-  phase: Phase;
-  jumpHeld: boolean;
-  jumpBuf: number;
-  diveHeld: boolean;
-  moveDir: number;
-  savedJumpHeld: boolean;
-  savedDiveHeld: boolean;
-  savedMoveDir: number;
-  platforms: Platform[];
-  pickups: Pickup[];
-  powerups: PowerUp[];
-  enemies: Enemy[];
-  spikes: Spike[];
-  springs: Spring[];
-  camX: number;
-  shake: number;
-  shakeX: number;
-  shakeY: number;
-  freeze: number;
-  slowAcc: number;
-  flash: number;
-  flashCol: string;
-  deathTimer: number;
-  deathReported: boolean;
-  px: number;
-  py: number;
-  vx: number;
-  vy: number;
-  onGround: boolean;
-  coyote: number;
-  jumps: number;
-  cut: boolean;
-  diving: boolean;
-  shielded: boolean;
-  shieldTimer: number;
-  jumpShoes: number;
-  tripleJump: number;
-  propellerHat: number;
-  propellerFlashing: boolean;
-  propellerFlashTimer: number;
-  invuln: number;
-  padFlight: number;
-  sx: number;
-  sy: number;
-  spin: number;
-  ghosts: Ghost[];
-  startX: number;
-  distance: number;
-  score: number;
-  bonus: number;
-  coins: number;
-  kills: number;
-  combo: number;
-  comboT: number;
-  comboPulse: number;
-  countdown: number;
-  goTimer: number;
-  bestCombo: number;
-  nextMilestone: number;
-  eventTimer: number;
-  eventMax: number;
-  eventSeed: number;
-  eventKind: BgKind;
-  zoneIdx: number;
-  zone: Zone;
-  zoneOrder: number[];
-}
+/**
+ * Initial values for every mutable piece of run state. reset() re-applies
+ * this object, so the run state is re-zeroed automatically — no manual
+ * re-zero list to drift out of sync. GameState is DERIVED from Game (all
+ * non-method fields minus the excluded ones below), so adding a reset-managed
+ * field to the class without initialising it in defaults() is a compile
+ * error. Excluded on purpose: ctx/onDeath/best (set from outside), the
+ * subsystems (renderer/worldGen/particles/texts), frame/animT (kept running
+ * across runs), countdownTicks, and the stats getter.
+ */
+type GameState = {
+  [K in Exclude<
+    {
+      [K in keyof Game]: Game[K] extends (...a: never[]) => unknown ? never : K;
+    }[keyof Game],
+    | 'ctx'
+    | 'onDeath'
+    | 'best'
+    | 'frame'
+    | 'animT'
+    | 'countdownTicks'
+    | 'renderer'
+    | 'worldGen'
+    | 'particles'
+    | 'texts'
+    | 'stats'
+  >]: Game[K];
+};
 
 /**
  * The game itself. Owns input, player physics, collisions, scoring, camera
@@ -138,13 +97,13 @@ export class Game implements GenHost, RenderHost {
   best = 0;
 
   /* ---- input */
-  private jumpHeld!: boolean;
-  private jumpBuf!: number;
-  private diveHeld!: boolean;
-  private moveDir!: number;
-  private savedJumpHeld!: boolean;
-  private savedDiveHeld!: boolean;
-  private savedMoveDir!: number;
+  jumpHeld!: boolean;
+  jumpBuf!: number;
+  diveHeld!: boolean;
+  moveDir!: number;
+  savedJumpHeld!: boolean;
+  savedDiveHeld!: boolean;
+  savedMoveDir!: number;
 
   /* ---- world arrays (read by WorldGen + Renderer through the host contract) */
   platforms!: Platform[];
@@ -156,17 +115,17 @@ export class Game implements GenHost, RenderHost {
 
   /* ---- camera / fx */
   camX!: number;
-  private shake!: number;
+  shake!: number;
   shakeX!: number;
   shakeY!: number;
-  private freeze!: number;
-  private slowAcc!: number;
+  freeze!: number;
+  slowAcc!: number;
   flash!: number;
   flashCol!: string;
   /** Kept running across runs like the original — not reset by reset(). */
   frame = 0;
-  private deathTimer!: number;
-  private deathReported!: boolean;
+  deathTimer!: number;
+  deathReported!: boolean;
 
   /* ---- player */
   px!: number;
@@ -174,9 +133,9 @@ export class Game implements GenHost, RenderHost {
   vx!: number;
   vy!: number;
   onGround!: boolean;
-  private coyote!: number;
-  private jumps!: number;
-  private cut!: boolean;
+  coyote!: number;
+  jumps!: number;
+  cut!: boolean;
   diving!: boolean;
   shielded!: boolean;
   shieldTimer!: number;
@@ -186,7 +145,7 @@ export class Game implements GenHost, RenderHost {
   propellerFlashing!: boolean;
   propellerFlashTimer!: number;
   invuln!: number;
-  private padFlight!: number;
+  padFlight!: number;
   sx!: number;
   sy!: number;
   spin!: number;
@@ -198,9 +157,9 @@ export class Game implements GenHost, RenderHost {
   /* ---- score */
   distance!: number;
   score!: number;
-  private bonus!: number;
+  bonus!: number;
   coins!: number;
-  private kills!: number;
+  kills!: number;
   combo!: number;
   comboT!: number;
   comboPulse!: number;
@@ -209,13 +168,13 @@ export class Game implements GenHost, RenderHost {
   goTimer!: number;
   /** Beep the countdown ticks — true for run starts, false for unpause resumes. */
   private countdownTicks = false;
-  private bestCombo!: number;
-  private nextMilestone!: number;
+  bestCombo!: number;
+  nextMilestone!: number;
   eventTimer!: number;
   eventMax!: number;
   eventSeed!: number;
   eventKind!: BgKind;
-  private zoneIdx!: number;
+  zoneIdx!: number;
   zone!: Zone;
   zoneOrder!: number[];
 
@@ -412,6 +371,10 @@ export class Game implements GenHost, RenderHost {
   }
   releaseJump() {
     this.jumpHeld = false;
+    // A tap released during the countdown must not fire at GO — clearing the
+    // buffer here cancels any buffered jump (held input survives via
+    // jumpHeld, which resume()/the countdown re-buffers at GO).
+    this.jumpBuf = 0;
     if (this.phase === 'paused') this.savedJumpHeld = false;
   }
   pressDive() {
@@ -431,6 +394,9 @@ export class Game implements GenHost, RenderHost {
   setMove(d: number) {
     if (this.phase !== 'playing') {
       this.moveDir = 0;
+      // Mirror releaseJump/releaseDive: letting go of the key while paused
+      // must not be re-applied by resume() (savedMoveDir is restored there).
+      if (this.phase === 'paused') this.savedMoveDir = 0;
       return;
     }
     this.moveDir = d > 0 ? 1 : 0;
@@ -565,7 +531,7 @@ export class Game implements GenHost, RenderHost {
       this.slowAcc -= 1;
       this.particles.update(1);
       this.texts.update();
-      if (this.deathTimer > 42 && !this.deathReported) {
+      if (this.deathTimer > DEATH_REPORT_FRAME && !this.deathReported) {
         this.deathReported = true;
         this.onDeath?.(this.stats);
       }
@@ -689,7 +655,7 @@ export class Game implements GenHost, RenderHost {
         if (this.comboT === 0) this.combo = 0;
       }
       if (this.comboPulse > 0) this.comboPulse = Math.max(0, this.comboPulse - 0.12);
-      const zi = Math.floor(m / 350);
+      const zi = Math.floor(m / ZONE_LEN_M);
       if (zi !== this.zoneIdx) {
         this.zoneIdx = zi;
         this.texts.popText(
@@ -703,7 +669,7 @@ export class Game implements GenHost, RenderHost {
     }
 
     /* ---- death by pit */
-    if (this.py > BASE_VH + 60) this.die('pit');
+    if (this.py > PIT_DEATH_Y) this.die('pit');
   }
 
   private doJump(dbl: boolean) {
@@ -747,7 +713,7 @@ export class Game implements GenHost, RenderHost {
         this.py + ph > p.y + 3 &&
         this.py < p.y + bh
       ) {
-        if (this.vx > 0 && this.px + pw - this.vx <= p.x + 1) {
+        if (this.vx > 0 && this.px + pw - this.vx <= p.x + WALL_MARGIN) {
           if (this.absorbShieldHit()) {
             this.px = p.x - pw - 1;
             this.vx = 0;
@@ -776,7 +742,7 @@ export class Game implements GenHost, RenderHost {
     let landing: Platform | null = null;
     let bonked = false;
     for (const p of this.platforms) {
-      if (this.px + pw <= p.x + 1 || this.px >= p.x + p.w - 1) continue;
+      if (this.px + pw <= p.x + WALL_MARGIN || this.px >= p.x + p.w - WALL_MARGIN) continue;
       const bh = p.float ? 8 : GROUND_BOTTOM - p.y;
       if (this.py + ph > p.y && this.py < p.y + bh) {
         if (this.vy >= 0 && prevBottom <= p.y + Math.max(4, this.vy)) {
@@ -826,8 +792,8 @@ export class Game implements GenHost, RenderHost {
         for (const e of this.enemies) {
           if (e.dead || e.kind === 'flyer') continue;
           if (
-            Math.abs(e.x + e.w / 2 - (this.px + PLAYER_W / 2)) < 46 &&
-            Math.abs(e.y - this.py) < 28
+            Math.abs(e.x + e.w / 2 - (this.px + PLAYER_W / 2)) < SLAM_RADIUS &&
+            Math.abs(e.y - this.py) < SLAM_VERT
           ) {
             this.killEnemy(e, SLAM_PTS, e.kind === 'spiker' ? 'SMASH' : 'SLAM');
           }
@@ -920,7 +886,15 @@ export class Game implements GenHost, RenderHost {
       if (e.kind === 'flyer') {
         e.x += e.vx;
         e.y = e.baseY + Math.sin(e.t) * 9;
-        if (e.x < e.minX || e.x > e.maxX) e.vx *= -1;
+        // Clamp inside the patrol range like the walkers — without this the
+        // flyer drifts up to |vx| beyond its range on every bounce.
+        if (e.x < e.minX) {
+          e.x = e.minX;
+          e.vx *= -1;
+        } else if (e.x > e.maxX) {
+          e.x = e.maxX;
+          e.vx *= -1;
+        }
       } else if (e.kind === 'hopper') {
         e.x += e.vx;
         if (e.x < e.minX) {
@@ -1078,9 +1052,10 @@ export class Game implements GenHost, RenderHost {
 
     /* springs */
     for (const sp of this.springs) {
+      // Skip off-screen pads entirely — don't tick their press animation.
+      if (sp.x > this.camX + VW + 20 || sp.x + 14 < this.camX - 20) continue;
       if (sp.press > 0) sp.press--;
       const padY = sp.y + (sp.press > 0 ? 4 : 0);
-      if (sp.x > this.camX + VW + 20 || sp.x + 14 < this.camX - 20) continue;
       if (
         this.vy >= 0 &&
         pxc + pw > sp.x &&
@@ -1122,12 +1097,13 @@ export class Game implements GenHost, RenderHost {
 
   private updateBiomeEvent() {
     if (this.eventTimer > 0) {
+      // Biome flipped mid-event: don't cut it off cold. Wind the timer down
+      // to the last 20 frames — the renderer's fade envelope (eventTimer/24)
+      // fades the weather out over that window instead of snapping it off.
       if (this.eventKind !== this.zone.bg) {
-        this.eventTimer = 0;
-        this.eventMax = 0;
-      } else {
-        this.eventTimer--;
+        if (this.eventTimer > 20) this.eventTimer = 20;
       }
+      this.eventTimer--;
       return;
     }
     for (const trigger of this.worldGen.eventTriggers) {

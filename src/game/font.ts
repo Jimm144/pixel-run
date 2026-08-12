@@ -74,10 +74,15 @@ export const FONT_H = 7;
 const CELL = FONT_W + 1;
 
 const atlasCache = new Map<string, HTMLCanvasElement>();
+/** Cap on cached atlases. Zone-fade HUD colours used to accumulate one atlas
+ *  per distinct lerped colour forever; beyond this we drop the whole cache
+ *  (rebaking a handful of atlases is trivial) so long sessions stay bounded. */
+const ATLAS_CAP = 128;
 
 function atlas(color: string): HTMLCanvasElement {
   let a = atlasCache.get(color);
   if (a) return a;
+  if (atlasCache.size >= ATLAS_CAP) atlasCache.clear();
   const cv = document.createElement('canvas');
   cv.width = CELL * GLYPHS.length;
   cv.height = FONT_H;

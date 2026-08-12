@@ -34,7 +34,13 @@ export function App() {
   const [live, setLive] = useState({ score: 0, meters: 0 });
 
   useEffect(() => {
-    setTouch(window.matchMedia('(pointer: coarse)').matches);
+    // Listen for pointer-capability changes (hybrid devices) instead of
+    // sampling once at mount.
+    const mq = window.matchMedia('(pointer: coarse)');
+    const apply = () => setTouch(mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
   }, []);
 
   useEffect(() => {
@@ -93,19 +99,14 @@ export function App() {
 
   const handleDeath = useCallback((s: Stats) => {
     setStats(s);
-    setLastRun(saveLastRun({ score: s.score, meters: s.meters, coins: s.coins, ts: Date.now() }));
+    const entry = { score: s.score, meters: s.meters, coins: s.coins, ts: Date.now() };
+    setLastRun(saveLastRun(entry));
+    // Load the stored best once and pass it through — saveHighScore would
+    // otherwise re-read it internally.
     const previous = loadHighScore();
-    const beatBest = !previous || s.score > previous.score;
-    if (beatBest && s.score > 0) {
-      const saved = saveHighScore({
-        score: s.score,
-        meters: s.meters,
-        coins: s.coins,
-        ts: Date.now(),
-      });
-      setBest(saved?.score ?? s.score);
-    }
-    setNewBest(beatBest && s.score > 0);
+    const beatBest = s.score > 0 && (!previous || s.score > previous.score);
+    if (beatBest) setBest(saveHighScore(entry, previous)?.score ?? s.score);
+    setNewBest(beatBest);
     setUi('over');
   }, []);
 

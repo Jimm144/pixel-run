@@ -1,16 +1,18 @@
 import { P_CAP, ri, rnd, type Particle } from './types';
 
 /**
- * Ring-buffer particle pool. `parts` is a fixed array of reusable entries
- * (pIdx walks it forever), so the pool never grows and never GCs mid-run.
+ * Free-list particle pool. Every particle lives in exactly one of two lists:
+ * `alive` (updated/drawn each frame) and `free` (reusable slots). Spawning
+ * never allocates once the pool is warm, and update/draw only touch the
+ * particles that are actually alive instead of scanning all P_CAP slots.
  */
 export class ParticleSystem {
-  private parts: Particle[] = [];
-  private pIdx = 0;
+  private alive: Particle[] = [];
+  private free: Particle[] = [];
 
   reset() {
-    this.parts.length = 0;
-    this.pIdx = 0;
+    this.free.push(...this.alive);
+    this.alive.length = 0;
   }
 
   spawnP(
@@ -24,12 +26,17 @@ export class ParticleSystem {
     grav = 0.14,
     drag = 1,
   ) {
-    let p = this.parts[this.pIdx];
+    // Hard cap: recycle the oldest live particle, ring-buffer style.
+    if (this.alive.length >= P_CAP) {
+      const oldest = this.alive[0];
+      this.alive[0] = this.alive[this.alive.length - 1];
+      this.alive.pop();
+      this.free.push(oldest);
+    }
+    let p = this.free.pop();
     if (!p) {
       p = { x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, size: 1, col, grav: 0, drag: 1 };
-      this.parts.push(p);
     }
-    this.pIdx = (this.pIdx + 1) % P_CAP;
     p.x = x;
     p.y = y;
     p.vx = vx;
@@ -40,6 +47,7 @@ export class ParticleSystem {
     p.col = col;
     p.grav = grav;
     p.drag = drag;
+    this.alive.push(p);
   }
 
   burst(x: number, y: number, n: number, cols: string[], power: number, grav = 0.14) {
@@ -61,23 +69,31 @@ export class ParticleSystem {
   }
 
   update(sc: number) {
-    for (let i = 0; i < this.parts.length; i++) {
-      const p = this.parts[i];
-      if (p.life <= 0) continue;
+    for (let i = this.alive.length - 1; i >= 0; i--) {
+      const p = this.alive[i];
       p.life -= sc;
+      if (p.life <= 0) {
+        this.free.push(p);
+        this.alive[i] = this.alive[this.alive.length - 1];
+        this.alive.pop();
+        continue;
+      }
       p.x += p.vx * sc;
       p.y += p.vy * sc;
       p.vy += p.grav * sc;
-      p.vx *= p.drag;
-      p.vy *= p.drag;
+      // Drag is time-scaled like the motion above, so slow-mo (death hit) no
+      // longer decelerates particles relatively faster than real time.
+      if (p.drag !== 1) {
+        const d = p.drag ** sc;
+        p.vx *= d;
+        p.vy *= d;
+      }
     }
   }
 
   draw(c: CanvasRenderingContext2D, camX: number) {
     const cam = Math.round(camX);
-    for (let i = 0; i < this.parts.length; i++) {
-      const p = this.parts[i];
-      if (p.life <= 0) continue;
+    for (const p of this.alive) {
       const a = p.life / p.max;
       c.globalAlpha = a > 0.55 ? 1 : a / 0.55;
       c.fillStyle = p.col;

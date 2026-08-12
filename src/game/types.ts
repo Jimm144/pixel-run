@@ -87,6 +87,21 @@ export const PAD_V = 9.6;
 export const MEGA_PAD_V = 12.2;
 export const PLATFORM_CACHE_PAD = 6; // headroom above y for cap bumps/grass/snow art
 export const MAX_PLATFORM_Y = 180;
+/** Biome zone length in tens-of-meters, and the crossfade window over its tail. */
+export const ZONE_LEN_M = 350;
+export const FADE_START_FRAC = 0.92;
+export const FADE_WINDOW = 0.08;
+/** Death by falling below the ground dirt (ground bottom sits at BASE_VH+70). */
+export const PIT_DEATH_Y = BASE_VH + 60;
+/** Slow-mo frames before the death report reaches App (onDeath fires). */
+export const DEATH_REPORT_FRAME = 42;
+/** Slam shockwave hitbox around the player. */
+export const SLAM_RADIUS = 46;
+export const SLAM_VERT = 28;
+/** Horizontal overlap tolerance when hugging a wall (keeps px from poking in). */
+export const WALL_MARGIN = 1;
+/** Play-area drag distance (px) that triggers a dive on touch. */
+export const DIVE_SWIPE_PX = 28;
 
 /* ---------------------------------------------------------------- entities */
 export interface Platform {
@@ -168,6 +183,8 @@ export interface FloatText {
   text: string;
   col: string;
   scale: number;
+  /** Rendered text width in world px — cached so draw() never re-measures. */
+  w: number;
   /** Pre-rendered glyphs (shadow + fill) — drawn at native scale, scaled up via canvas transform for the pop. */
   sprite: HTMLCanvasElement;
 }

@@ -6,6 +6,8 @@ import {
   clamp,
   COIN_HW,
   COMBO_TIME,
+  FADE_START_FRAC,
+  FADE_WINDOW,
   GROUND_BOTTOM,
   hash,
   PLAYER_BOOT,
@@ -24,14 +26,17 @@ import {
   VW,
   worldOffsetY,
   wrap,
+  ZONE_LEN_M,
+  type Enemy,
   type Platform,
   type PowerUpKind,
   type RenderHost,
 } from './types';
 
-/** Ground-palette fade granularity — steps of the platform re-bake across
- *  a biome crossfade. Small enough that the steps read as one smooth fade. */
-const PLATFORM_FADE_STEPS = 12;
+/** Palette-fade granularity — the biome blend re-bakes in this many steps
+ *  (sky, sun, ground art and HUD colours all step together). Small enough
+ *  that the steps read as one smooth fade. */
+const FADE_STEPS = 12;
 
 /**
  * Everything that paints a frame: all draw* methods, the baked sprite caches
@@ -41,21 +46,19 @@ const PLATFORM_FADE_STEPS = 12;
  */
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
-  private zoneMeters = -1;
   private lastZoneZi = -1;
   private lastZoneT = -1;
-  /** Continuous 0..1 crossfade progress into the next biome. */
+  /** Continuous 0..1 crossfade progress into the next biome (used only for
+   *  the parallax layer alpha — the palette itself steps at FADE_STEPS). */
   private zoneFadeT = 0;
   private transOut: Zone = ZONES[0];
   private transIn: Zone = ZONES[1];
-  /** Bumped at each zone boundary; platform caches rebuild against the new
-   *  pure palette exactly once (see getPlatformCache). */
+  /** Bumped at each zone boundary and fade step; platform caches rebuild
+   *  against the palette of the step they were baked in (see
+   *  getPlatformCache), so within one epoch every platform shares colours. */
   private platformEpoch = 0;
-  /** Quantised fade step (0..PLATFORM_FADE_STEPS) — bumps platformEpoch so
-   *  the ground palette steps along with the sky during the crossfade. */
-  private platformFadeStep = -1;
-  private stars: number[] = [];
-  private motes: number[] = [];
+  private stars: [x: number, y: number, phase: number, size: number][] = [];
+  private motes: [x: number, y: number, spd: number, phase: number][] = [];
   private skyBands: string[] = [];
   /** Pre-baked silhouette strip (512px wide). Built once per shape/colour,
    *  then scrolled with integer drawImage offsets — no live sampling, no
@@ -67,7 +70,6 @@ export class Renderer {
   private powerupSprites = new Map<PowerUpKind, HTMLCanvasElement>();
   private cBolt = shade(ZONES[0].groundDark, -0.3);
   private cStrata1 = mix(ZONES[0].ground, ZONES[0].groundDark, 0.45);
-  private cStrata2 = shade(ZONES[0].groundDark, -0.3);
   private cRockA = shade(ZONES[0].ground, -0.16);
   private cRockB = shade(ZONES[0].groundDark, 0.12);
   private cRockLit = shade(ZONES[0].ground, 0.1);
@@ -84,10 +86,14 @@ export class Renderer {
   // HUD strings are only rebuilt when their values change (perf).
   private hudScore = -1;
   private hudScoreStr = '';
+  private hudBest = -1;
+  private hudBestStr = '';
   private hudM = -1;
   private hudMText = '';
   private hudCoins = -1;
   private hudCoinsText = '';
+  private hudComboKey = '';
+  private hudComboStr = '';
 
   constructor(
     private g: RenderHost,
@@ -96,24 +102,24 @@ export class Renderer {
   ) {
     this.ctx = g.ctx;
     for (let i = 0; i < 90; i++) {
-      this.stars.push(rnd(0, 1400), rnd(2, 140), rnd(0, 6.28), Math.random() < 0.25 ? 2 : 1);
+      this.stars.push([rnd(0, 1400), rnd(2, 140), rnd(0, 6.28), Math.random() < 0.25 ? 2 : 1]);
     }
     for (let i = 0; i < 26; i++) {
-      this.motes.push(rnd(0, VW), rnd(0, VH), rnd(0.3, 1.1), rnd(0, 6.28));
+      this.motes.push([rnd(0, VW), rnd(0, VH), rnd(0.3, 1.1), rnd(0, 6.28)]);
     }
   }
 
   /** Re-zero the per-run zone/platform cache state (called from Game.reset). */
   reset() {
-    this.zoneMeters = -1;
     this.lastZoneZi = -1;
     this.lastZoneT = -1;
     this.zoneFadeT = 0;
     this.platformEpoch = 0;
-    this.platformFadeStep = -1;
   }
 
-  /** Called when the canvas size changes — drops size-dependent art caches. */
+  /** Called when the canvas size changes — drops the size-dependent art
+   *  caches (band tiles are baked VH-tall); platform art is rebuilt for
+   *  safety even though its height comes from the constant ground line. */
   invalidateViewport() {
     this.bandCache.clear();
     for (const p of this.g.platforms) {
@@ -135,7 +141,6 @@ export class Renderer {
   refreshZoneColors(Z: Zone) {
     this.cBolt = shade(Z.groundDark, -0.3);
     this.cStrata1 = mix(Z.ground, Z.groundDark, 0.45);
-    this.cStrata2 = shade(Z.groundDark, -0.3);
     this.cRockA = shade(Z.ground, -0.16);
     this.cRockB = shade(Z.groundDark, 0.12);
     this.cRockLit = shade(Z.ground, 0.1);
@@ -231,47 +236,32 @@ export class Renderer {
 
   render() {
     const c = this.ctx;
-    const m = Math.floor(this.g.distance / 10);
-    // Continuous crossfade into the next biome: colours, sky and the whole
-    // parallax structure morph over the last 8% of a zone (~28m, brisk) and
-    // the ground palette steps along with them so nothing snaps at the
-    // boundary. The refresh is cheap (band tiles are pure-colour keyed and
-    // cached forever), so the fade runs unquantised — no stepping in the sky.
+    // Crossfade into the next biome over the last 8% of a zone (~28m, brisk).
+    // The parallax layer alpha blends continuously, but the palette itself is
+    // quantised to FADE_STEPS so the sky bands, the baked sun and the font
+    // atlases only re-bake at step boundaries — a dozen steps read as one
+    // smooth fade, and the ground already stepped like this. The epoch bump
+    // guarantees every platform in a step is baked against the same colours
+    // (no half-blended drift between platforms).
     const df = this.g.distance / 10;
-    const zi = Math.floor(df / 350);
-    const frac = df / 350 - zi;
-    const t = frac > 0.92 ? Math.min(1, (frac - 0.92) / 0.08) : 0;
-    if (m !== this.zoneMeters || t !== this.lastZoneT) {
-      this.zoneMeters = m;
+    const zi = Math.floor(df / ZONE_LEN_M);
+    const frac = df / ZONE_LEN_M - zi;
+    const fadeT = frac > FADE_START_FRAC ? Math.min(1, (frac - FADE_START_FRAC) / FADE_WINDOW) : 0;
+    const t = Math.floor(fadeT * FADE_STEPS) / FADE_STEPS;
+    if (zi !== this.lastZoneZi || t !== this.lastZoneT) {
+      this.lastZoneZi = zi;
       this.lastZoneT = t;
-      if (zi !== this.lastZoneZi) {
-        this.lastZoneZi = zi;
-        // Zone name flips while colours keep lerping, so keying the platform
-        // cache on the name froze every platform at the half-blended palette.
-        // Rebuild platform art at the boundary where the zone is pure.
-        this.platformEpoch++;
-      }
+      this.platformEpoch++;
       const i = this.g.zoneOrder[zi % ZONES.length];
       const ni = this.g.zoneOrder[(zi + 1) % ZONES.length];
       this.g.zone = lerpZone(ZONES[i], ZONES[ni], t);
       this.transOut = ZONES[i];
       this.transIn = ZONES[ni];
-      this.zoneFadeT = t;
+      this.zoneFadeT = fadeT;
       this.refreshZoneColors(this.g.zone);
       this.skyBands.length = 0;
       for (let b = 0; b < 15; b++) {
         this.skyBands.push(sampleSky(this.g.zone.sky, (b + 0.5) / 15));
-      }
-      // Platform art is baked with the palette at bake time. Bump the epoch
-      // in quantised steps across the fade so the ground re-bakes with the
-      // mid-blend colours and fades like the sky instead of snapping at the
-      // boundary — a dozen small steps are invisible as "stepping".
-      if (t > 0 && t < 1) {
-        const step = Math.floor(t * PLATFORM_FADE_STEPS);
-        if (step !== this.platformFadeStep) {
-          this.platformFadeStep = step;
-          this.platformEpoch++;
-        }
       }
     }
 
@@ -341,18 +331,14 @@ export class Renderer {
     }
     // stars
     c.fillStyle = this.g.zone.star;
-    for (let i = 0; i < this.stars.length; i += 4) {
-      const sx = this.stars[i];
-      const sy = this.stars[i + 1];
-      const ph = this.stars[i + 2];
-      const sz = this.stars[i + 3];
-      const x = ((sx - this.g.camX * 0.06) % 1400 + 1400) % 1400;
+    for (const [sx0, sy0, ph, sz] of this.stars) {
+      const x = ((sx0 - this.g.camX * 0.06) % 1400 + 1400) % 1400;
       if (x > VW) continue;
       const tw = Math.sin(this.g.frame * 0.05 + ph);
       if (tw < -0.4) continue;
       c.globalAlpha = 0.35 + 0.65 * (tw * 0.5 + 0.5);
       // Spread stars across the sky rather than bunching in the top 140px.
-      const starY = (sy / 140) * (VH * 0.66);
+      const starY = (sy0 / 140) * (VH * 0.66);
       c.fillRect(Math.round(x), Math.round(starY), sz, sz);
     }
     c.globalAlpha = 1;
@@ -403,13 +389,13 @@ export class Renderer {
   ) {
     const tile = this.getBandTile(horizon, amp, freq, sharpness, seed, col);
     const tw = tile.width;
-    // Integer scroll only — never subpixel.
+    // Integer scroll only — never subpixel. Blit enough copies to cover any
+    // viewport width (band tiles are 512px; VW is 240/400 today, but the
+    // renderer doesn't assume that).
     let ox = Math.floor(this.g.camX * spd) % tw;
     if (ox < 0) ox += tw;
     const c = this.ctx;
-    // Two blits cover the full viewport as the tile wraps.
-    c.drawImage(tile, -ox, 0);
-    c.drawImage(tile, -ox + tw, 0);
+    for (let x = -ox; x < VW; x += tw) c.drawImage(tile, x, 0);
   }
 
   private drawParallax() {
@@ -503,127 +489,150 @@ export class Renderer {
       const roll = hash(seed);
       // Planted on the solid strip
       const ground = Math.round(baseY) + 2;
-      if (bg === 'jungle') {
-        // tree family: broad canopy / tall palm / twin trunk
-        const h = Math.round((22 + Math.floor(hash(seed + 3) * 20)) * scale);
-        if (roll < 0.4) {
-          const cw = 26 + hash(seed + 4) * 22;
-          c.fillRect(Math.round(nx - 2), ground - h + 4, 5, h - 2);
-          c.fillRect(Math.round(nx - cw / 2), ground - h, cw, 9);
-          c.fillRect(Math.round(nx - cw * 0.3), ground - h - 6, cw * 0.6, 6);
-        } else if (roll < 0.7) {
-          c.fillRect(Math.round(nx), ground - h, 4, h);
-          c.fillRect(Math.round(nx - 13), ground - h - 2, 13, 3);
-          c.fillRect(Math.round(nx + 3), ground - h - 3, 14, 3);
-          c.fillRect(Math.round(nx - 7), ground - h - 6, 9, 3);
-          c.fillRect(Math.round(nx + 2), ground - h - 7, 7, 3);
-        } else {
-          c.fillRect(Math.round(nx - 8), ground - h + 5, 4, h - 5);
-          c.fillRect(Math.round(nx + 4), ground - h - 2, 4, h);
-          c.fillRect(Math.round(nx - 14), ground - h + 1, 12, 6);
-          c.fillRect(Math.round(nx + 2), ground - h - 5, 12, 6);
+      if (bg === 'jungle') this.drawJungleShape(roll, nx, ground, seed, scale, col);
+      else if (bg === 'desert') this.drawDesertShape(roll, nx, ground, seed, scale, col);
+      else if (bg === 'tundra') this.drawTundraShape(roll, nx, ground, seed, scale, col, tipCol);
+      else this.drawCityShape(roll, nx, ground, seed, scale, col, tipCol);
+    }
+  }
+
+  private drawJungleShape(roll: number, nx: number, ground: number, seed: number, scale: number, col: string) {
+    const c = this.ctx;
+    c.fillStyle = col;
+    // tree family: broad canopy / tall palm / twin trunk
+    const h = Math.round((22 + Math.floor(hash(seed + 3) * 20)) * scale);
+    if (roll < 0.4) {
+      const cw = 26 + hash(seed + 4) * 22;
+      c.fillRect(Math.round(nx - 2), ground - h + 4, 5, h - 2);
+      c.fillRect(Math.round(nx - cw / 2), ground - h, cw, 9);
+      c.fillRect(Math.round(nx - cw * 0.3), ground - h - 6, cw * 0.6, 6);
+    } else if (roll < 0.7) {
+      c.fillRect(Math.round(nx), ground - h, 4, h);
+      c.fillRect(Math.round(nx - 13), ground - h - 2, 13, 3);
+      c.fillRect(Math.round(nx + 3), ground - h - 3, 14, 3);
+      c.fillRect(Math.round(nx - 7), ground - h - 6, 9, 3);
+      c.fillRect(Math.round(nx + 2), ground - h - 7, 7, 3);
+    } else {
+      c.fillRect(Math.round(nx - 8), ground - h + 5, 4, h - 5);
+      c.fillRect(Math.round(nx + 4), ground - h - 2, 4, h);
+      c.fillRect(Math.round(nx - 14), ground - h + 1, 12, 6);
+      c.fillRect(Math.round(nx + 2), ground - h - 5, 12, 6);
+    }
+  }
+
+  private drawDesertShape(roll: number, nx: number, ground: number, seed: number, scale: number, col: string) {
+    const c = this.ctx;
+    c.fillStyle = col;
+    // cactus family: saguaro / barrel / ocotillo
+    if (roll < 0.45) {
+      const h = Math.round((16 + Math.floor(hash(seed + 3) * 16)) * scale);
+      c.fillRect(Math.round(nx), ground - h, 4, h);
+      c.fillRect(Math.round(nx - 5), ground - h + 7, 5, 3);
+      c.fillRect(Math.round(nx - 5), ground - h + 3, 3, 6);
+      c.fillRect(Math.round(nx + 4), ground - h + 10, 5, 3);
+      c.fillRect(Math.round(nx + 6), ground - h + 5, 3, 7);
+    } else if (roll < 0.75) {
+      const h2 = Math.round((9 + Math.floor(hash(seed + 3) * 8)) * scale);
+      c.fillRect(Math.round(nx - 5), ground - h2, 11, h2);
+      c.fillRect(Math.round(nx - 3), ground - h2 - 3, 7, 3);
+    } else {
+      const h3 = Math.round((12 + Math.floor(hash(seed + 3) * 12)) * scale);
+      c.fillRect(Math.round(nx), ground - h3, 2, h3);
+      c.fillRect(Math.round(nx - 6), ground - 9, 6, 3);
+      c.fillRect(Math.round(nx + 2), ground - 11, 7, 3);
+      c.fillRect(Math.round(nx - 4), ground - h3 + 3, 2, 8);
+    }
+  }
+
+  private drawTundraShape(roll: number, nx: number, ground: number, seed: number, scale: number, col: string, tipCol: string) {
+    const c = this.ctx;
+    c.fillStyle = col;
+    // pine forest (tundra firs) & snowy mountain shards (properly wide at base, narrow at top)
+    if (roll < 0.55) {
+      // snowy fir tree: trunk + 3 stacked triangles (widening towards the bottom)
+      const h = Math.round((24 + Math.floor(hash(seed + 3) * 16)) * scale);
+      const top = ground - h;
+      // trunk
+      c.fillRect(Math.round(nx - 1), top, 3, h);
+      // top tier
+      c.fillRect(Math.round(nx - 4), top + 3, 9, 3);
+      c.fillRect(Math.round(nx - 2), top, 5, 3);
+      // mid tier
+      c.fillRect(Math.round(nx - 8), top + 9, 17, 4);
+      c.fillRect(Math.round(nx - 5), top + 6, 11, 3);
+      // bottom tier
+      c.fillRect(Math.round(nx - 12), top + 17, 25, 5);
+      c.fillRect(Math.round(nx - 9), top + 13, 19, 4);
+      // snowy branch tips
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx - 1), top, 3, 1);
+      c.fillRect(Math.round(nx - 3), top + 3, 2, 1);
+      c.fillRect(Math.round(nx + 2), top + 3, 2, 1);
+      c.fillRect(Math.round(nx - 7), top + 9, 3, 1);
+      c.fillRect(Math.round(nx + 4), top + 9, 3, 1);
+      c.fillRect(Math.round(nx - 11), top + 17, 4, 1);
+      c.fillRect(Math.round(nx + 7), top + 17, 4, 1);
+      c.fillStyle = col;
+    } else {
+      // snowy glacial peak mountain shard (wide base, narrow peak)
+      const h = Math.round((20 + Math.floor(hash(seed + 3) * 24)) * scale);
+      const w = Math.round((28 + Math.floor(hash(seed + 4) * 20)) * scale);
+      // draw a pointed peak mountain using vertical rectangles
+      const halfW = w / 2;
+      for (let colOffset = -Math.floor(halfW); colOffset <= Math.floor(halfW); colOffset++) {
+        const ratio = 1 - Math.abs(colOffset) / halfW;
+        const colH = Math.round(h * ratio);
+        if (colH > 0) {
+          c.fillRect(Math.round(nx + colOffset), ground - colH, 1, colH + 2);
         }
-      } else if (bg === 'desert') {
-        // cactus family: saguaro / barrel / ocotillo
-        if (roll < 0.45) {
-          const h = Math.round((16 + Math.floor(hash(seed + 3) * 16)) * scale);
-          c.fillRect(Math.round(nx), ground - h, 4, h);
-          c.fillRect(Math.round(nx - 5), ground - h + 7, 5, 3);
-          c.fillRect(Math.round(nx - 5), ground - h + 3, 3, 6);
-          c.fillRect(Math.round(nx + 4), ground - h + 10, 5, 3);
-          c.fillRect(Math.round(nx + 6), ground - h + 5, 3, 7);
-        } else if (roll < 0.75) {
-          const h2 = Math.round((9 + Math.floor(hash(seed + 3) * 8)) * scale);
-          c.fillRect(Math.round(nx - 5), ground - h2, 11, h2);
-          c.fillRect(Math.round(nx - 3), ground - h2 - 3, 7, 3);
-        } else {
-          const h3 = Math.round((12 + Math.floor(hash(seed + 3) * 12)) * scale);
-          c.fillRect(Math.round(nx), ground - h3, 2, h3);
-          c.fillRect(Math.round(nx - 6), ground - 9, 6, 3);
-          c.fillRect(Math.round(nx + 2), ground - 11, 7, 3);
-          c.fillRect(Math.round(nx - 4), ground - h3 + 3, 2, 8);
+      }
+      // snow cap peak
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx - 2), ground - h, 5, 2);
+      c.fillRect(Math.round(nx - 4), ground - h + 2, 9, 2);
+      c.fillStyle = col;
+    }
+  }
+
+  private drawCityShape(roll: number, nx: number, ground: number, seed: number, scale: number, col: string, tipCol: string) {
+    const c = this.ctx;
+    c.fillStyle = col;
+    // city family: antenna slab / twin towers / stepped block
+    const h = Math.round((24 + Math.floor(hash(seed + 3) * 34)) * scale);
+    const bw = Math.round((16 + Math.floor(hash(seed + 4) * 20)) * scale);
+    const top = ground - h;
+    if (roll < 0.35) {
+      c.fillRect(Math.round(nx), top, bw, h);
+      c.fillRect(Math.round(nx + bw * 0.45), top - 12, 3, 12);
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx + bw * 0.45) - 1, top - 15, 5, 3);
+      c.fillStyle = col;
+    } else if (roll < 0.7) {
+      const tw = Math.max(6, Math.floor(bw * 0.4));
+      c.fillRect(Math.round(nx), top + 10, tw, h);
+      c.fillRect(Math.round(nx + bw - tw), top, tw, h + 10);
+      c.fillRect(Math.round(nx + tw), top + 22, bw - tw * 2, 5);
+    } else {
+      c.fillRect(Math.round(nx), top + 14, bw, h);
+      c.fillRect(Math.round(nx + 4), top + 7, bw - 8, 8);
+      c.fillRect(Math.round(nx + 8), top, Math.max(6, bw - 16), 7);
+    }
+    // windows drawn on THIS building's footprint, so they always line up.
+    // The layer alpha must survive this block: during a crossfade the whole
+    // incoming row is drawn at alpha t, and resetting to 1 here would pop the
+    // rest of the row (and the second landmark row) to full opacity.
+    const layerAlpha = c.globalAlpha;
+    c.fillStyle = tipCol;
+    for (let wy = top + 10; wy < ground - 4; wy += 9) {
+      for (let wx = 4; wx < bw - 4; wx += 7) {
+        if (hash(seed + wy * 0.7 + wx) > 0.55) {
+          c.globalAlpha = layerAlpha * (0.35 + hash(seed + wx + wy) * 0.35);
+          c.fillRect(Math.round(nx + wx), Math.round(wy), 2, 2);
         }
-      } else if (bg === 'tundra') {
-        // pine forest (tundra firs) & snowy mountain shards (properly wide at base, narrow at top)
-        if (roll < 0.55) {
-          // snowy fir tree: trunk + 3 stacked triangles (widening towards the bottom)
-          const h = Math.round((24 + Math.floor(hash(seed + 3) * 16)) * scale);
-          const top = ground - h;
-          // trunk
-          c.fillRect(Math.round(nx - 1), top, 3, h);
-          // top tier
-          c.fillRect(Math.round(nx - 4), top + 3, 9, 3);
-          c.fillRect(Math.round(nx - 2), top, 5, 3);
-          // mid tier
-          c.fillRect(Math.round(nx - 8), top + 9, 17, 4);
-          c.fillRect(Math.round(nx - 5), top + 6, 11, 3);
-          // bottom tier
-          c.fillRect(Math.round(nx - 12), top + 17, 25, 5);
-          c.fillRect(Math.round(nx - 9), top + 13, 19, 4);
-          // snowy branch tips
-          c.fillStyle = tipCol;
-          c.fillRect(Math.round(nx - 1), top, 3, 1);
-          c.fillRect(Math.round(nx - 3), top + 3, 2, 1);
-          c.fillRect(Math.round(nx + 2), top + 3, 2, 1);
-          c.fillRect(Math.round(nx - 7), top + 9, 3, 1);
-          c.fillRect(Math.round(nx + 4), top + 9, 3, 1);
-          c.fillRect(Math.round(nx - 11), top + 17, 4, 1);
-          c.fillRect(Math.round(nx + 7), top + 17, 4, 1);
-          c.fillStyle = col;
-        } else {
-          // snowy glacial peak mountain shard (wide base, narrow peak)
-          const h = Math.round((20 + Math.floor(hash(seed + 3) * 24)) * scale);
-          const w = Math.round((28 + Math.floor(hash(seed + 4) * 20)) * scale);
-          // draw a pointed peak mountain using vertical rectangles
-          const halfW = w / 2;
-          for (let colOffset = -Math.floor(halfW); colOffset <= Math.floor(halfW); colOffset++) {
-            const ratio = 1 - Math.abs(colOffset) / halfW;
-            const colH = Math.round(h * ratio);
-            if (colH > 0) {
-              c.fillRect(Math.round(nx + colOffset), ground - colH, 1, colH + 2);
-            }
-          }
-          // snow cap peak
-          c.fillStyle = tipCol;
-          c.fillRect(Math.round(nx - 2), ground - h, 5, 2);
-          c.fillRect(Math.round(nx - 4), ground - h + 2, 9, 2);
-          c.fillStyle = col;
-        }
-      } else {
-        // city family: antenna slab / twin towers / stepped block
-        const h = Math.round((24 + Math.floor(hash(seed + 3) * 34)) * scale);
-        const bw = Math.round((16 + Math.floor(hash(seed + 4) * 20)) * scale);
-        const top = ground - h;
-        if (roll < 0.35) {
-          c.fillRect(Math.round(nx), top, bw, h);
-          c.fillRect(Math.round(nx + bw * 0.45), top - 12, 3, 12);
-          c.fillStyle = tipCol;
-          c.fillRect(Math.round(nx + bw * 0.45) - 1, top - 15, 5, 3);
-          c.fillStyle = col;
-        } else if (roll < 0.7) {
-          const tw = Math.max(6, Math.floor(bw * 0.4));
-          c.fillRect(Math.round(nx), top + 10, tw, h);
-          c.fillRect(Math.round(nx + bw - tw), top, tw, h + 10);
-          c.fillRect(Math.round(nx + tw), top + 22, bw - tw * 2, 5);
-        } else {
-          c.fillRect(Math.round(nx), top + 14, bw, h);
-          c.fillRect(Math.round(nx + 4), top + 7, bw - 8, 8);
-          c.fillRect(Math.round(nx + 8), top, Math.max(6, bw - 16), 7);
-        }
-        // windows drawn on THIS building's footprint, so they always line up
-        c.fillStyle = tipCol;
-        for (let wy = top + 10; wy < ground - 4; wy += 9) {
-          for (let wx = 4; wx < bw - 4; wx += 7) {
-            if (hash(seed + wy * 0.7 + wx) > 0.55) {
-              c.globalAlpha = 0.35 + hash(seed + wx + wy) * 0.35;
-              c.fillRect(Math.round(nx + wx), Math.round(wy), 2, 2);
-            }
-          }
-        }
-        c.globalAlpha = 1;
-        c.fillStyle = col;
       }
     }
+    c.globalAlpha = layerAlpha;
+    c.fillStyle = col;
   }
 
   // Every platform's artwork is deterministic (keyed by p.seed) and never
@@ -701,7 +710,7 @@ export class Renderer {
       c.fillRect(x, y + 16, w, h - 16);
       c.fillStyle = Z.groundDark;
       c.fillRect(x, y + 34, w, h - 34);
-      c.fillStyle = this.cStrata2;
+      c.fillStyle = this.cBolt;
       c.fillRect(x, y + 62, w, h - 62);
 
       // ---- right cliff edge: 1px dark gradient
@@ -745,7 +754,8 @@ export class Renderer {
         c.fillRect(x + sx, capY, 2, 2);
       }
 
-      // ---- biome surface dressing
+      // ---- biome surface dressing (desert gets a clean sand top — no cap
+      // decorations; the surface cap above already gives it its rim)
       if (bg === 'jungle') {
         c.fillStyle = Z.deco;
         for (let i = 0; i * 22 < w - 6; i++) {
@@ -754,8 +764,6 @@ export class Renderer {
           const gx = x + 4 + i * 22 + Math.floor(hx * 6);
           c.fillRect(gx, y - 2, 2, 2);
         }
-      } else if (bg === 'desert') {
-        // clean sand top — no green accent line
       } else if (bg === 'tundra') {
         c.fillStyle = '#ffffff';
         c.fillRect(x + 1, y - 2, w - 2, 2);
@@ -773,6 +781,15 @@ export class Renderer {
   }
 
   private drawWorld() {
+    this.drawPlatforms();
+    this.drawSprings();
+    this.drawSpikes();
+    this.drawPickups();
+    this.drawPowerUps();
+    this.drawEnemies();
+  }
+
+  private drawPlatforms() {
     const c = this.ctx;
     const cam = Math.round(this.g.camX);
 
@@ -784,6 +801,11 @@ export class Renderer {
       const cache = this.getPlatformCache(p);
       c.drawImage(cache, x, y - PLATFORM_CACHE_PAD);
     }
+  }
+
+  private drawSprings() {
+    const c = this.ctx;
+    const cam = Math.round(this.g.camX);
 
     /* springs */
     for (const s of this.g.springs) {
@@ -815,6 +837,11 @@ export class Renderer {
         c.fillRect(x + 2, y + 1, 10, 1);
       }
     }
+  }
+
+  private drawSpikes() {
+    const c = this.ctx;
+    const cam = Math.round(this.g.camX);
 
     /* spikes — sharp metal blades, grounded directly on the platform */
     for (const s of this.g.spikes) {
@@ -839,6 +866,11 @@ export class Renderer {
         c.fillRect(x + 6, y + 5, 1, 4);
       }
     }
+  }
+
+  private drawPickups() {
+    const c = this.ctx;
+    const cam = Math.round(this.g.camX);
 
     /* pickups */
     for (const k of this.g.pickups) {
@@ -910,6 +942,11 @@ export class Renderer {
         }
       }
     }
+  }
+
+  private drawPowerUps() {
+    const c = this.ctx;
+    const cam = Math.round(this.g.camX);
 
     /* power-ups */
     for (const power of this.g.powerups) {
@@ -927,15 +964,24 @@ export class Renderer {
     }
 
     /* enemies */
+    this.drawEnemies();
+  }
+
+  private drawEnemies() {
+    const cam = Math.round(this.g.camX);
     const Z = this.g.zone;
     for (const e of this.g.enemies) {
       if (e.dead) continue;
       const x = Math.round(e.x - cam);
       if (x > VW + 20 || x < -20) continue;
       const y = Math.round(e.y);
-      const hurt = e.hurt > 0;
+      this.drawEnemy(e, x, y, e.hurt > 0, Z);
+    }
+  }
 
-      if (e.kind === 'flyer') {
+  private drawEnemy(e: Enemy, x: number, y: number, hurt: boolean, Z: Zone) {
+    const c = this.ctx;
+    if (e.kind === 'flyer') {
         // biome flyer (wasp / vulture / ice drone / neon drone)
         c.fillStyle = '#14101f';
         c.fillRect(x + 1, y + 3, 18, 8);
@@ -1046,7 +1092,6 @@ export class Renderer {
         c.fillRect(x + 5 + eo, yy + 5, 2, 2);
         c.fillRect(x + 11 + eo, yy + 5, 2, 2);
       }
-    }
   }
 
   private drawPowerUpEffects(c: CanvasRenderingContext2D, cx: number, cy: number) {
@@ -1240,10 +1285,9 @@ export class Renderer {
     const c = this.ctx;
     // dust motes
     c.fillStyle = '#ffffff';
-    for (let i = 0; i < this.motes.length; i += 4) {
-      const spd = this.motes[i + 2];
-      const x = ((this.motes[i] - this.g.camX * spd * 0.5) % VW + VW) % VW;
-      const y = this.motes[i + 1] + Math.sin(this.g.frame * 0.02 + this.motes[i + 3]) * 6;
+    for (const [mx, my, spd, ph] of this.motes) {
+      const x = ((mx - this.g.camX * spd * 0.5) % VW + VW) % VW;
+      const y = my + Math.sin(this.g.frame * 0.02 + ph) * 6;
       c.globalAlpha = 0.12 + 0.12 * spd;
       c.fillRect(Math.round(x), Math.round(y), 1, 1);
     }
@@ -1350,8 +1394,12 @@ export class Renderer {
 
     // best
     if (this.g.best > 0) {
+      if (this.hudBest !== this.g.best) {
+        this.hudBest = this.g.best;
+        this.hudBestStr = pad(this.g.best, 6);
+      }
       drawText(c, 'BEST', 6, bestY, bestS, this.g.zone.accent, '#150a24');
-      drawText(c, pad(this.g.best, 6), 36, bestY, bestS, this.g.zone.accent, '#150a24');
+      drawText(c, this.hudBestStr, 36, bestY, bestS, this.g.zone.accent, '#150a24');
     }
     this.drawPowerUpHud();
 
@@ -1432,7 +1480,13 @@ export class Renderer {
     if (this.g.combo <= 1) return;
     const c = this.ctx;
     const t = this.g.comboT / COMBO_TIME;
-    const label = 'X' + this.g.mult() + ' COMBO ' + this.g.combo;
+    // Only rebuild the label string when its parts change.
+    const key = this.g.combo + '|' + this.g.mult();
+    if (key !== this.hudComboKey) {
+      this.hudComboKey = key;
+      this.hudComboStr = 'X' + this.g.mult() + ' COMBO ' + this.g.combo;
+    }
+    const label = this.hudComboStr;
     const flash = this.g.comboPulse;
     const col = flash > 0.4 ? '#ffffff' : '#ffd166';
     const bw = 78;

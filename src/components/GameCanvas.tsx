@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { BASE_VW, Game, setViewportSize, VH, VW, type Stats } from '../game/engine';
+import { PauseIcon } from './ui';
 import { useGameInput, type UI } from './useGameInput';
 
 interface Props {
@@ -71,20 +72,31 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       // at 60 Hz. Render the transition frame once for the pause overlay.
       if (!paused || !wasPaused) game.render();
       wasPaused = paused;
-      // Biome accent for the touch pause button — flips when the zone flips.
-      if (game.zone.name !== lastZoneName.current) {
-        lastZoneName.current = game.zone.name;
-        setBiomeAccent(game.zone.accent);
-      }
-      // Dim the touch buttons while the countdown dims the scene.
-      const countingNow = game.countdown > 0 || game.goTimer > 0;
-      if (countingNow !== countingRef.current) {
-        countingRef.current = countingNow;
-        setCounting(countingNow);
+      // The React state mirrors (zone accent, countdown dim) only change at
+      // zone/countdown transitions; check them on a slow cadence instead of
+      // every frame so the game loop never drives 60 Hz re-renders. While
+      // paused the world is frozen, so skipping the check is safe.
+      if (game.frame % 10 === 0) {
+        // Biome accent for the touch pause button — flips when the zone flips.
+        if (game.zone.name !== lastZoneName.current) {
+          lastZoneName.current = game.zone.name;
+          setBiomeAccent(game.zone.accent);
+        }
+        // Dim the touch buttons while the countdown dims the scene.
+        const countingNow = game.countdown > 0 || game.goTimer > 0;
+        if (countingNow !== countingRef.current) {
+          countingRef.current = countingNow;
+          setCounting(countingNow);
+        }
       }
     };
     raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      // Drop the ref so the unmounted Game can be collected and stale
+      // listeners (pointerup etc.) never find an orphaned instance.
+      gameRef.current = null;
+    };
   }, [gameRef]);
 
   /* -------------------------------------------------------------- fit size */
@@ -178,10 +190,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
               <span className="pointer-events-none absolute -top-[4px] -right-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
               <span className="pointer-events-none absolute -bottom-[4px] -left-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
               <span className="pointer-events-none absolute -bottom-[4px] -right-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
-              <svg aria-hidden="true" viewBox="0 0 16 16" className="h-5 w-5 tablet:h-6 tablet:w-6" fill="currentColor" shapeRendering="crispEdges">
-                <rect x="3" y="2" width="3" height="12" />
-                <rect x="10" y="2" width="3" height="12" />
-              </svg>
+              <PauseIcon className="h-5 w-5 tablet:h-6 tablet:w-6" />
             </button>
           </div>
           <div className="absolute bottom-4 left-4 z-20 tablet:bottom-8 tablet:left-8">

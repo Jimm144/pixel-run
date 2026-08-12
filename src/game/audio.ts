@@ -64,6 +64,13 @@ const BIOME_MUSIC: Record<MusicBiome, BiomeMusic> = {
   },
 };
 
+interface PooledTone {
+  osc: OscillatorNode;
+  gain: GainNode;
+  /** Audio time at which the note's gain envelope has fully closed. */
+  freeAt: number;
+}
+
 export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -77,6 +84,8 @@ export class Sfx {
   private musicIntensity = 0;
   private musicPlaying = false;
   private musicPaused = false;
+  /** Reusable melody/bass/arp voices — see acquireTone(). */
+  private musicTonePool: PooledTone[] = [];
   muted = false;
   musicMuted = false;
   sfxMuted = false;
@@ -222,6 +231,30 @@ export class Sfx {
     this.musicTimer = null;
   }
 
+  /**
+   * Returns a voice whose previous note has fully closed, or creates one.
+   * The oscillator runs forever (never stopped); the gain envelope gates each
+   * note to silence and `freeAt` guards against reuse while a note is still
+   * sounding — this keeps the ~6 nodes per 16th note from being reallocated.
+   */
+  private acquireTone(needAt: number): PooledTone | null {
+    const ctx = this.ctx;
+    if (!ctx || !this.musicGain) return null;
+    for (let i = this.musicTonePool.length - 1; i >= 0; i--) {
+      const n = this.musicTonePool[i];
+      if (n.freeAt <= needAt - 0.03) {
+        this.musicTonePool.splice(i, 1);
+        return n;
+      }
+    }
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(this.musicGain);
+    osc.start(0);
+    return { osc, gain, freeAt: 0 };
+  }
+
   private musicTone(
     type: OscillatorType,
     f0: number,
@@ -231,20 +264,18 @@ export class Sfx {
     delay: number,
   ) {
     const ctx = this.ctx;
-    if (!ctx || ctx.state === 'closed' || !this.musicGain || this.muted || this.musicMuted) return;
+    if (!ctx || ctx.state === 'closed' || this.muted || this.musicMuted) return;
     const t = ctx.currentTime + delay;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(f0, t);
-    osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
-    gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(vol, t + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    osc.connect(gain);
-    gain.connect(this.musicGain);
-    osc.start(t);
-    osc.stop(t + dur + 0.02);
+    const n = this.acquireTone(t);
+    if (!n) return;
+    n.osc.type = type;
+    n.osc.frequency.setValueAtTime(f0, t);
+    n.osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    n.gain.gain.setValueAtTime(0.0001, t);
+    n.gain.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+    n.gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    n.freeAt = t + dur + 0.03;
+    this.musicTonePool.push(n);
   }
 
   private musicDrum(type: 'kick' | 'snare' | 'hihat', delay: number) {
