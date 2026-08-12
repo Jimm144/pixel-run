@@ -1,0 +1,69 @@
+# PIXEL RUN
+
+An endless runner that plays in the browser. No install, no account.
+
+Play: https://jimm144.github.io/pixel-run/
+
+## Gameplay
+
+The player runs automatically. Jump, double jump and dive through four biomes: jungle, desert, tundra and neon city.
+
+- Stomp enemies from above to defeat them
+- Dive-slam to break rooted hazards
+- Collect coins and gems for score
+- Grab power-ups: shield, jump shoes, triple jump, propeller
+- The combo meter multiplies score while enemies are defeated in quick succession
+
+The best run and the last run are stored locally (localStorage).
+
+## Controls
+
+Keyboard:
+
+- SPACE or W: jump
+- SPACE twice: double jump
+- Hold SPACE: higher jump
+- S or DOWN: dive
+- D: boost
+- P or ESC: pause
+
+Touch:
+
+- Tap: jump
+- Double tap: double jump
+- Hold: higher jump
+- DIVE button: dive
+- Pause button: pause
+
+## Biomes
+
+Four zones repeat in order. Each zone has its own palette, parallax background, enemies, coins and music. Zone transitions fade gradually.
+
+## Technical
+
+- TypeScript, React, Vite
+- Single HTML5 canvas renderer, pixel art, no image assets
+- Music and sound effects generated at runtime with the Web Audio API
+- Production build is one self-contained HTML file (vite-plugin-singlefile)
+- Font: Press Start 2P from Google Fonts
+
+## Development
+
+Requires Node.js.
+
+```
+npm install
+npm run dev
+```
+
+Production build:
+
+```
+npm run build
+```
+
+Output: `dist/index.html`. Pushing to master deploys it to GitHub Pages via the workflow in `.github/workflows/deploy.yml`.
+
+## License
+
+GPL-3.0-or-later. See the header in `src/game/audio.ts`.
