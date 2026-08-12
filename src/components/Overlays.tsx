@@ -27,7 +27,7 @@ function ControlHint({ kind, keys, danger = false }: { kind: ControlIconKind; ke
       <span className={danger ? 'text-[#ff4d6d]' : 'text-[#3ef2c8]'}>
         <ControlIcon kind={kind} />
       </span>
-      <p className={`truncate font-pixel text-[7px] leading-[1.7] md:text-[9px] ${danger ? 'text-[#ff4d6d]' : 'text-[#3ef2c8]'}`}>
+      <p className={`truncate font-pixel text-[7px] leading-[1.7] tablet:text-[9px] ${danger ? 'text-[#ff4d6d]' : 'text-[#3ef2c8]'}`}>
         {keys}
       </p>
     </div>
@@ -75,22 +75,22 @@ export function StartScreen({
       className="absolute inset-0 z-10 flex cursor-pointer items-center justify-center overflow-y-auto bg-[#08040f]/88 p-4"
       onClick={onStart}
     >
-      <div className="flex w-full max-w-[340px] flex-col items-center gap-3 md:max-w-[640px]">
+      <div className="flex w-full max-w-[340px] flex-col items-center gap-3 tablet:max-w-[800px]">
         <div className="text-center">
-          <h1 className="font-pixel text-[26px] leading-none text-[#3ef2c8] drop-shadow-[0_4px_0_#08040f] sm:text-[34px] md:text-[48px]">
+          <h1 className="font-pixel text-[26px] leading-none text-[#3ef2c8] drop-shadow-[0_4px_0_#08040f] sm:text-[34px] tablet:text-[48px]">
             <span className="animate-title inline-block">PIXEL</span>
           </h1>
-          <h1 className="font-pixel text-[26px] leading-none text-[#ff4d6d] drop-shadow-[0_4px_0_#08040f] sm:text-[34px] md:text-[48px]">
+          <h1 className="font-pixel text-[26px] leading-none text-[#ff4d6d] drop-shadow-[0_4px_0_#08040f] sm:text-[34px] tablet:text-[48px]">
             <span className="animate-title-2 inline-block">RUN</span>
           </h1>
-          <p className="mt-2 font-pixel text-[8px] tracking-[0.25em] text-[#9d8fd6] md:text-[10px]">
+          <p className="mt-2 font-pixel text-[8px] tracking-[0.25em] text-[#9d8fd6] tablet:text-[10px]">
             RUN &middot; STOMP &middot; SURVIVE
           </p>
         </div>
 
         <Panel className="w-full">
           <div className="flex flex-col items-center gap-3">
-            <div className="grid w-full grid-cols-2 gap-x-3 gap-y-2 md:grid-cols-3">
+            <div className="grid w-full grid-cols-2 gap-x-3 gap-y-2 tablet:grid-cols-3">
               {touch ? (
                 <>
                   <ControlHint kind="tap" keys="TAP" />
@@ -109,16 +109,16 @@ export function StartScreen({
                 </>
               )}
             </div>
-            <div className="mt-1 flex w-full items-center justify-center gap-4 border-t-2 border-[#221741] pt-3 font-pixel text-[8px] text-[#6f5fa8] md:text-[10px]">
+            <div className="mt-1 flex w-full items-center justify-center gap-4 border-t-2 border-[#221741] pt-3 font-pixel text-[8px] text-[#6f5fa8] tablet:text-[10px]">
               <span>LAST RUN <span className="text-[#9d8fd6]">{pad(lastRun, 6)}</span></span>
               <span>BEST <span className="text-[#ffd166]">{pad(best, 6)}</span></span>
             </div>
           </div>
         </Panel>
-        <div className="flex w-full max-w-[340px] gap-2 md:max-w-[640px]">
+        <div className="flex w-full max-w-[340px] gap-2 tablet:max-w-[800px]">
           <button
             onClick={(e) => { e.stopPropagation(); onToggleMusic(); }}
-            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] md:px-4 md:py-3 md:text-[10px] ${
+            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] tablet:px-5 tablet:py-3 tablet:text-[10px] ${
               musicOn
                 ? 'border-[#3ef2c8]/40 bg-[#3ef2c8]/10 text-[#3ef2c8]'
                 : 'border-[#6f5fa8]/30 bg-[#0d0619] text-[#6f5fa8]'
@@ -143,7 +143,7 @@ export function StartScreen({
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onToggleSfx(); }}
-            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] md:px-4 md:py-3 md:text-[10px] ${
+            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] tablet:px-5 tablet:py-3 tablet:text-[10px] ${
               sfxOn
                 ? 'border-[#ffd166]/40 bg-[#ffd166]/10 text-[#ffd166]'
                 : 'border-[#6f5fa8]/30 bg-[#0d0619] text-[#6f5fa8]'
@@ -167,7 +167,7 @@ export function StartScreen({
           </button>
         </div>
         <span onClick={(e) => e.stopPropagation()}>
-          <PixelButton onClick={onStart} className="flex min-w-[280px] items-center justify-center gap-3 md:min-w-[420px] md:py-4 md:text-[15px]">
+          <PixelButton onClick={onStart} className="flex min-w-[280px] items-center justify-center gap-3 tablet:min-w-[480px] tablet:py-4 tablet:text-[15px]">
             <PlayIcon />
             <span>START RUN</span>
           </PixelButton>
@@ -177,7 +177,7 @@ export function StartScreen({
           target="_blank"
           rel="noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="font-pixel text-[7px] text-[#5c4f8e] transition-colors hover:text-[#9d8fd6] md:text-[9px]"
+          className="font-pixel text-[7px] text-[#5c4f8e] transition-colors hover:text-[#9d8fd6] tablet:text-[9px]"
         >
           GITHUB
         </a>
@@ -202,21 +202,21 @@ export function PauseScreen({
 }) {
   return (
     <div className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-[#08040f]/80 p-3 [@media(max-height:640px)]:items-end [@media(max-height:640px)]:pb-8">
-      <Panel className="w-full max-w-[300px] p-4 md:max-w-[400px] md:p-6">
-        <h2 className="mb-3 text-center font-pixel text-[16px] text-[#3ef2c8] md:mb-4 md:text-[18px]">PAUSED</h2>
-        <div className="mb-3 grid grid-cols-2 gap-2 md:mb-4 md:gap-3">
+      <Panel className="w-full max-w-[300px] p-4 tablet:max-w-[420px] tablet:p-6">
+        <h2 className="mb-3 text-center font-pixel text-[16px] text-[#3ef2c8] tablet:mb-4 tablet:text-[18px]">PAUSED</h2>
+        <div className="mb-3 grid grid-cols-2 gap-2 tablet:mb-4 tablet:gap-3">
           <Stat label="SCORE" value={pad(score, 6)} color="#ffffff" />
           <Stat label="DIST" value={meters + 'M'} color="#3ef2c8" />
         </div>
         <div className="flex flex-col gap-2">
-          <PixelButton onClick={onResume} small className="py-2.5 md:py-3 md:text-[10px]">
+          <PixelButton onClick={onResume} small className="py-2.5 tablet:py-3 tablet:text-[10px]">
             RESUME
           </PixelButton>
           <div className="grid grid-cols-2 gap-2">
-            <PixelButton variant="danger" onClick={onRestart} small className="py-2.5 md:py-3 md:text-[10px]">
+            <PixelButton variant="danger" onClick={onRestart} small className="py-2.5 tablet:py-3 tablet:text-[10px]">
               RESTART
             </PixelButton>
-            <PixelButton variant="ghost" onClick={onQuit} small className="py-2.5 md:py-3 md:text-[10px]">
+            <PixelButton variant="ghost" onClick={onQuit} small className="py-2.5 tablet:py-3 tablet:text-[10px]">
               MENU
             </PixelButton>
           </div>
@@ -244,37 +244,37 @@ export function GameOverScreen({
 }) {
   return (
     <div className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-[#08040f]/80 p-3">
-      <div className="flex w-full max-w-[380px] flex-col items-center gap-3 md:max-w-[560px]">
-        <h2 className="animate-shake-in font-pixel text-[22px] text-[#ff4d6d] drop-shadow-[0_4px_0_#08040f] md:text-[30px]">
+      <div className="flex w-full max-w-[380px] flex-col items-center gap-3 tablet:max-w-[800px]">
+        <h2 className="animate-shake-in font-pixel text-[22px] text-[#ff4d6d] drop-shadow-[0_4px_0_#08040f] tablet:text-[30px]">
           WASTED
         </h2>
         <Panel className="w-full">
           <div className="mb-3 text-center">
-            <p className="font-pixel text-[7px] text-[#6f5fa8] md:text-[9px]">
+            <p className="font-pixel text-[7px] text-[#6f5fa8] tablet:text-[9px]">
               {newBest ? 'NEW PERSONAL BEST' : 'FINAL SCORE'}
             </p>
-            <p className="font-pixel text-[24px] text-[#ffd166] drop-shadow-[0_3px_0_#08040f] md:text-[34px]">
+            <p className="font-pixel text-[24px] text-[#ffd166] drop-shadow-[0_3px_0_#08040f] tablet:text-[34px]">
               {pad(stats.score, 6)}
             </p>
             {!newBest && (
-              <p className="mt-2 font-pixel text-[7px] text-[#6f5fa8] md:text-[9px]">
+              <p className="mt-2 font-pixel text-[7px] text-[#6f5fa8] tablet:text-[9px]">
                 BEST <span className="text-[#3ef2c8]">{pad(best, 6)}</span>
               </p>
             )}
           </div>
-          <div className="mb-3 grid grid-cols-4 gap-1.5 md:gap-3">
+          <div className="mb-3 grid grid-cols-4 gap-1.5 tablet:gap-3">
             <Stat label="DIST" value={stats.meters + 'M'} color="#3ef2c8" />
             <Stat label="COINS" value={String(stats.coins)} color="#ffd166" />
             <Stat label="KILLS" value={String(stats.kills)} color="#ff4d6d" />
             <Stat label="COMBO" value={'X' + stats.combo} color="#c98cff" />
           </div>
         </Panel>
-        <div className="flex w-full max-w-[380px] flex-col items-center gap-2 md:max-w-[560px]">
-          <PixelButton onClick={onRestart} className="w-full md:py-4 md:text-[14px]">
-            <RetryIcon className="mr-2 inline-block h-[16px] w-[16px] align-[-3px] md:h-[20px] md:w-[20px]" />
+        <div className="flex w-full max-w-[380px] flex-col items-center gap-2 tablet:max-w-[800px]">
+          <PixelButton onClick={onRestart} className="w-full tablet:py-4 tablet:text-[14px]">
+            <RetryIcon className="mr-2 inline-block h-[16px] w-[16px] align-[-3px] tablet:h-[24px] tablet:w-[24px]" />
             {touch ? 'TAP TO RETRY' : 'RETRY'}
           </PixelButton>
-          <PixelButton variant="ghost" onClick={onMenu} small className="md:py-3 md:text-[10px]">
+          <PixelButton variant="ghost" onClick={onMenu} small className="tablet:py-3 tablet:text-[10px]">
             MAIN MENU
           </PixelButton>
         </div>

@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Tablet (iPad) sizing: touch screens that are wide enough to use the space.
+   Deliberately excludes desktop windows, which keep the phone-size menus. */
+@custom-variant tablet (@media (min-width: 768px) and (pointer: coarse));
+
 :root {
   color-scheme: dark;
 }

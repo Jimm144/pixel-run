@@ -219,8 +219,9 @@ export class Renderer {
       c.fillRect(6, 6, 7, 7);
       c.fillStyle = col;
       c.fillRect(7, 7, 5, 5);
-      // Three thin blades at 120-degree angles
-      c.fillRect(8, 1, 2, 5);
+      // Three thin blades at 120-degree angles; the top blade reaches into
+      // the hub so it reads as one connected rotor.
+      c.fillRect(8, 1, 2, 7);
       c.fillRect(3, 9, 5, 2);
       c.fillRect(11, 9, 5, 2);
     }
@@ -946,11 +947,12 @@ export class Renderer {
         c.fillRect(x + 12, y + 2, 3, 8);
         c.fillStyle = Z.flyerLight;
         c.fillRect(x + 1, y + 3, 18, 2);
-        // blinking lens
+        // blinking lens — on the side it is flying towards
+        const lens = e.vx < 0 ? x + 3 : x + 15;
         c.fillStyle = Math.sin(e.t * 3.5) > 0 ? '#ff4d6d' : '#ffd166';
-        c.fillRect(x + 15, y + 5, 3, 3);
+        c.fillRect(lens, y + 5, 3, 3);
         c.fillStyle = '#ffffff';
-        c.fillRect(x + 16, y + 6, 1, 1);
+        c.fillRect(lens + 1, y + 6, 1, 1);
         // rotor
         c.fillStyle = '#c8cbe8';
         const rot = Math.sin(e.t * 8) * 8;

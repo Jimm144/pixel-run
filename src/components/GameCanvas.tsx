@@ -166,37 +166,37 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
 
       {showTouch && (
         <>
-          <div className="absolute top-4 right-4 z-20 md:top-6 md:right-6">
+          <div className="absolute top-4 right-4 z-20 tablet:top-8 tablet:right-8">
             <button
               type="button"
               aria-label="Pause"
               style={{ borderColor: biomeAccent, color: biomeAccent, opacity: counting ? 0.35 : 0.75 }}
-              className="relative flex h-12 w-12 items-center justify-center border-2 bg-[#140a26]/80 shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] md:h-14 md:w-14"
+              className="relative flex h-12 w-12 items-center justify-center border-2 bg-[#140a26]/80 shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] tablet:h-16 tablet:w-16"
               {...pauseHandlers}
             >
               <span className="pointer-events-none absolute -top-[4px] -left-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
               <span className="pointer-events-none absolute -top-[4px] -right-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
               <span className="pointer-events-none absolute -bottom-[4px] -left-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
               <span className="pointer-events-none absolute -bottom-[4px] -right-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
-              <svg aria-hidden="true" viewBox="0 0 16 16" className="h-5 w-5 md:h-6 md:w-6" fill="currentColor" shapeRendering="crispEdges">
+              <svg aria-hidden="true" viewBox="0 0 16 16" className="h-5 w-5 tablet:h-6 tablet:w-6" fill="currentColor" shapeRendering="crispEdges">
                 <rect x="3" y="2" width="3" height="12" />
                 <rect x="10" y="2" width="3" height="12" />
               </svg>
             </button>
           </div>
-          <div className="absolute bottom-4 left-4 z-20 md:bottom-6 md:left-6">
+          <div className="absolute bottom-4 left-4 z-20 tablet:bottom-8 tablet:left-8">
             <button
               type="button"
               aria-label="Dive"
               style={{ borderColor: '#ffd166', color: '#ffd166', opacity: counting ? 0.35 : 0.75 }}
-              className="relative flex h-16 w-16 items-center justify-center border-2 bg-[#140a26]/80 shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] md:h-20 md:w-20"
+              className="relative flex h-16 w-16 items-center justify-center border-2 bg-[#140a26]/80 shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] tablet:h-24 tablet:w-24"
               {...diveHandlers}
             >
               <span className="pointer-events-none absolute -top-[4px] -left-[4px] h-2 w-2 bg-[#ffd166]" />
               <span className="pointer-events-none absolute -top-[4px] -right-[4px] h-2 w-2 bg-[#ffd166]" />
               <span className="pointer-events-none absolute -bottom-[4px] -left-[4px] h-2 w-2 bg-[#ffd166]" />
               <span className="pointer-events-none absolute -bottom-[4px] -right-[4px] h-2 w-2 bg-[#ffd166]" />
-              <svg aria-hidden="true" viewBox="0 0 32 32" className="h-9 w-9 md:h-11 md:w-11" fill="currentColor" shapeRendering="crispEdges">
+              <svg aria-hidden="true" viewBox="0 0 32 32" className="h-9 w-9 tablet:h-14 tablet:w-14" fill="currentColor" shapeRendering="crispEdges">
                 <path d="M12 4h8v14h7L16 29 5 18h7V4z" />
               </svg>
             </button>
