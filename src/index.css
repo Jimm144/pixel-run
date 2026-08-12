@@ -117,19 +117,3 @@ canvas {
 .animate-pop {
   animation: popKF 0.22s ease-out both;
 }
-
-@keyframes bobKF {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-4px);
-  }
-}
-.animate-bob {
-  animation: bobKF 1.8s ease-in-out infinite;
-}
-.animate-bob-delayed {
-  animation: bobKF 1.8s ease-in-out 0.45s infinite;
-}

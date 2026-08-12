@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { BASE_VW, Game, setViewportSize, VH, VW, type Stats } from '../game/engine';
 import { useGameInput, type UI } from './useGameInput';
@@ -18,6 +18,9 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<{ portrait: boolean; w: number; h: number } | null>(null);
+  /** Zone accent for the touch pause button — follows the biome. */
+  const [biomeAccent, setBiomeAccent] = useState('#3ef2c8');
+  const lastZoneName = useRef('');
 
   const { wrapHandlers, diveHandlers, pauseHandlers } = useGameInput({
     gameRef,
@@ -65,6 +68,11 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       // at 60 Hz. Render the transition frame once for the pause overlay.
       if (!paused || !wasPaused) game.render();
       wasPaused = paused;
+      // Biome accent for the touch pause button — flips when the zone flips.
+      if (game.zone.name !== lastZoneName.current) {
+        lastZoneName.current = game.zone.name;
+        setBiomeAccent(game.zone.accent);
+      }
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
@@ -149,28 +157,30 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
 
       {showTouch && (
         <>
-          <div className="animate-bob absolute top-[92px] right-4 z-20">
+          <div className="absolute top-4 right-4 z-20">
             <button
               type="button"
               aria-label="Pause"
-              className="relative flex h-12 w-12 items-center justify-center border-2 border-[#3ef2c8] bg-[#140a26]/95 text-[#3ef2c8] shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
+              style={{ borderColor: biomeAccent, color: biomeAccent, opacity: 0.75 }}
+              className="relative flex h-12 w-12 items-center justify-center border-2 bg-[#140a26]/80 shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
               {...pauseHandlers}
             >
-              <span className="pointer-events-none absolute -top-[4px] -left-[4px] h-2 w-2 bg-[#3ef2c8]" />
-              <span className="pointer-events-none absolute -top-[4px] -right-[4px] h-2 w-2 bg-[#3ef2c8]" />
-              <span className="pointer-events-none absolute -bottom-[4px] -left-[4px] h-2 w-2 bg-[#3ef2c8]" />
-              <span className="pointer-events-none absolute -bottom-[4px] -right-[4px] h-2 w-2 bg-[#3ef2c8]" />
+              <span className="pointer-events-none absolute -top-[4px] -left-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
+              <span className="pointer-events-none absolute -top-[4px] -right-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
+              <span className="pointer-events-none absolute -bottom-[4px] -left-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
+              <span className="pointer-events-none absolute -bottom-[4px] -right-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
               <svg aria-hidden="true" viewBox="0 0 16 16" className="h-5 w-5" fill="currentColor" shapeRendering="crispEdges">
                 <rect x="3" y="2" width="3" height="12" />
                 <rect x="10" y="2" width="3" height="12" />
               </svg>
             </button>
           </div>
-          <div className="animate-bob-delayed absolute bottom-4 left-4 z-20">
+          <div className="absolute bottom-4 left-4 z-20">
             <button
               type="button"
               aria-label="Dive"
-              className="relative flex h-16 w-16 items-center justify-center border-2 border-[#ffd166] bg-[#140a26]/95 text-[#ffd166] shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
+              style={{ borderColor: '#ffd166', color: '#ffd166', opacity: 0.75 }}
+              className="relative flex h-16 w-16 items-center justify-center border-2 bg-[#140a26]/80 shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
               {...diveHandlers}
             >
               <span className="pointer-events-none absolute -top-[4px] -left-[4px] h-2 w-2 bg-[#ffd166]" />

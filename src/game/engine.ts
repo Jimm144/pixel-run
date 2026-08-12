@@ -382,6 +382,7 @@ export class Game implements GenHost, RenderHost {
       this.savedDiveHeld = false;
       this.savedMoveDir = 0;
       if (this.jumpHeld) this.jumpBuf = BUFFER; // buffered for GO
+      this.goTimer = 0; // don't flash "GO" over the fresh countdown
       this.countdown = 180; // 3s of "3-2-1-GO" before control resumes
       this.countdownTicks = false; // silent countdown after unpause
       sfx.resumeMusic();

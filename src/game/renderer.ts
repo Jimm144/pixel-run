@@ -335,8 +335,8 @@ export class Renderer {
     const period = VW + 140;
     const sunX = (((300 - this.g.camX * 0.04) % period) + period) % period - 70;
     if (this.sunSprite) {
-      // Mobile puts it well below the HUD block, just above the ridge.
-      c.drawImage(this.sunSprite, Math.round(sunX) - 32, (this.mobileView ? 84 : 68) - 32);
+      // Mobile: low in the sky, its top peeking above the mountains.
+      c.drawImage(this.sunSprite, Math.round(sunX) - 32, (this.mobileView ? 96 : 68) - 32);
     }
     // stars
     c.fillStyle = this.g.zone.star;
@@ -450,21 +450,21 @@ export class Renderer {
     // rows sink, giving each parallax layer clear vertical breathing room.
     const m = this.mobileView;
     if (bg === 'jungle') {
-      this.seeBand(0.12, m ? 140 : 120, 30, 0.02, 0.15, 0, Z.far);
-      this.drawLandmarks(Z, back, 0.19, m ? 136 : 152, 47, 29, Z.decoMid, m ? 0.8 : 0.65);
-      this.drawLandmarks(Z, Z.mid, 0.28, m ? 168 : 172, 56, 73, Z.decoMid, 1);
+      this.seeBand(0.12, m ? 150 : 120, m ? 40 : 30, 0.02, 0.15, 0, Z.far);
+      this.drawLandmarks(Z, back, 0.19, m ? 124 : 142, 47, 29, Z.decoMid, m ? 0.8 : 0.65);
+      this.drawLandmarks(Z, Z.mid, 0.28, m ? 158 : 160, 56, 73, Z.decoMid, 1);
     } else if (bg === 'desert') {
-      this.seeBand(0.12, m ? 144 : 124, 24, 0.014, 0.08, 0, Z.far);
-      this.drawLandmarks(Z, back, 0.19, m ? 138 : 154, 72, 23, Z.decoMid, m ? 0.8 : 0.65);
-      this.drawLandmarks(Z, Z.mid, 0.28, m ? 170 : 174, 84, 67, Z.decoMid, 1);
+      this.seeBand(0.12, m ? 154 : 124, m ? 40 : 24, 0.014, 0.08, 0, Z.far);
+      this.drawLandmarks(Z, back, 0.19, m ? 126 : 144, 72, 23, Z.decoMid, m ? 0.8 : 0.65);
+      this.drawLandmarks(Z, Z.mid, 0.28, m ? 160 : 162, 84, 67, Z.decoMid, 1);
     } else if (bg === 'tundra') {
-      this.seeBand(0.11, m ? 140 : 118, 30, 0.018, 1.6, 0.5, Z.far);
-      this.drawLandmarks(Z, back, 0.18, m ? 138 : 154, 53, 41, Z.decoMid, m ? 0.8 : 0.65);
-      this.drawLandmarks(Z, Z.mid, 0.28, m ? 170 : 174, 58, 59, Z.decoMid, 1);
+      this.seeBand(0.11, m ? 150 : 118, m ? 40 : 30, 0.018, 1.6, 0.5, Z.far);
+      this.drawLandmarks(Z, back, 0.18, m ? 126 : 144, 53, 41, Z.decoMid, m ? 0.8 : 0.65);
+      this.drawLandmarks(Z, Z.mid, 0.28, m ? 160 : 162, 58, 59, Z.decoMid, 1);
     } else {
-      this.seeBand(0.13, m ? 142 : 122, 38, 0.05, 0.2, 0.9, Z.far);
-      this.drawLandmarks(Z, back, 0.18, m ? 136 : 152, 55, 19, Z.decoFar, m ? 0.8 : 0.7);
-      this.drawLandmarks(Z, Z.mid, 0.28, m ? 168 : 172, 62, 37, Z.decoFar, 1);
+      this.seeBand(0.13, m ? 152 : 122, m ? 40 : 38, 0.05, 0.2, 0.9, Z.far);
+      this.drawLandmarks(Z, back, 0.18, m ? 124 : 142, 55, 19, Z.decoFar, m ? 0.8 : 0.7);
+      this.drawLandmarks(Z, Z.mid, 0.28, m ? 158 : 160, 62, 37, Z.decoFar, 1);
     }
     c.globalAlpha = 1;
   }
@@ -1289,12 +1289,13 @@ export class Renderer {
         c.fillRect(x + 4, y + 3, 3, 2);
         c.fillRect(x + 4, y + 1, 2, 2);
       } else if (kind === 'triple') {
-        c.fillRect(x, y, 2, 1);
+        // three wings, each with a stem below — same shape as the pickup
+        c.fillRect(x, y, 3, 1);
         c.fillRect(x + 1, y + 1, 1, 2);
-        c.fillRect(x + 3, y + 2, 2, 1);
-        c.fillRect(x + 4, y + 3, 1, 2);
-        c.fillRect(x + 6, y + 4, 2, 1);
-        c.fillRect(x + 7, y + 5, 1, 2);
+        c.fillRect(x + 4, y + 2, 3, 1);
+        c.fillRect(x + 5, y + 3, 1, 2);
+        c.fillRect(x + 8, y + 4, 3, 1);
+        c.fillRect(x + 9, y + 5, 1, 2);
       } else {
         // propeller — 3-blade rotor, same shape as the pickup sprite
         c.fillRect(x + 4, y, 1, 3);
@@ -1352,8 +1353,8 @@ export class Renderer {
     }
     this.drawPowerUpHud();
 
-    // distance + coins (right)
-    {
+    // distance + coins (right) — mobile keeps the top-right corner clean
+    if (!mobile) {
       if (this.hudM !== m) {
         this.hudM = m;
         this.hudMText = m + 'M';
@@ -1415,10 +1416,10 @@ export class Renderer {
     }
 
     // combo — fixed layout, colour-only pulse (no size jitter). Mobile keeps
-    // it at the top too, just left of centre so it clears the meters.
+    // it centred but drops it below the score/best block.
     if (mobile) {
       c.restore();
-      this.drawCombo(VW * 0.45, 8);
+      this.drawCombo(VW / 2, 54);
     } else {
       this.drawCombo(W / 2, 8);
       c.restore();

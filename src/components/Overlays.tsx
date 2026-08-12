@@ -75,7 +75,7 @@ export function StartScreen({
       className="absolute inset-0 z-10 flex cursor-pointer items-center justify-center overflow-y-auto bg-[#08040f]/88 p-4"
       onClick={onStart}
     >
-      <div className="flex w-full max-w-[420px] flex-col items-center gap-4">
+      <div className="flex w-full max-w-[340px] flex-col items-center gap-4">
         <div className="text-center">
           <h1 className="font-pixel text-[26px] leading-none text-[#3ef2c8] drop-shadow-[0_4px_0_#08040f] sm:text-[34px]">
             <span className="animate-title inline-block">PIXEL</span>
@@ -96,7 +96,7 @@ export function StartScreen({
                   <ControlHint kind="tap" keys="TAP" />
                   <ControlHint kind="hold" keys="HOLD" />
                   <ControlHint kind="double" keys="2X TAP" />
-                  <ControlHint kind="dive" keys="DIVE" danger />
+                  <ControlHint kind="dive" keys="DIVE" />
                 </>
               ) : (
                 <>
@@ -115,7 +115,7 @@ export function StartScreen({
             </div>
           </div>
         </Panel>
-        <div className="flex w-full max-w-[420px] gap-2">
+        <div className="flex w-full max-w-[340px] gap-2">
           <button
             onClick={(e) => { e.stopPropagation(); onToggleMusic(); }}
             className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] ${
