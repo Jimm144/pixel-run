@@ -336,7 +336,7 @@ export class Renderer {
     const sunX = (((300 - this.g.camX * 0.04) % period) + period) % period - 70;
     if (this.sunSprite) {
       // Mobile: low behind the mountains — only its top peeks over them.
-      c.drawImage(this.sunSprite, Math.round(sunX) - 32, (this.mobileView ? 108 : 68) - 32);
+      c.drawImage(this.sunSprite, Math.round(sunX) - 32, (this.mobileView ? 100 : 68) - 32);
     }
     // stars
     c.fillStyle = this.g.zone.star;
@@ -450,19 +450,19 @@ export class Renderer {
     // rows sink, giving each parallax layer clear vertical breathing room.
     const m = this.mobileView;
     if (bg === 'jungle') {
-      this.seeBand(0.12, m ? 130 : 120, m ? 40 : 30, 0.02, 0.15, 0, Z.far);
+      this.seeBand(0.12, m ? 116 : 120, m ? 40 : 30, 0.02, 0.15, 0, Z.far);
       this.drawLandmarks(Z, back, 0.19, m ? 124 : 142, 47, 29, Z.decoMid, m ? 0.8 : 0.65);
       this.drawLandmarks(Z, Z.mid, 0.28, m ? 158 : 160, 56, 73, Z.decoMid, 1);
     } else if (bg === 'desert') {
-      this.seeBand(0.12, m ? 134 : 124, m ? 40 : 24, 0.014, 0.08, 0, Z.far);
+      this.seeBand(0.12, m ? 120 : 124, m ? 40 : 24, 0.014, 0.08, 0, Z.far);
       this.drawLandmarks(Z, back, 0.19, m ? 126 : 144, 72, 23, Z.decoMid, m ? 0.8 : 0.65);
       this.drawLandmarks(Z, Z.mid, 0.28, m ? 160 : 162, 84, 67, Z.decoMid, 1);
     } else if (bg === 'tundra') {
-      this.seeBand(0.11, m ? 130 : 118, m ? 40 : 30, 0.018, 1.6, 0.5, Z.far);
+      this.seeBand(0.11, m ? 116 : 118, m ? 40 : 30, 0.018, 1.6, 0.5, Z.far);
       this.drawLandmarks(Z, back, 0.18, m ? 126 : 144, 53, 41, Z.decoMid, m ? 0.8 : 0.65);
       this.drawLandmarks(Z, Z.mid, 0.28, m ? 160 : 162, 58, 59, Z.decoMid, 1);
     } else {
-      this.seeBand(0.13, m ? 132 : 122, m ? 40 : 38, 0.05, 0.2, 0.9, Z.far);
+      this.seeBand(0.13, m ? 118 : 122, m ? 40 : 38, 0.05, 0.2, 0.9, Z.far);
       this.drawLandmarks(Z, back, 0.18, m ? 124 : 142, 55, 19, Z.decoFar, m ? 0.8 : 0.7);
       this.drawLandmarks(Z, Z.mid, 0.28, m ? 158 : 160, 62, 37, Z.decoFar, 1);
     }
