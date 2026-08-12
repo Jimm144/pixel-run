@@ -75,7 +75,7 @@ export function StartScreen({
       className="absolute inset-0 z-10 flex cursor-pointer items-center justify-center overflow-y-auto bg-[#08040f]/88 p-4"
       onClick={onStart}
     >
-      <div className="flex w-full max-w-[340px] flex-col items-center gap-4">
+      <div className="flex w-full max-w-[340px] flex-col items-center gap-3">
         <div className="text-center">
           <h1 className="font-pixel text-[26px] leading-none text-[#3ef2c8] drop-shadow-[0_4px_0_#08040f] sm:text-[34px]">
             <span className="animate-title inline-block">PIXEL</span>
@@ -83,7 +83,7 @@ export function StartScreen({
           <h1 className="font-pixel text-[26px] leading-none text-[#ff4d6d] drop-shadow-[0_4px_0_#08040f] sm:text-[34px]">
             <span className="animate-title-2 inline-block">RUN</span>
           </h1>
-          <p className="mt-3 font-pixel text-[8px] tracking-[0.25em] text-[#9d8fd6]">
+          <p className="mt-2 font-pixel text-[8px] tracking-[0.25em] text-[#9d8fd6]">
             RUN &middot; STOMP &middot; SURVIVE
           </p>
         </div>

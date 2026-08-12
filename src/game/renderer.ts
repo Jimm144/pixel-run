@@ -283,9 +283,12 @@ export class Renderer {
     // worldOffsetY pushes the world down on tall screens so the ground sits
     // near the bottom and the extra space becomes sky instead of black bars.
     // worldLift raises the world on phones so the play field sits higher.
+    // On tall mobile screens (tablets) the push is halved so the play area
+    // doesn't sit under a huge band of empty sky.
+    const worldOff = this.mobileView ? Math.round(worldOffsetY() * 0.5) + this.worldLift : worldOffsetY();
     c.translate(
       Math.round(this.g.shakeX),
-      Math.round(this.g.shakeY) + worldOffsetY() + this.worldLift,
+      Math.round(this.g.shakeY) + worldOff,
     );
     this.drawParallax();
     this.drawWorld();
