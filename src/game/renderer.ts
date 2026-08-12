@@ -335,7 +335,7 @@ export class Renderer {
     const period = VW + 140;
     const sunX = (((300 - this.g.camX * 0.04) % period) + period) % period - 70;
     if (this.sunSprite) {
-      c.drawImage(this.sunSprite, Math.round(sunX) - 32, (this.mobileView ? 46 : 68) - 32);
+      c.drawImage(this.sunSprite, Math.round(sunX) - 32, (this.mobileView ? 54 : 68) - 32);
     }
     // stars
     c.fillStyle = this.g.zone.star;
@@ -449,21 +449,21 @@ export class Renderer {
     // rows sink, giving each parallax layer clear vertical breathing room.
     const m = this.mobileView;
     if (bg === 'jungle') {
-      this.seeBand(0.12, m ? 106 : 128, 30, 0.02, 0.15, 0, Z.far);
-      this.drawLandmarks(Z, back, 0.19, m ? 150 : 166, 47, 29, Z.decoMid, m ? 0.8 : 0.65);
-      this.drawLandmarks(Z, Z.mid, 0.28, m ? 176 : 180, 56, 73, Z.decoMid, 1);
+      this.seeBand(0.12, m ? 112 : 120, 30, 0.02, 0.15, 0, Z.far);
+      this.drawLandmarks(Z, back, 0.19, m ? 136 : 152, 47, 29, Z.decoMid, m ? 0.8 : 0.65);
+      this.drawLandmarks(Z, Z.mid, 0.28, m ? 168 : 172, 56, 73, Z.decoMid, 1);
     } else if (bg === 'desert') {
-      this.seeBand(0.12, m ? 110 : 132, 24, 0.014, 0.08, 0, Z.far);
-      this.drawLandmarks(Z, back, 0.19, m ? 152 : 168, 72, 23, Z.decoMid, m ? 0.8 : 0.65);
-      this.drawLandmarks(Z, Z.mid, 0.28, m ? 178 : 182, 84, 67, Z.decoMid, 1);
+      this.seeBand(0.12, m ? 116 : 124, 24, 0.014, 0.08, 0, Z.far);
+      this.drawLandmarks(Z, back, 0.19, m ? 138 : 154, 72, 23, Z.decoMid, m ? 0.8 : 0.65);
+      this.drawLandmarks(Z, Z.mid, 0.28, m ? 170 : 174, 84, 67, Z.decoMid, 1);
     } else if (bg === 'tundra') {
-      this.seeBand(0.11, m ? 104 : 126, 30, 0.018, 1.6, 0.5, Z.far);
-      this.drawLandmarks(Z, back, 0.18, m ? 152 : 168, 53, 41, Z.decoMid, m ? 0.8 : 0.65);
-      this.drawLandmarks(Z, Z.mid, 0.28, m ? 178 : 182, 58, 59, Z.decoMid, 1);
+      this.seeBand(0.11, m ? 110 : 118, 30, 0.018, 1.6, 0.5, Z.far);
+      this.drawLandmarks(Z, back, 0.18, m ? 138 : 154, 53, 41, Z.decoMid, m ? 0.8 : 0.65);
+      this.drawLandmarks(Z, Z.mid, 0.28, m ? 170 : 174, 58, 59, Z.decoMid, 1);
     } else {
-      this.seeBand(0.13, m ? 108 : 130, 38, 0.05, 0.2, 0.9, Z.far);
-      this.drawLandmarks(Z, back, 0.18, m ? 150 : 166, 55, 19, Z.decoFar, m ? 0.8 : 0.7);
-      this.drawLandmarks(Z, Z.mid, 0.28, m ? 176 : 180, 62, 37, Z.decoFar, 1);
+      this.seeBand(0.13, m ? 114 : 122, 38, 0.05, 0.2, 0.9, Z.far);
+      this.drawLandmarks(Z, back, 0.18, m ? 136 : 152, 55, 19, Z.decoFar, m ? 0.8 : 0.7);
+      this.drawLandmarks(Z, Z.mid, 0.28, m ? 168 : 172, 62, 37, Z.decoFar, 1);
     }
     c.globalAlpha = 1;
   }
@@ -1265,7 +1265,8 @@ export class Renderer {
     const c = this.ctx;
     let x = 6;
     // HUD space is scaled by hudScale; W is the virtual width in that space.
-    const y = 45;
+    // Mobile gives the row a little more air below the compacted BEST line.
+    const y = this.mobileView ? 50 : 45;
     const W = Math.floor(VW / this.hudScale);
     const status = (remaining: number, kind: PowerUpKind) => {
       // The propeller flashes with 0s left — draw the icon alone, no "0".
@@ -1294,10 +1295,13 @@ export class Renderer {
         c.fillRect(x + 6, y + 4, 2, 1);
         c.fillRect(x + 7, y + 5, 1, 2);
       } else {
-        c.fillRect(x + 2, y + 2, 3, 3);
-        c.fillRect(x + 3, y, 1, 2);
-        c.fillRect(x, y + 3, 2, 1);
-        c.fillRect(x + 5, y + 3, 2, 1);
+        // propeller — one connected piece: top wings, mast through the hub,
+        // band at the bottom (mirrors the world sprite's silhouette)
+        c.fillRect(x + 4, y + 2, 1, 4);
+        c.fillRect(x + 2, y + 1, 2, 1);
+        c.fillRect(x + 5, y + 1, 2, 1);
+        c.fillRect(x + 3, y + 2, 3, 3);
+        c.fillRect(x + 2, y + 6, 6, 1);
       }
       if (text) drawText(c, text, x + 9, y, 1, col, '#150a24');
       x += width + 4;
@@ -1337,7 +1341,7 @@ export class Renderer {
     while (leadingZeroes < scoreStr.length && scoreStr[leadingZeroes] === '0') leadingZeroes++;
     if (leadingZeroes > 0) {
       c.globalAlpha = 0.35;
-      drawText(c, scoreStr.slice(0, leadingZeroes), 6, 15, digS, '#8f7fd0', '#150a24');
+      drawText(c, scoreStr.slice(0, leadingZeroes), 6, 15, digS, '#ffffff', '#150a24');
       c.globalAlpha = 1;
     }
     drawText(c, scoreStr.slice(leadingZeroes), 6 + leadingZeroes * adv, 15, digS, '#ffffff', '#150a24');
