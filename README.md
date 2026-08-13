@@ -87,4 +87,4 @@ Output: `dist/index.html`. Pushing to master deploys it to GitHub Pages via the 
 
 ## License
 
-GPL-3.0. See the header in `src/game/audio.ts`.
+GPL-3.0. See [`LICENSE`](LICENSE).
