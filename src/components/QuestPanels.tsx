@@ -1,7 +1,9 @@
+import { useEffect, useRef, useState } from 'react';
 import { Panel } from './ui';
 import {
   getQuestLabel,
   getQuestProgress,
+  nextQuestResetAt,
   QUEST_DIFFICULTY_COLORS,
   type QuestDefinition,
   type QuestRecord,
@@ -15,6 +17,48 @@ interface QuestPanelProps {
   compact?: boolean;
   announcement?: boolean;
   decorated?: boolean;
+  onDayRollover?: () => void;
+}
+
+function useQuestReset(onDayRollover?: () => void) {
+  const [remaining, setRemaining] = useState(() => Math.max(0, nextQuestResetAt() - Date.now()));
+  const targetRef = useRef(nextQuestResetAt());
+  const onDayRolloverRef = useRef(onDayRollover);
+  const rolledOverRef = useRef(false);
+  const intervalRef = useRef(0);
+  onDayRolloverRef.current = onDayRollover;
+
+  useEffect(() => {
+    const tick = () => {
+      const ms = targetRef.current - Date.now();
+      if (ms > 0) {
+        setRemaining(ms);
+        return;
+      }
+      setRemaining(0);
+      window.clearInterval(intervalRef.current);
+      if (!rolledOverRef.current) {
+        rolledOverRef.current = true;
+        onDayRolloverRef.current?.();
+      }
+      targetRef.current = nextQuestResetAt();
+      rolledOverRef.current = false;
+      intervalRef.current = window.setInterval(tick, 250);
+    };
+    window.clearInterval(intervalRef.current);
+    intervalRef.current = window.setInterval(tick, 250);
+    return () => window.clearInterval(intervalRef.current);
+  }, []);
+
+  return { remaining: Math.max(0, remaining) };
+}
+
+function formatHms(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 function QuestCard({ quest, record, run, compact }: { quest: QuestDefinition; record: QuestRecord; run: QuestRunStats; compact: boolean }) {
@@ -48,12 +92,13 @@ function QuestCard({ quest, record, run, compact }: { quest: QuestDefinition; re
   );
 }
 
-export function DailyQuestPanel({ quests, record, run, compact = false, announcement = false, decorated = true }: QuestPanelProps) {
+export function DailyQuestPanel({ quests, record, run, compact = false, announcement = false, decorated = true, onDayRollover }: QuestPanelProps) {
+  const { remaining } = useQuestReset(onDayRollover);
   return (
     <Panel decorated={decorated} className={`w-full ${compact ? 'p-2.5' : 'p-4'} border-2 border-[#3ef2c8] bg-[#140a26]/95 shadow-[0_0_24px_rgba(62,242,200,0.16)] ${announcement ? 'bg-[#140a26]/80' : ''}`}>
       <div className={`${compact ? 'mb-2' : 'mb-3'} flex items-center justify-between gap-3`}>
         <h2 className="font-pixel text-[10px] text-[#3ef2c8]">{announcement ? 'DAILY QUESTS' : 'QUESTS'}</h2>
-        {!announcement && <span className="font-pixel text-[6px] text-[#6f5fa8]">TODAY</span>}
+        {!announcement && <span className="font-pixel text-[6px] text-[#6f5fa8]">NEXT {formatHms(remaining)}</span>}
       </div>
       <div className="grid grid-cols-2 gap-2">
         {quests.map((quest) => <QuestCard key={quest.id} quest={quest} record={record} run={run} compact={compact} />)}
@@ -71,10 +116,10 @@ export function DailyQuestPanel({ quests, record, run, compact = false, announce
   );
 }
 
-export function DailyQuestAnnouncement({ quests, record, run }: Omit<QuestPanelProps, 'compact' | 'announcement'>) {
+export function DailyQuestAnnouncement({ quests, record, run, onDayRollover }: Omit<QuestPanelProps, 'compact' | 'announcement'>) {
   return (
     <div className="animate-quest-announcement pointer-events-none absolute top-3 left-1/2 z-30 w-[min(94vw,720px)] -translate-x-1/2 opacity-80">
-      <DailyQuestPanel quests={quests} record={record} run={run} compact announcement decorated={false} />
+      <DailyQuestPanel quests={quests} record={record} run={run} compact announcement decorated={false} onDayRollover={onDayRollover} />
     </div>
   );
 }

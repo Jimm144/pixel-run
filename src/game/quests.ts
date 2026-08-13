@@ -220,6 +220,13 @@ export function getDailyQuests(date = dateKey()): QuestDefinition[] {
   return quests;
 }
 
+// Epoch-ms of the next local midnight — Date resolves DST-shifted midnights naturally.
+export function nextQuestResetAt() {
+  const d = new Date();
+  d.setHours(24, 0, 0, 0);
+  return d.getTime();
+}
+
 export function emptyQuestRunStats(): QuestRunStats {
   return { ...zeroTotals(), maxCombo: 0, cleanMeters: 0, cleanScore: 0, cleanRun: true, biomeEffects: [], twoPowerups: false };
 }

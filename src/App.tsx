@@ -179,6 +179,13 @@ export function App() {
     setQuestToast(newlyCompleted);
   }, []);
 
+  const handleQuestRollover = useCallback(() => {
+    setQuestRecord(loadQuestRecord());
+    questRecordCache.current = null;
+    questToastSeenRef.current.clear();
+    setQuestRun(emptyQuestRunStats());
+  }, []);
+
   const start = useCallback(() => {
     commitQuestRun();
     sfx.init();
@@ -313,6 +320,7 @@ export function App() {
             quests={quests}
             questRecord={questRecord}
             questRun={questRun}
+            questOnDayRollover={handleQuestRollover}
           />
         )}
         {ui === 'paused' && (
@@ -338,7 +346,7 @@ export function App() {
           />
         )}
         {ui === 'playing' && questAnnouncement > 0 && (
-          <DailyQuestAnnouncement quests={quests} record={questRecord} run={questRun} />
+          <DailyQuestAnnouncement quests={quests} record={questRecord} run={questRun} onDayRollover={handleQuestRollover} />
         )}
         {questToast.length > 0 && <QuestCompletionToast quests={quests} completed={questToast} touch={touch} />}
       </div>

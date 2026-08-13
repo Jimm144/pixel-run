@@ -65,6 +65,7 @@ export function StartScreen({
   quests,
   questRecord,
   questRun,
+  questOnDayRollover,
 }: {
   best: number;
   lastRun: number;
@@ -77,6 +78,7 @@ export function StartScreen({
   quests: QuestDefinition[];
   questRecord: QuestRecord;
   questRun: QuestRunStats;
+  questOnDayRollover?: () => void;
 }) {
   return (
     <div
@@ -121,7 +123,7 @@ export function StartScreen({
             </div>
           </div>
         </Panel>
-        <DailyQuestPanel quests={quests} record={questRecord} run={questRun} compact decorated={false} />
+        <DailyQuestPanel quests={quests} record={questRecord} run={questRun} compact decorated={false} onDayRollover={questOnDayRollover} />
         <div className="flex w-full max-w-[420px] gap-2 tablet:max-w-[800px]">
           <button
             onClick={(e) => { e.stopPropagation(); onToggleMusic(); }}

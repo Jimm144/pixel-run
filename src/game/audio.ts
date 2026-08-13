@@ -92,6 +92,7 @@ export class Sfx {
   muted = false;
   musicMuted = false;
   sfxMuted = false;
+  private muffled = false;
   private static readonly MASTER_VOL = 0.5;
   private static readonly MUSIC_VOL = 0.45;
 
@@ -124,7 +125,7 @@ export class Sfx {
       // UI blips sound like they come from another room.
       const sfxFilter = ctx.createBiquadFilter();
       sfxFilter.type = 'lowpass';
-      sfxFilter.frequency.value = 22000;
+      sfxFilter.frequency.value = this.muffled ? 520 : 22000;
       const sfxGain = ctx.createGain();
       sfxGain.gain.value = 1;
       sfxFilter.connect(sfxGain);
@@ -206,6 +207,7 @@ export class Sfx {
 
   /** Drops the SFX lowpass so menu sounds sound muffled (from another room). */
   setMuffled(m: boolean) {
+    this.muffled = m;
     if (!this.sfxFilter || !this.ctx) return;
     this.sfxFilter.frequency.setTargetAtTime(m ? 520 : 22000, this.ctx.currentTime, 0.04);
   }
