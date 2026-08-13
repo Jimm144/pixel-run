@@ -1,6 +1,6 @@
 # PIXEL RUN
 
-An endless runner that plays in the browser. No install, no account.
+PIXEL RUN is a browser-based endless runner and 2D platform game built with TypeScript, React, Vite and HTML5 Canvas.
 
 Play: https://jimm144.github.io/pixel-run/
 

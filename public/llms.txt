@@ -1,0 +1,25 @@
+# PIXEL RUN
+
+> PIXEL RUN is a browser-based endless runner and 2D platform game.
+
+## Play
+
+- Game: https://jimm144.github.io/pixel-run/
+- Source code: https://github.com/Jimm144/pixel-run
+
+## Game facts
+
+- The player runs automatically through four biomes: jungle, desert, tundra and neon city.
+- Controls include jumping, double jumping, diving and a speed boost.
+- Gameplay includes enemies, coins, gems, shield, jump shoes, triple jump and propeller power-ups.
+- Combo scoring increases points from enemy stomps, coins, gems and power-ups.
+- The combo multiplier reaches x10.
+- Four daily quests track run or daily totals for coins, meters, score, enemies, power-ups and jumps.
+- Special quests include clean runs, biome effects, simultaneous power-ups and reaching a x10 combo.
+- Best run, last run and daily quest progress are stored in browser localStorage.
+
+## Technical facts
+
+- TypeScript, React, Vite and an HTML5 Canvas renderer.
+- Music and sound effects use the Web Audio API.
+- The project is licensed under GPL-3.0.
