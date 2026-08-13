@@ -15,6 +15,7 @@ import {
   type BiomeEventTrigger,
   type EnemyKind,
   type GenHost,
+  type Pickup,
   type Platform,
   type PowerUpKind,
 } from './types';
@@ -90,14 +91,14 @@ export class WorldGen {
     }
   }
 
-  private blobKind(): EnemyKind {
-    if (this.h.zone.bg === 'jungle') return this.genCount % 2 === 0 ? 'slime' : 'hopper';
-    if (this.h.zone.bg === 'desert') return this.genCount % 2 === 0 ? 'scarab' : 'slime';
+  private blobKind(bg: BgKind): EnemyKind {
+    if (bg === 'jungle') return this.genCount % 2 === 0 ? 'slime' : 'hopper';
+    if (bg === 'desert') return this.genCount % 2 === 0 ? 'scarab' : 'slime';
     return 'slime';
   }
 
   private addBlob(p: Platform, x: number) {
-    const kind = this.blobKind();
+    const kind = this.blobKind(this.biomeAtX(p.x));
     const dims =
       kind === 'scarab' ? { w: 22, h: 10, dy: 10 } : kind === 'hopper' ? { w: 14, h: 15, dy: 15 } : { w: 18, h: 14, dy: 14 };
     const speed = kind === 'scarab' ? 1.0 : 0.48;
@@ -186,6 +187,17 @@ export class WorldGen {
     return ZONES[this.h.zoneOrder[index % ZONES.length]].bg;
   }
 
+  private diffAtX(x: number) {
+    return clamp((x - this.h.startX) / 15000, 0, 1);
+  }
+
+  private anchoredToFloat(k: Pickup) {
+    for (const f of this.h.platforms) {
+      if (f.float && k.x > f.x && k.x < f.x + f.w && k.y > f.y - 36 && k.y < f.y) return true;
+    }
+    return false;
+  }
+
   private decorate(
     p: Platform,
     gapStart: number,
@@ -193,9 +205,11 @@ export class WorldGen {
     prevY: number,
     pattern: number,
   ) {
-    const d = this.h.diff();
+    const d = this.diffAtX(p.x);
     const intro = this.genCount < 4;
+    const grace = this.genX - this.h.startX < 1000;
     const gap = gapEnd - gapStart;
+    const bg = this.biomeAtX(p.x);
 
     // Exactly ONE coin placement per encounter: the gap arc only appears on rest
     // beats, so it never overlaps with a pattern's own coins.
@@ -205,22 +219,25 @@ export class WorldGen {
 
     // Power-ups only appear on wide, calm platforms and are spaced by world
     // distance, so they never create a new procedural jump requirement.
-    if (!intro && pattern === PAT.REST && gap > 34 && p.w >= 100 && p.x >= this.nextPowerUpX)
+    if (!intro && !grace && pattern === PAT.REST && gap > 34 && p.w >= 100 && p.x >= this.nextPowerUpX)
       this.addPowerUp(p);
 
     if (!intro) {
       const biomeIndex = this.biomeIndexAtX(p.x);
       if (!this.eventBiomeRolls.has(biomeIndex)) {
         this.eventBiomeRolls.add(biomeIndex);
-        const kind = this.biomeAtX(p.x);
-        if (kind !== 'city' && Math.random() < 0.2)
-          this.eventTriggers.push({ x: p.x + 8, kind, used: false });
+        if (Math.random() < 0.2)
+          this.eventTriggers.push({ x: p.x + 8, kind: bg, used: false });
       }
     }
 
     if (intro) {
       if (this.genCount === 1) this.addCoinLine(Math.max(p.x + 44, 158), p.x + p.w - 44, p.y - 16, 4);
-      if (this.genCount === 2) this.addBlob(p, p.x + p.w * 0.62);
+      if (this.genCount === 2) {
+        const bx = p.x + p.w * 0.62;
+        this.addBlob(p, bx);
+        this.addCoinArc(bx - 22, bx + 24, p.y - 25, 24, 3);
+      }
       if (this.genCount === 3) {
         // teach the launch pad: pad + a clean bounce arc landing on this platform
         const sx = p.x + 40;
@@ -243,15 +260,16 @@ export class WorldGen {
         this.addBlob(p, center);
         this.addCoinArc(center - 22, center + 24, p.y - 25, 24, 3);
         // sometimes a second foe on a wide platform
-        if (p.w > 165 && Math.random() < 0.4) this.addBlob(p, p.x + p.w * 0.28);
+        if (p.w > (d > 0.7 ? 130 : 165) && Math.random() < (d > 0.7 ? 0.7 : 0.4))
+          this.addBlob(p, p.x + p.w * 0.28);
         break;
       }
 
       case PAT.SPIKES: {
         // variable spike fields: singles, short rows, or spaced clusters
         const roll = Math.random();
-        const maxN = d > 0.6 ? 5 : d > 0.3 ? 4 : 3;
-        if (this.h.zone.bg === 'desert' && Math.random() < 0.5) {
+        const maxN = d > 0.7 ? 7 : d > 0.6 ? 5 : d > 0.3 ? 4 : 3;
+        if (bg === 'desert' && Math.random() < 0.5) {
           // cactus spikers you must slam through — keep them far enough apart
           // that there's a real landing spot in between (spiker is 12 wide).
           this.addSpiker(p, center - 20);
@@ -308,9 +326,8 @@ export class WorldGen {
 
       case PAT.FLYER:
       default: {
-        const droneX = gap > 50 ? (gapStart + gapEnd) / 2 : center;
         const droneY = clamp(Math.min(prevY, p.y) - ri(30, 46), 66, VH - 54);
-        this.addFlyer(droneX, droneY, gap > 50 ? 22 : ri(28, 40));
+        this.addFlyer(center, droneY, ri(28, 40));
         if (Math.random() < 0.4) this.addCoinLine(center - 22, center + 22, p.y - 16, 3);
         break;
       }
@@ -365,7 +382,7 @@ export class WorldGen {
 
   // Weighted, non-repeating pattern picker -> a fresh sequence every run.
   private pickPattern(): number {
-    const d = this.h.diff();
+    const d = this.diffAtX(this.genX);
     const weights = [
       1.4 - 0.6 * d, // rest thins out as it speeds up
       1.6,
@@ -373,8 +390,12 @@ export class WorldGen {
       0.9,
       0.7,
       0.9,
-      0.8 + 0.8 * d,
+      0.8 + 0.8 * d + (d > 0.8 ? 0.5 : 0),
     ];
+    if (this.genX - this.h.startX < 3000) {
+      weights[PAT.SPIKES] = 0;
+      weights[PAT.FLYER] = 0;
+    }
     // avoid the same pattern 3x, and never chain two launch pads
     for (let attempt = 0; attempt < 8; attempt++) {
       let total = 0;
@@ -406,12 +427,13 @@ export class WorldGen {
   generate(untilX: number) {
     let guard = 0;
     while (this.genX < untilX && guard++ < 60) {
-      const d = this.h.diff();
+      const d = this.diffAtX(this.genX);
       const intro = this.genCount < 4;
+      const grace = this.genX - this.h.startX < 1000;
       const prevEnd = this.genX;
       const prevY = this.lastY;
 
-      const pattern = intro ? PAT.REST : this.pickPattern();
+      const pattern = intro || grace ? PAT.REST : this.pickPattern();
 
       let y = prevY;
       if (!intro) {
@@ -454,6 +476,7 @@ export class WorldGen {
         if (rise > 0) gap *= 1 - 0.55 * (rise / 40);
         else gap *= 1 + 0.2 * (-rise / 58);
         gap = Math.max(24, gap);
+        if (pattern === PAT.FLYER) gap = Math.min(gap, 50);
       }
 
       const x = prevEnd + gap;
@@ -479,14 +502,24 @@ export class WorldGen {
         // The launch is the only pickup read in this space. Remove a previous
         // pattern's nearby coins/hazards so the departure edge stays legible.
         const clearFrom = prevEnd - 118;
-        for (let i = this.h.pickups.length - 1; i >= 0; i--)
-          if (this.h.pickups[i].x > clearFrom && this.h.pickups[i].x < x + 8)
+        for (let i = this.h.pickups.length - 1; i >= 0; i--) {
+          const k = this.h.pickups[i];
+          if (k.x > clearFrom && k.x < x + 8 && !this.anchoredToFloat(k))
             this.h.pickups.splice(i, 1);
+        }
+        let depX = prevEnd - 130;
+        for (let i = this.h.platforms.length - 1; i >= 0; i--) {
+          const q = this.h.platforms[i];
+          if (q.x + q.w > prevEnd - 1 && q.x + q.w < prevEnd + 1) {
+            depX = q.x;
+            break;
+          }
+        }
         for (let i = this.h.spikes.length - 1; i >= 0; i--)
-          if (this.h.spikes[i].x + this.h.spikes[i].n * 8 > prevEnd - 54)
+          if (this.h.spikes[i].x + this.h.spikes[i].n * 8 > depX - 12)
             this.h.spikes.splice(i, 1);
         for (let i = this.h.enemies.length - 1; i >= 0; i--)
-          if (this.h.enemies[i].x + this.h.enemies[i].w > prevEnd - 48)
+          if (this.h.enemies[i].x + this.h.enemies[i].w > depX - 12)
             this.h.enemies.splice(i, 1);
 
         this.h.springs.push({ x: sx, y: prevY - 9, press: 0, mega, launchVx });

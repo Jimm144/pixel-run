@@ -42,7 +42,7 @@ const FADE_STEPS = 12;
  * Everything that paints a frame: all draw* methods, the baked sprite caches
  * (sun, power-up icons, band tiles, platform art, sky bands, HUD strings) and
  * the zone-derived colour constants. Reads world state through the RenderHost
- * (the Game), writes only `zone` + the platform cache epoch on zone changes.
+ * (the Game), writes only `zone` + the platform crossfade pair on zone changes.
  */
 export class Renderer {
   private ctx: CanvasRenderingContext2D;
@@ -53,10 +53,14 @@ export class Renderer {
   private zoneFadeT = 0;
   private transOut: Zone = ZONES[0];
   private transIn: Zone = ZONES[1];
-  /** Bumped at each zone boundary and fade step; platform caches rebuild
-   *  against the palette of the step they were baked in (see
-   *  getPlatformCache), so within one epoch every platform shares colours. */
-  private platformEpoch = 0;
+  /** Pure-biome zoneOrder indices the platform art is baked against. A
+   *  transition bakes every platform exactly twice (once per pure biome) and
+   *  crossfades the two, so there are no per-fade-step rebakes. */
+  private platI = 0;
+  private platNI = 1;
+  /** Platform art keyed by `zoneIndex|seed|w|float|y` — one bake per pure
+   *  biome per platform, reused until the zone pair changes. */
+  private platformCaches = new Map<string, HTMLCanvasElement>();
   private stars: [x: number, y: number, phase: number, size: number][] = [];
   private motes: [x: number, y: number, spd: number, phase: number][] = [];
   private skyBands: string[] = [];
@@ -68,12 +72,6 @@ export class Renderer {
   private sunSprite: HTMLCanvasElement | null = null;
   /** Dark backing + icon per power-up kind, baked once. */
   private powerupSprites = new Map<PowerUpKind, HTMLCanvasElement>();
-  private cBolt = shade(ZONES[0].groundDark, -0.3);
-  private cStrata1 = mix(ZONES[0].ground, ZONES[0].groundDark, 0.45);
-  private cRockA = shade(ZONES[0].ground, -0.16);
-  private cRockB = shade(ZONES[0].groundDark, 0.12);
-  private cRockLit = shade(ZONES[0].ground, 0.1);
-  private cRivet = shade(ZONES[0].accent, -0.35);
   private cCloud = shade(ZONES[0].far, 0.07);
   /** HUD zoom (1 on desktop) — keeps the score/distance text readable on
    *  phones, where the whole canvas is scaled up from a small buffer. */
@@ -114,7 +112,9 @@ export class Renderer {
     this.lastZoneZi = -1;
     this.lastZoneT = -1;
     this.zoneFadeT = 0;
-    this.platformEpoch = 0;
+    this.platI = 0;
+    this.platNI = 1;
+    this.platformCaches.clear();
   }
 
   /** Called when the canvas size changes — drops the size-dependent art
@@ -122,10 +122,10 @@ export class Renderer {
    *  safety even though its height comes from the constant ground line. */
   invalidateViewport() {
     this.bandCache.clear();
-    for (const p of this.g.platforms) {
-      p.cache = undefined;
-      p.cacheEpoch = undefined;
-    }
+    this.platformCaches.clear();
+    // Re-seed the motes so a viewport shrink doesn't leave most of them
+    // below the visible area (they were sampled once against the old VH).
+    for (const m of this.motes) m[1] = rnd(0, VH);
   }
 
   setHudScale(v: number) {
@@ -139,12 +139,6 @@ export class Renderer {
 
   // Cache every derived platform colour once per zone change (never per frame).
   refreshZoneColors(Z: Zone) {
-    this.cBolt = shade(Z.groundDark, -0.3);
-    this.cStrata1 = mix(Z.ground, Z.groundDark, 0.45);
-    this.cRockA = shade(Z.ground, -0.16);
-    this.cRockB = shade(Z.groundDark, 0.12);
-    this.cRockLit = shade(Z.ground, 0.1);
-    this.cRivet = shade(Z.accent, -0.35);
     this.cCloud = shade(Z.far, 0.07);
     // Band tiles are immutable and keyed by (geometry, pure zone colour) —
     // the fade draws each biome with its own pure colours, so the cache
@@ -192,8 +186,8 @@ export class Renderer {
     c.fillStyle = col;
     c.fillRect(1, 1, 16, 1);
     c.fillRect(1, 16, 16, 1);
-    c.fillRect(1, 1, 1, 14);
-    c.fillRect(16, 1, 1, 14);
+    c.fillRect(1, 1, 1, 15);
+    c.fillRect(16, 1, 1, 15);
     if (kind === 'shield') {
       c.fillRect(5, 4, 8, 1);
       c.fillRect(4, 5, 10, 1);
@@ -240,20 +234,23 @@ export class Renderer {
     // The parallax layer alpha blends continuously, but the palette itself is
     // quantised to FADE_STEPS so the sky bands, the baked sun and the font
     // atlases only re-bake at step boundaries — a dozen steps read as one
-    // smooth fade, and the ground already stepped like this. The epoch bump
-    // guarantees every platform in a step is baked against the same colours
-    // (no half-blended drift between platforms).
+    // smooth fade, and the ground already stepped like this. Platform art is
+    // baked once per pure biome and crossfaded (drawPlatforms), so it never
+    // re-bakes mid-fade and can't drift into half-blended colours.
     const df = this.g.distance / 10;
     const zi = Math.floor(df / ZONE_LEN_M);
     const frac = df / ZONE_LEN_M - zi;
     const fadeT = frac > FADE_START_FRAC ? Math.min(1, (frac - FADE_START_FRAC) / FADE_WINDOW) : 0;
     const t = Math.floor(fadeT * FADE_STEPS) / FADE_STEPS;
     if (zi !== this.lastZoneZi || t !== this.lastZoneT) {
+      const ziChanged = zi !== this.lastZoneZi;
       this.lastZoneZi = zi;
       this.lastZoneT = t;
-      this.platformEpoch++;
       const i = this.g.zoneOrder[zi % ZONES.length];
       const ni = this.g.zoneOrder[(zi + 1) % ZONES.length];
+      this.platI = i;
+      this.platNI = ni;
+      if (ziChanged) this.prunePlatformCaches();
       this.g.zone = lerpZone(ZONES[i], ZONES[ni], t);
       this.transOut = ZONES[i];
       this.transIn = ZONES[ni];
@@ -278,10 +275,12 @@ export class Renderer {
       Math.round(this.g.shakeX),
       Math.round(this.g.shakeY) + worldOffsetY() + this.worldLift,
     );
+    this.applyDeathZoom();
     this.drawParallax();
     this.drawWorld();
     this.particles.draw(c, this.g.camX);
     if (this.g.phase !== 'dead') this.drawPlayer();
+    this.drawDeathShockwave();
     this.texts.draw(c, this.g.camX);
     c.restore();
 
@@ -296,6 +295,40 @@ export class Renderer {
     }
 
     if ((this.g.countdown > 0 || this.g.goTimer > 0) && this.g.phase !== 'dead') this.drawCountdown();
+  }
+
+  /** Zoom-out punch as the death slow-mo opens: 1.04 easing back to 1 over
+   *  the first ~20 death frames, about the screen centre. A pure transform —
+   *  no palette or cache work, and the HUD/foreground stay unscaled. */
+  private applyDeathZoom() {
+    if (this.g.phase !== 'dead') return;
+    const dt = (this.g as RenderHost & { deathTimer?: number }).deathTimer ?? 0;
+    const z = 1 + 0.04 * (1 - Math.min(1, dt / 20));
+    if (z === 1) return;
+    const c = this.ctx;
+    c.translate(Math.round(VW / 2), Math.round(VH / 2));
+    c.scale(z, z);
+    c.translate(-Math.round(VW / 2), -Math.round(VH / 2));
+  }
+
+  /** Expanding pixel ring from the death point — the engine already maxes
+   *  the shake and fires the flash on die(); this adds the ring on top. */
+  private drawDeathShockwave() {
+    if (this.g.phase !== 'dead') return;
+    const dt = (this.g as RenderHost & { deathTimer?: number }).deathTimer ?? 0;
+    if (dt <= 0 || dt > 24) return;
+    const c = this.ctx;
+    const cam = Math.round(this.g.camX);
+    const cx = Math.round(this.g.px - cam + PLAYER_W / 2);
+    const cy = Math.round(this.g.py + PLAYER_H / 2);
+    const r = Math.round(dt * 1.9);
+    c.globalAlpha = 0.5 * (1 - dt / 24);
+    c.fillStyle = '#ffffff';
+    c.fillRect(cx - r, cy - r, r * 2, 1);
+    c.fillRect(cx - r, cy + r, r * 2, 1);
+    c.fillRect(cx - r, cy - r, 1, r * 2);
+    c.fillRect(cx + r, cy - r, 1, r * 2);
+    c.globalAlpha = 1;
   }
 
   private drawCountdown() {
@@ -638,23 +671,34 @@ export class Renderer {
   // Every platform's artwork is deterministic (keyed by p.seed) and never
   // changes after it's generated, so we paint it once into an offscreen
   // canvas and blit that with a single drawImage() every frame instead of
-  // redoing dozens of fillRect/hash() calls per platform per frame.
-  private getPlatformCache(p: Platform): HTMLCanvasElement {
-    if (p.cache && p.cacheEpoch === this.platformEpoch) return p.cache;
+  // redoing dozens of fillRect/hash() calls per platform per frame. Two
+  // pure-biome bakes crossfade over a transition, so the art never re-bakes
+  // at fade steps and every platform in a frame shares one palette.
+  private getPlatformCache(p: Platform, k: number, Z: Zone): HTMLCanvasElement {
+    const key = `${k}|${p.seed}|${p.w}|${p.float}|${p.y}`;
+    let cv = this.platformCaches.get(key);
+    if (cv) return cv;
     const w = Math.max(1, Math.round(p.w) + 1);
     const pad = PLATFORM_CACHE_PAD;
     // Use the full depth so the sides reach the screen bottom with no gap.
     // GROUND_BOTTOM is VH+70, and p.y is typically 98-MAX_PLATFORM_Y, so this is at
     // most ~297px — fine for an offscreen canvas.
     const h = p.float ? 18 : Math.max(8, GROUND_BOTTOM - Math.round(p.y));
-    const cv = document.createElement('canvas');
+    cv = document.createElement('canvas');
     cv.width = w;
     cv.height = h + pad;
     const c = cv.getContext('2d')!;
     const x = 0;
     const y = pad;
-    const Z = this.g.zone;
     const bg = Z.bg;
+    // Derived colours come from the bake's pure palette — never the live
+    // lerped zone — so the two transition bakes stay pure and consistent.
+    const cBolt = shade(Z.groundDark, -0.3);
+    const cStrata1 = mix(Z.ground, Z.groundDark, 0.45);
+    const cRockA = shade(Z.ground, -0.16);
+    const cRockB = shade(Z.groundDark, 0.12);
+    const cRockLit = shade(Z.ground, 0.1);
+    const cRivet = shade(Z.accent, -0.35);
 
     if (p.float) {
       c.fillStyle = Z.groundDark;
@@ -689,11 +733,11 @@ export class Renderer {
         c.fillRect(x + 2, y + 5, w - 4, 6);
         c.fillStyle = Z.groundDark;
         c.fillRect(x + 3, y + 9, w - 6, 3);
-        c.fillStyle = this.cBolt;
+        c.fillStyle = cBolt;
         c.fillRect(x + 3, y + 12, Math.max(3, w * 0.28), 2);
         c.fillRect(x + Math.max(4, w - 4 - w * 0.28), y + 12, Math.max(3, w * 0.28), 2);
       } else {
-        c.fillStyle = this.cBolt;
+        c.fillStyle = cBolt;
         c.fillRect(x + 2, y + 4, w - 4, 4);
         const legx1 = x + Math.max(3, Math.round(w * 0.22));
         const legx2 = x + Math.max(4, w - 3 - Math.round(w * 0.22));
@@ -706,11 +750,11 @@ export class Renderer {
       // ---- body: layered strata that get darker with depth
       c.fillStyle = Z.ground;
       c.fillRect(x, y + 4, w, h);
-      c.fillStyle = this.cStrata1;
+      c.fillStyle = cStrata1;
       c.fillRect(x, y + 16, w, h - 16);
       c.fillStyle = Z.groundDark;
       c.fillRect(x, y + 34, w, h - 34);
-      c.fillStyle = this.cBolt;
+      c.fillStyle = cBolt;
       c.fillRect(x, y + 62, w, h - 62);
 
       // ---- right cliff edge: 1px dark gradient
@@ -723,18 +767,19 @@ export class Renderer {
       c.globalAlpha = 1;
 
       // ---- chunky rock blocks embedded in the strata (deterministic)
-      const rockA = this.cRockA;
-      const rockB = this.cRockB;
-      const rockLit = this.cRockLit;
+      const rockA = cRockA;
+      const rockB = cRockB;
+      const rockLit = cRockLit;
       const blocks = Math.min(14, Math.max(2, Math.floor(w / 22)));
       for (let i = 0; i < blocks; i++) {
         const hx = hash(p.seed + i * 3.7);
         const hy = hash(p.seed + i * 9.1);
         const hs = hash(p.seed + i * 5.5);
-        const bx = x + 3 + Math.floor(hx * (w - 12));
-        const by = y + 20 + Math.floor(hy * 52);
         const bw2 = 5 + Math.floor(hs * 9);
         const bh2 = 4 + Math.floor(hash(p.seed + i * 2.3) * 5);
+        // Clamp so a block never pokes past the cache's right edge (clipped).
+        const bx = Math.min(x + 3 + Math.floor(hx * (w - 12)), w - bw2 - 2);
+        const by = y + 20 + Math.floor(hy * 52);
         c.fillStyle = hy > 0.5 ? rockA : rockB;
         c.fillRect(bx, by, bw2, bh2);
         c.fillStyle = rockLit;
@@ -770,14 +815,22 @@ export class Renderer {
         c.fillStyle = Z.deco;
         c.fillRect(x + 2, y - 1, w - 4, 1);
       } else {
-        c.fillStyle = this.cRivet;
+        c.fillStyle = cRivet;
         for (let i = 0; i * 18 < w - 8; i++) c.fillRect(x + 6 + i * 18, y + 7, 2, 2);
       }
     }
 
-    p.cache = cv;
-    p.cacheEpoch = this.platformEpoch;
+    this.platformCaches.set(key, cv);
     return cv;
+  }
+
+  /** Drop platform bakes from earlier biomes once a zone boundary passes. */
+  private prunePlatformCaches() {
+    const a = this.platI + '|';
+    const b = this.platNI + '|';
+    for (const key of this.platformCaches.keys()) {
+      if (!key.startsWith(a) && !key.startsWith(b)) this.platformCaches.delete(key);
+    }
   }
 
   private drawWorld() {
@@ -792,14 +845,27 @@ export class Renderer {
   private drawPlatforms() {
     const c = this.ctx;
     const cam = Math.round(this.g.camX);
+    const outZ = ZONES[this.platI];
+    const inZ = ZONES[this.platNI];
+    const t = this.zoneFadeT;
+    // Crossfade the two pure-biome bakes, mirroring the band-tile blend.
+    // Outside a transition only one drawImage is issued per platform.
+    const fading = t > 0 && t < 1;
 
     /* platforms — one drawImage() per platform, artwork pre-baked */
     for (const p of this.g.platforms) {
       const x = Math.floor(p.x - cam);
       if (x > VW + 4 || x + p.w < -4) continue;
       const y = Math.round(p.y);
-      const cache = this.getPlatformCache(p);
-      c.drawImage(cache, x, y - PLATFORM_CACHE_PAD);
+      if (!fading) {
+        c.drawImage(this.getPlatformCache(p, this.platI, outZ), x, y - PLATFORM_CACHE_PAD);
+        continue;
+      }
+      c.globalAlpha = 1;
+      c.drawImage(this.getPlatformCache(p, this.platI, outZ), x, y - PLATFORM_CACHE_PAD);
+      c.globalAlpha = t;
+      c.drawImage(this.getPlatformCache(p, this.platNI, inZ), x, y - PLATFORM_CACHE_PAD);
+      c.globalAlpha = 1;
     }
   }
 
@@ -893,10 +959,8 @@ export class Renderer {
         c.fillRect(x - 2, y - 3, 2, 2);
       } else {
         const Z = this.g.zone;
-        const f = Math.floor(k.t * 1.1) % 4;
-        const hw = COIN_HW[f];
         if (Z.bg === 'tundra') {
-          // snowflake shard coin
+          // snowflake shard coin — frozen shard by design (no spin frame)
           c.fillStyle = Z.coinEdge;
           c.fillRect(x - 4, y - 3, 8, 7);
           c.fillStyle = Z.coinFill;
@@ -908,6 +972,8 @@ export class Renderer {
           c.fillRect(x + 3, y - 1, 2, 2);
         } else if (Z.bg === 'desert') {
           // sun coin with rays
+          const f = Math.floor(k.t * 1.1) % 4;
+          const hw = COIN_HW[f];
           c.fillStyle = Z.coinEdge;
           c.fillRect(x - hw, y - 3, hw * 2, 7);
           c.fillStyle = Z.coinFill;
@@ -933,6 +999,8 @@ export class Renderer {
           c.fillRect(x + 1, y - 5, 2, 1);
         } else {
           // neon chip
+          const f = Math.floor(k.t * 1.1) % 4;
+          const hw = COIN_HW[f];
           c.fillStyle = Z.coinEdge;
           c.fillRect(x - hw, y - 3, hw * 2, 7);
           c.fillStyle = Z.coinFill;
@@ -962,9 +1030,6 @@ export class Renderer {
       c.globalAlpha = 1;
       c.drawImage(this.powerupSprite(power.kind), x - 9, y - 9);
     }
-
-    /* enemies */
-    this.drawEnemies();
   }
 
   private drawEnemies() {
@@ -1170,10 +1235,15 @@ export class Renderer {
     const cy = Math.round(this.g.py + PLAYER_H / 2);
     const qx = Math.abs(this.g.sx - 1) < 0.05 ? 1 : this.g.sx;
     const qy = Math.abs(this.g.sy - 1) < 0.05 ? 1 : this.g.sy;
+    // Landing squash — engine sets playerSquashX/Y (decays to 1); absent
+    // fields (or a 1) leave the transform untouched.
+    const host = this.g as RenderHost & { playerSquashX?: number; playerSquashY?: number };
+    const sqx = host.playerSquashX ?? 1;
+    const sqy = host.playerSquashY ?? 1;
     c.save();
     c.translate(cx, cy);
     if (this.g.spin > 0) c.rotate(this.g.spin * Math.PI * 2);
-    if (qx !== 1 || qy !== 1) c.scale(qx, qy);
+    if (qx * sqx !== 1 || qy * sqy !== 1) c.scale(qx * sqx, qy * sqy);
     const run = this.g.onGround ? Math.floor(this.g.animT) % 4 : -1;
     const air = !this.g.onGround;
     const f = (x: number, y: number, w: number, h: number, col: string) => {
@@ -1252,6 +1322,11 @@ export class Renderer {
       c.globalAlpha = 0.13 * strength;
       c.fillStyle = '#dff6ff';
       c.fillRect(0, 0, VW, VH);
+    } else if (this.g.eventKind === 'city') {
+      // subtle neon flicker washing over the screen
+      c.globalAlpha = (0.045 + 0.035 * Math.sin(this.g.frame * 0.21)) * strength;
+      c.fillStyle = '#7ef7ff';
+      c.fillRect(0, 0, VW, VH);
     }
 
     if (this.g.eventKind === 'jungle') {
@@ -1280,6 +1355,23 @@ export class Renderer {
         c.globalAlpha = Math.min(0.62, alpha * (1.45 + (i % 3) * 0.15));
         c.fillStyle = i % 4 === 0 ? '#ffffff' : Z.accent;
         c.fillRect(Math.round(x), Math.round(y), i % 5 === 0 ? 2 : 1, i % 4 === 0 ? 3 : 2);
+      }
+    } else if (this.g.eventKind === 'city') {
+      // neon rain — thin cyan streaks, a few with a glint tip
+      for (let i = 0; i < 70; i++) {
+        const x = wrap(
+          hash(this.g.eventSeed + i * 6.3) * (VW + 24) - this.g.frame * (1.5 + (i % 3) * 0.35),
+          VW + 24,
+        ) - 12;
+        const y = wrap(
+          hash(this.g.eventSeed + i * 14.9) * (VH + 80) - this.g.frame * (2.4 + (i % 4) * 0.45),
+          VH + 80,
+        ) - 40;
+        const len = 5 + Math.round(hash(this.g.eventSeed + i * 3.1) * 9);
+        c.globalAlpha = alpha * (0.75 + 0.25 * Math.sin(this.g.frame * 0.09 + i * 1.7));
+        c.fillStyle = i % 3 === 0 ? '#7ef7ff' : Z.accent;
+        c.fillRect(Math.round(x), Math.round(y), 1, len);
+        if (i % 6 === 0) c.fillRect(Math.round(x), Math.round(y + len + 1), 1, 1);
       }
     }
     c.globalAlpha = 1;
@@ -1325,35 +1417,9 @@ export class Renderer {
       const width = textWidth(text, 1) + 12;
       if (x + width > W - 6) return;
       const col = POWERUP_COLORS[kind];
-      c.fillStyle = col;
-      if (kind === 'shield') {
-        c.fillRect(x, y, 4, 1);
-        c.fillRect(x - 1, y + 1, 6, 1);
-        c.fillRect(x - 1, y + 2, 6, 1);
-        c.fillRect(x - 1, y + 3, 6, 1);
-        c.fillRect(x, y + 4, 4, 1);
-        c.fillRect(x + 1, y + 5, 2, 1);
-      } else if (kind === 'shoes') {
-        c.fillRect(x, y + 3, 3, 2);
-        c.fillRect(x, y + 1, 2, 2);
-        c.fillRect(x + 4, y + 3, 3, 2);
-        c.fillRect(x + 4, y + 1, 2, 2);
-      } else if (kind === 'triple') {
-        // three wings, each with a stem below — same shape as the pickup
-        c.fillRect(x, y, 3, 1);
-        c.fillRect(x + 1, y + 1, 1, 2);
-        c.fillRect(x + 4, y + 2, 3, 1);
-        c.fillRect(x + 5, y + 3, 1, 2);
-        c.fillRect(x + 8, y + 4, 3, 1);
-        c.fillRect(x + 9, y + 5, 1, 2);
-      } else {
-        // propeller — 3-blade rotor, same shape as the pickup sprite
-        c.fillRect(x + 4, y, 1, 3);
-        c.fillRect(x + 3, y + 2, 3, 3);
-        c.fillRect(x + 2, y + 3, 2, 1);
-        c.fillRect(x + 5, y + 3, 2, 1);
-      }
-      if (text) drawText(c, text, x + 9, y, 1, col, '#150a24');
+      // Same art as the pickup sprites, at half scale for the HUD row.
+      c.drawImage(this.powerupSprite(kind), x, y, 9, 9);
+      if (text) drawText(c, text, x + 11, y, 1, col, '#150a24');
       x += width + 4;
     };
     if (this.g.shielded) status(this.g.shieldTimer, 'shield');
@@ -1493,7 +1559,8 @@ export class Renderer {
     const label = this.hudComboStr;
     const flash = this.g.comboPulse;
     const col = flash > 0.4 ? '#ffffff' : '#ffd166';
-    const bw = 78;
+    // Bar grows with the label so a long "X8 COMBO 9999" can't overflow it.
+    const bw = Math.max(78, textWidth(label, 1) + 8);
     drawTextCentered(c, label, labelCenterX, y, 1, col, '#150a24');
     c.fillStyle = '#150a24';
     c.fillRect(labelCenterX - bw / 2 - 1, y + 10, bw + 2, 5);

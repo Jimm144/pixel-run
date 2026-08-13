@@ -1,4 +1,4 @@
-import { P_CAP, ri, rnd, type Particle } from './types';
+import { P_CAP, ri, rnd, VW, type Particle } from './types';
 
 /**
  * Free-list particle pool. Every particle lives in exactly one of two lists:
@@ -93,7 +93,9 @@ export class ParticleSystem {
 
   draw(c: CanvasRenderingContext2D, camX: number) {
     const cam = Math.round(camX);
+    // Viewport cull: skip particles outside the frame (plus a small margin).
     for (const p of this.alive) {
+      if (p.x < cam - 8 || p.x > cam + VW + 8) continue;
       const a = p.life / p.max;
       c.globalAlpha = a > 0.55 ? 1 : a / 0.55;
       c.fillStyle = p.col;

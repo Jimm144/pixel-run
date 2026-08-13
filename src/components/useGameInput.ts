@@ -17,6 +17,7 @@ export interface GameInputOptions {
   onPause: () => void;
   onResume: () => void;
   onToggleMute: () => void;
+  onRestartHint: () => void;
 }
 
 /** Which pointer currently owns the held dive — the play-area drag or the
@@ -30,16 +31,16 @@ type DiveOwner = 'wrap' | 'button' | null;
  * key-release cleanup. Listener closures only read refs, so they are
  * subscribed once and stay correct across re-renders and StrictMode remounts.
  */
-export function useGameInput({ gameRef, ui, onStart, onPause, onResume, onToggleMute }: GameInputOptions) {
+export function useGameInput({ gameRef, ui, onStart, onPause, onResume, onToggleMute, onRestartHint }: GameInputOptions) {
   const uiRef = useRef(ui);
-  const cbRef = useRef({ onStart, onPause, onResume, onToggleMute });
+  const cbRef = useRef({ onStart, onPause, onResume, onToggleMute, onRestartHint });
   // The "latest value" refs are written in an effect (not during render) so
   // the subscribed-once listeners below always read the freshest callbacks.
   useEffect(() => {
     uiRef.current = ui;
   });
   useEffect(() => {
-    cbRef.current = { onStart, onPause, onResume, onToggleMute };
+    cbRef.current = { onStart, onPause, onResume, onToggleMute, onRestartHint };
   });
 
   const moveKeys = useRef(new Set<string>());
@@ -47,6 +48,19 @@ export function useGameInput({ gameRef, ui, onStart, onPause, onResume, onToggle
   const diveId = useRef<number | null>(null);
   const diveOwner = useRef<DiveOwner>(null);
   const startY = useRef(0);
+  /** Timestamp of the last KeyR press — a second press within 0.8s confirms. */
+  const restartArmedAt = useRef(0);
+
+  const handleRestart = () => {
+    const now = performance.now();
+    if (now - restartArmedAt.current <= 800) {
+      restartArmedAt.current = 0;
+      cbRef.current.onStart();
+    } else {
+      restartArmedAt.current = now;
+      cbRef.current.onRestartHint();
+    }
+  };
 
   const applyMove = (g: Game) => {
     if (g.phase !== 'playing') return;
@@ -56,14 +70,10 @@ export function useGameInput({ gameRef, ui, onStart, onPause, onResume, onToggle
 
   const onKeyDown = (e: KeyboardEvent) => {
     const code = e.code;
-    if (code === 'KeyM') {
-      cbRef.current.onToggleMute();
-      return;
-    }
     const g = gameRef.current;
-    // Only swallow native behaviour for live gameplay keys — menus keep
-    // Space/arrows working as the browser would (they already start/resume
-    // via the UI branch below, and the page can't scroll).
+    // Only swallow native behaviour for live gameplay keys — the menu keys
+    // below are handled too, so preventDefault keeps them from also
+    // activating the last-focused button or scrolling the page.
     if (g && g.phase === 'playing' && GAME_KEYS.includes(code)) e.preventDefault();
     if (g && g.phase === 'playing') {
       if (JUMP.includes(code)) {
@@ -78,14 +88,33 @@ export function useGameInput({ gameRef, ui, onStart, onPause, onResume, onToggle
       }
     }
     const u = uiRef.current;
+    if (u === 'playing') {
+      // Menu keys must ignore key-repeat (holding P flips pause/resume at
+      // ~30 Hz) and must not trigger a previously focused button natively.
+      if (e.repeat) return;
+      if (code === 'Escape' || code === 'KeyP') {
+        e.preventDefault();
+        cbRef.current.onPause();
+      } else if (code === 'KeyR') {
+        e.preventDefault();
+        handleRestart();
+      }
+      return;
+    }
+    if (e.repeat) return;
+    const menuKey =
+      code === 'Space' || code === 'Enter' || code === 'Escape' || code === 'KeyP' ||
+      code === 'KeyR' || code === 'KeyM' || code === 'KeyW' || code === 'ArrowUp';
+    if (menuKey) e.preventDefault();
+    if (code === 'KeyM') {
+      cbRef.current.onToggleMute();
+      return;
+    }
     if (u === 'start') {
       if (code === 'Space' || code === 'Enter' || code === 'KeyW' || code === 'ArrowUp') cbRef.current.onStart();
-    } else if (u === 'playing') {
-      if (code === 'Escape' || code === 'KeyP') cbRef.current.onPause();
-      else if (code === 'KeyR') cbRef.current.onStart();
     } else if (u === 'paused') {
       if (code === 'Escape' || code === 'KeyP' || code === 'Space' || code === 'Enter') cbRef.current.onResume();
-      else if (code === 'KeyR') cbRef.current.onStart();
+      else if (code === 'KeyR') handleRestart();
     } else if (u === 'over') {
       if (code === 'Space' || code === 'Enter' || code === 'KeyR' || code === 'ArrowUp') cbRef.current.onStart();
     }

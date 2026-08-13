@@ -80,10 +80,10 @@ export function StartScreen({
 }) {
   return (
     <div
-      className="absolute inset-0 z-10 flex cursor-pointer items-center justify-center overflow-y-auto bg-[#08040f]/88 p-4"
+      className="absolute inset-0 z-10 flex cursor-pointer items-start justify-center overflow-y-auto bg-[#08040f]/88 p-4"
       onClick={onStart}
     >
-      <div className="flex w-full max-w-[420px] flex-col items-center gap-3 tablet:max-w-[800px]">
+      <div className="my-auto flex w-full max-w-[420px] flex-col items-center gap-3 tablet:max-w-[800px]">
         <div className="text-center">
           <h1 className="font-pixel text-[26px] leading-none drop-shadow-[0_4px_0_#08040f] sm:text-[34px] tablet:text-[48px]">
             <span className="animate-title block text-[#3ef2c8]">PIXEL</span>
@@ -196,26 +196,70 @@ export function StartScreen({
 }
 
 /* -------------------------------------------------------------------- pause */
+function VolumeStepper({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  const pct = Math.round(value * 100);
+  const step = (dir: number) => onChange(Math.min(1, Math.max(0, pct + dir) / 100));
+  return (
+    <div className="flex items-center justify-between gap-2 border-2 border-[#2c1f4d] bg-[#0d0619] px-2 py-1.5">
+      <span className="font-pixel text-[7px] text-[#9d8fd6]">{label}</span>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          aria-label={`${label} down`}
+          onClick={() => step(-10)}
+          className="border-2 border-[#3ef2c8]/50 bg-[#0d0619] px-2 py-1 font-pixel text-[8px] text-[#3ef2c8] transition-colors hover:bg-[#3ef2c8]/10 active:bg-[#3ef2c8]/20"
+        >
+          -
+        </button>
+        <span className="w-11 text-center font-pixel text-[8px] text-[#e9e2ff]">{pct}%</span>
+        <button
+          type="button"
+          aria-label={`${label} up`}
+          onClick={() => step(10)}
+          className="border-2 border-[#3ef2c8]/50 bg-[#0d0619] px-2 py-1 font-pixel text-[8px] text-[#3ef2c8] transition-colors hover:bg-[#3ef2c8]/10 active:bg-[#3ef2c8]/20"
+        >
+          +
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function PauseScreen({
   onResume,
   onRestart,
   onQuit,
-  score,
-  meters,
+  stats,
+  musicVol,
+  sfxVol,
+  onMusicVol,
+  onSfxVol,
 }: {
   onResume: () => void;
   onRestart: () => void;
   onQuit: () => void;
-  score: number;
-  meters: number;
+  stats: Stats;
+  musicVol: number;
+  sfxVol: number;
+  onMusicVol: (v: number) => void;
+  onSfxVol: (v: number) => void;
 }) {
   return (
     <div className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-[#08040f]/80 p-3 [@media(max-height:640px)]:items-end [@media(max-height:640px)]:pb-8">
       <Panel className="w-full max-w-[300px] p-4 tablet:max-w-[420px] tablet:p-6">
         <h2 className="mb-3 text-center font-pixel text-[16px] text-[#3ef2c8] tablet:mb-4 tablet:text-[18px]">PAUSED</h2>
         <div className="mb-3 grid grid-cols-2 gap-2 tablet:mb-4 tablet:gap-3">
-          <Stat label="SCORE" value={pad(score, 6)} color="#ffffff" />
-          <Stat label="DIST" value={meters + 'M'} color="#3ef2c8" />
+          <Stat label="SCORE" value={pad(stats.score, 6)} color="#ffffff" />
+          <Stat label="DIST" value={stats.meters + 'M'} color="#3ef2c8" />
+        </div>
+        <div className="mb-3 grid grid-cols-3 gap-2 tablet:mb-4 tablet:gap-3">
+          <Stat label="COINS" value={String(stats.coins)} color="#ffd166" />
+          <Stat label="KILLS" value={String(stats.kills)} color="#ff4d6d" />
+          <Stat label="COMBO" value={'X' + stats.combo} color="#c98cff" />
+        </div>
+        <div className="mb-3 flex flex-col gap-2 tablet:mb-4">
+          <VolumeStepper label="MUSIC" value={musicVol} onChange={onMusicVol} />
+          <VolumeStepper label="SFX" value={sfxVol} onChange={onSfxVol} />
         </div>
         <div className="flex flex-col gap-2">
           <PixelButton onClick={onResume} small className="py-2.5 tablet:py-3 tablet:text-[10px]">
@@ -252,8 +296,8 @@ export function GameOverScreen({
   touch: boolean;
 }) {
   return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-[#08040f]/80 p-3">
-      <div className="flex w-full max-w-[380px] flex-col items-center gap-3 tablet:max-w-[800px]">
+    <div className="absolute inset-0 z-10 flex items-start justify-center overflow-y-auto bg-[#08040f]/80 p-3">
+      <div className="my-auto flex w-full max-w-[380px] flex-col items-center gap-3 tablet:max-w-[800px]">
         <h2 className="animate-shake-in font-pixel text-[22px] text-[#ff4d6d] drop-shadow-[0_4px_0_#08040f] tablet:text-[30px]">
           WASTED
         </h2>

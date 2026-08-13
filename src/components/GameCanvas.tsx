@@ -12,12 +12,13 @@ interface Props {
   onResume: () => void;
   onStart: () => void;
   onToggleMute: () => void;
+  onRestartHint: () => void;
   onQuestProgress: (stats: QuestRunStats) => void;
   ui: UI;
   showTouch: boolean;
 }
 
-export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onToggleMute, onQuestProgress, ui, showTouch }: Props) {
+export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onToggleMute, onRestartHint, onQuestProgress, ui, showTouch }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<{ portrait: boolean; w: number; h: number } | null>(null);
@@ -40,6 +41,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
     onPause,
     onResume,
     onToggleMute,
+    onRestartHint,
   });
 
   /* ---------------------------------------------------- engine + main loop */

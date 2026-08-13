@@ -75,6 +75,7 @@ export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private musicGain: GainNode | null = null;
+  private sfxGain: GainNode | null = null;
   private sfxFilter: BiquadFilterNode | null = null;
   private noiseBuf: AudioBuffer | null = null;
   private musicTimer: number | null = null;
@@ -86,6 +87,8 @@ export class Sfx {
   private musicPaused = false;
   /** Reusable melody/bass/arp voices — see acquireTone(). */
   private musicTonePool: PooledTone[] = [];
+  private musicVolume = Sfx.MUSIC_VOL;
+  private sfxVolume = 1;
   muted = false;
   musicMuted = false;
   sfxMuted = false;
@@ -105,7 +108,15 @@ export class Sfx {
       const ctx = new AC();
       const master = ctx.createGain();
       master.gain.value = Sfx.MASTER_VOL;
-      master.connect(ctx.destination);
+      // Gentle limiter so stacked kick/combo/coin transients don't clip.
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.value = -12;
+      compressor.knee.value = 20;
+      compressor.ratio.value = 4;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.2;
+      master.connect(compressor);
+      compressor.connect(ctx.destination);
       const musicGain = ctx.createGain();
       musicGain.gain.value = Sfx.MUSIC_VOL;
       musicGain.connect(master);
@@ -114,7 +125,10 @@ export class Sfx {
       const sfxFilter = ctx.createBiquadFilter();
       sfxFilter.type = 'lowpass';
       sfxFilter.frequency.value = 22000;
-      sfxFilter.connect(master);
+      const sfxGain = ctx.createGain();
+      sfxGain.gain.value = 1;
+      sfxFilter.connect(sfxGain);
+      sfxGain.connect(master);
 
       const len = Math.floor(ctx.sampleRate * 0.4);
       const buf = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -124,12 +138,14 @@ export class Sfx {
       this.ctx = ctx;
       this.master = master;
       this.musicGain = musicGain;
+      this.sfxGain = sfxGain;
       this.sfxFilter = sfxFilter;
       this.noiseBuf = buf;
     } catch {
       this.ctx = null;
       this.master = null;
       this.musicGain = null;
+      this.sfxGain = null;
       this.sfxFilter = null;
       this.noiseBuf = null;
     }
@@ -149,6 +165,43 @@ export class Sfx {
 
   setSfxMuted(m: boolean) {
     this.sfxMuted = m;
+    this.applySfxGain();
+  }
+
+  /** 0..1 music level. Ramps the gain so no zipper noise. */
+  setMusicVolume(v: number) {
+    this.musicVolume = Math.max(0, Math.min(1, v));
+    this.applyMusicGain();
+  }
+
+  /** 0..1 sfx level. Ramps the gain so no zipper noise. */
+  setSfxVolume(v: number) {
+    this.sfxVolume = Math.max(0, Math.min(1, v));
+    this.applySfxGain();
+  }
+
+  /** Resumes the AudioContext on a user gesture and restarts the music chain if a track is pending. */
+  unlock() {
+    this.init();
+    const ctx = this.ctx;
+    if (!ctx || ctx.state === 'closed') return;
+    if (ctx.state === 'suspended') void ctx.resume().catch(() => undefined);
+    if (!this.musicPlaying) return;
+    this.musicPaused = false;
+    if (this.musicNextTime < ctx.currentTime - 0.3) this.musicNextTime = ctx.currentTime + 0.05;
+    this.applyMusicGain();
+    this.ensureMusicTimer();
+    this.scheduleMusic();
+  }
+
+  /** Stops timers and suspends the context. Idempotent; the context stays reusable via init()/unlock(). */
+  dispose() {
+    this.musicPlaying = false;
+    this.musicPaused = false;
+    this.clearMusicTimer();
+    this.musicTonePool = [];
+    const ctx = this.ctx;
+    if (ctx && ctx.state !== 'closed' && ctx.state === 'running') void ctx.suspend().catch(() => undefined);
   }
 
   /** Drops the SFX lowpass so menu sounds sound muffled (from another room). */
@@ -159,12 +212,19 @@ export class Sfx {
 
   private applyVolumes() {
     this.applyMusicGain();
+    this.applySfxGain();
   }
 
   private applyMusicGain() {
     if (!this.musicGain || !this.ctx || this.ctx.state === 'closed') return;
-    const vol = this.muted || this.musicMuted ? 0 : Sfx.MUSIC_VOL;
-    this.musicGain.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.04);
+    const vol = this.muted || this.musicMuted ? 0 : this.musicVolume;
+    this.musicGain.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.02);
+  }
+
+  private applySfxGain() {
+    if (!this.sfxGain || !this.ctx || this.ctx.state === 'closed') return;
+    const vol = this.muted || this.sfxMuted ? 0 : this.sfxVolume;
+    this.sfxGain.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.02);
   }
 
   startMusic(biome: MusicBiome, intensity = 0) {
@@ -205,6 +265,7 @@ export class Sfx {
     if (!this.musicPlaying || !this.musicPaused) return;
     const ctx = this.ctx;
     if (!ctx || ctx.state === 'closed' || !this.musicGain) return;
+    if (ctx.state === 'suspended') void ctx.resume().catch(() => undefined);
     this.musicPaused = false;
     this.musicNextTime = ctx.currentTime + 0.05;
     this.applyMusicGain();
@@ -433,6 +494,7 @@ export class Sfx {
 
   play(name: SfxName, param = 0) {
     if (!this.ctx || this.ctx.state === 'closed' || this.muted || this.sfxMuted) return;
+    if (this.ctx.state === 'suspended') void this.ctx.resume().catch(() => undefined);
     switch (name) {
       case 'jump':
         this.tone('square', 340, 700, 0.11, 0.22);
@@ -499,3 +561,8 @@ export class Sfx {
 }
 
 export const sfx = new Sfx();
+
+export const setMusicVolume = (v: number) => sfx.setMusicVolume(v);
+export const setSfxVolume = (v: number) => sfx.setSfxVolume(v);
+export const unlock = () => sfx.unlock();
+export const dispose = () => sfx.dispose();

@@ -1,3 +1,4 @@
 node_modules/
 dist/
 vite.log
+vite.dev.log

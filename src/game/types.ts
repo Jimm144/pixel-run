@@ -38,13 +38,13 @@ export interface Stats {
 
 /* ------------------------------------------------------------------ tuning */
 export const GRAV = 0.44;
-export const GRAV_HOLD = 0.32;
+export const GRAV_HOLD = 0.36;
 export const GRAV_FALL = 0.54;
 export const GRAV_DIVE = 1.1;
 export const JUMP_V = 6.4;
-export const DJUMP_V = 5.8;
+export const DJUMP_V = 6.4;
 export const MAX_FALL = 10;
-export const COYOTE = 8;
+export const COYOTE = 12;
 export const BUFFER = 8;
 /** Camera anchor as a fraction of view width (112/400 on desktop). */
 const ANCHOR_FRAC = 0.28;

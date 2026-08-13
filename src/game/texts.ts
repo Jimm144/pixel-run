@@ -74,16 +74,17 @@ export class FloatTexts {
       const anchorY = Math.round(t.y);
 
       // Smooth ease-out pop: scale from (scale+1) down to scale over the
-      // first 6 frames, anchored at the text center so the glyph stays put.
+      // first 6 frames, scaled about the sprite centre so the glyph stays
+      // anchored. The steady-state draw below centres the sprite at
+      // (tx, anchorY + h/2), so the pop translates to that exact point.
       const age = t.max - t.life;
       if (age < 6) {
         const popT = age / 6;
         const sf = (t.scale + (1 - popT) * (1 - popT)) / t.scale;
         c.save();
-        c.translate(anchorX, anchorY);
+        c.translate(tx, anchorY + (FONT_H * t.scale) / 2);
         c.scale(sf, sf);
-        c.translate(-2, -2);
-        c.drawImage(t.sprite, 0, 0);
+        c.drawImage(t.sprite, -(t.w + 4) / 2, -(FONT_H * t.scale + 4) / 2);
         c.restore();
       } else {
         c.drawImage(t.sprite, anchorX - 2, anchorY - 2);

@@ -8,6 +8,7 @@ export interface HighScore {
 const KEY = 'pixeldash.best.v2';
 const LEGACY_KEY = 'pixeldash.scores.v1';
 const LAST_KEY = 'pixeldash.lastrun.v1';
+const VOL_KEY = 'pixeldash.volumes.v1';
 
 function nonNegativeInt(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback;
@@ -84,4 +85,31 @@ export function saveLastRun(entry: HighScore): HighScore | null {
     localStorage.setItem(LAST_KEY, JSON.stringify(candidate));
   } catch {}
   return candidate;
+}
+
+export interface Volumes {
+  music: number;
+  sfx: number;
+}
+
+function normalizeVolume(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback;
+}
+
+export function loadVolumes(): Volumes {
+  try {
+    const raw = localStorage.getItem(VOL_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<Volumes>;
+      return { music: normalizeVolume(parsed.music, 1), sfx: normalizeVolume(parsed.sfx, 1) };
+    }
+  } catch {}
+  return { music: 1, sfx: 1 };
+}
+
+export function saveVolumes(volumes: Volumes): Volumes {
+  try {
+    localStorage.setItem(VOL_KEY, JSON.stringify(volumes));
+  } catch {}
+  return volumes;
 }

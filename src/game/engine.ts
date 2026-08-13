@@ -149,6 +149,8 @@ export class Game implements GenHost, RenderHost {
   padFlight!: number;
   sx!: number;
   sy!: number;
+  playerSquashX!: number;
+  playerSquashY!: number;
   spin!: number;
   /** Kept running across runs like the original — not reset by reset(). */
   animT = 0;
@@ -252,6 +254,8 @@ export class Game implements GenHost, RenderHost {
       padFlight: 0,
       sx: 1,
       sy: 1,
+      playerSquashX: 1,
+      playerSquashY: 1,
       spin: 0,
       ghosts: [],
       startX: 0,
@@ -360,9 +364,11 @@ export class Game implements GenHost, RenderHost {
       this.savedDiveHeld = false;
       this.savedMoveDir = 0;
       if (this.jumpHeld) this.jumpBuf = BUFFER; // buffered for GO
-      this.goTimer = 0; // don't flash "GO" over the fresh countdown
-      this.countdown = 180; // 3s of "3-2-1-GO" before control resumes
-      this.countdownTicks = false; // silent countdown after unpause
+      if (this.countdown === 0) {
+        this.goTimer = 0; // don't flash "GO" over the fresh countdown
+        this.countdown = 180; // 3s of "3-2-1-GO" before control resumes
+        this.countdownTicks = false; // silent countdown after unpause
+      }
       sfx.resumeMusic();
     }
   }
@@ -414,13 +420,15 @@ export class Game implements GenHost, RenderHost {
     if (this.phase === 'paused') this.savedJumpHeld = false;
   }
   pressDive() {
-    if (this.phase !== 'playing') return;
+    if (this.phase !== 'playing' || this.countdown > 0) return;
     this.diveHeld = true;
     if (!this.onGround && this.vy > -3) {
       this.diving = true;
       this.padFlight = 0;
       this.vy = Math.max(this.vy, 6.5);
       this.spin = 0;
+      this.sx = 0.8;
+      this.sy = 1.25;
     }
   }
   releaseDive() {
@@ -440,11 +448,12 @@ export class Game implements GenHost, RenderHost {
 
   /* --------------------------------------------------------------- helpers */
   diff() {
-    const d = clamp(this.distance / 9000, 0, 1);
+    const d = clamp(this.distance / 15000, 0, 1);
     return this.phase === 'ready' ? Math.min(d, 0.1) : d;
   }
   runSpeed() {
-    return 2.1 + 1.4 * this.diff();
+    const late = this.phase === 'ready' ? 0 : clamp((this.distance - 10500) / 15000, 0, 1);
+    return 2.1 + 1.4 * this.diff() + 0.8 * late;
   }
   mult() {
     return Math.min(10, 1 + Math.floor(this.combo / 4));
@@ -464,6 +473,7 @@ export class Game implements GenHost, RenderHost {
   }
 
   private addCombo(x: number, y: number, base: number, label?: string) {
+    if (this.phase !== 'playing') return;
     this.questCleanRun = false;
     this.combo++;
     this.comboT = COMBO_TIME;
@@ -614,7 +624,7 @@ export class Game implements GenHost, RenderHost {
         this.doJump(true);
       }
     }
-    if (!this.jumpHeld && this.vy < -2.4 && !this.cut) {
+    if (!this.jumpHeld && this.vy < -3 && !this.cut) {
       this.vy *= 0.52;
       this.cut = true;
     }
@@ -623,11 +633,13 @@ export class Game implements GenHost, RenderHost {
     if (this.diveHeld && !this.onGround && !this.diving && this.vy > 0.5) {
       this.diving = true;
       this.spin = 0;
+      this.sx = 0.8;
+      this.sy = 1.25;
     }
     let g = GRAV_FALL;
     if (this.diving) g = GRAV_DIVE;
     else if ((this.propellerHat > 0 || this.propellerFlashing) && !this.onGround && this.jumpHeld) g = this.vy > 0 ? 0.08 : 0.16;
-    else if (this.eventTimer > 0 && this.eventKind === 'desert') g = this.vy < 0 ? 0.3 : 0.48;
+    else if (this.eventTimer > 0 && this.eventKind === 'desert' && this.padFlight <= 0) g = this.vy < 0 ? 0.3 : 0.48;
     else if (this.vy < 0) g = this.padFlight > 0 ? GRAV : this.jumpHeld ? GRAV_HOLD : GRAV;
     this.vy = Math.min(MAX_FALL + (this.diving ? 5 : 0), this.vy + g);
     if ((this.propellerHat > 0 || this.propellerFlashing) && !this.onGround && !this.diving && this.jumpHeld && this.vy > 1.8)
@@ -646,6 +658,8 @@ export class Game implements GenHost, RenderHost {
     /* ---- squash & spin */
     this.sx += (1 - this.sx) * 0.18;
     this.sy += (1 - this.sy) * 0.18;
+    this.playerSquashX += (1 - this.playerSquashX) * 0.2;
+    this.playerSquashY += (1 - this.playerSquashY) * 0.2;
     if (this.spin > 0) this.spin = Math.max(0, this.spin - 0.075);
     this.animT += this.vx * 0.09;
 
@@ -756,6 +770,11 @@ export class Game implements GenHost, RenderHost {
         this.py < p.y + bh
       ) {
         if (this.vx > 0 && this.px + pw - this.vx <= p.x + WALL_MARGIN) {
+          if (this.vy < 0) {
+            this.px = p.x - pw - 1;
+            this.vx = 0;
+            continue;
+          }
           if (this.absorbShieldHit()) {
             this.px = p.x - pw - 1;
             this.vx = 0;
@@ -809,8 +828,8 @@ export class Game implements GenHost, RenderHost {
       this.diving = false;
       this.spin = 0;
       if (impact > 2) {
-        this.sx = 1 + Math.min(0.45, impact * 0.045);
-        this.sy = 1 - Math.min(0.4, impact * 0.04);
+        this.playerSquashX = 1 + Math.min(0.35, impact * 0.035);
+        this.playerSquashY = 1 - Math.min(0.4, impact * 0.04);
         const n = wasDiving ? 16 : Math.min(10, Math.floor(impact));
         for (let i = 0; i < n; i++) {
           this.particles.spawnP(
@@ -823,6 +842,19 @@ export class Game implements GenHost, RenderHost {
             i % 3 === 0 ? '#ffffff' : shade(this.zone.accent, -0.1),
             0.12,
             0.92,
+          );
+        }
+        for (let i = 0; i < 5; i++) {
+          this.particles.spawnP(
+            this.px + PLAYER_W / 2 + rnd(-5, 5),
+            this.py + PLAYER_H,
+            rnd(-1.4, 1.4) - this.vx * 0.15,
+            -rnd(0.1, 0.7),
+            14,
+            3,
+            shade(this.zone.accent, -0.15),
+            0.02,
+            0.93,
           );
         }
       }
@@ -1040,8 +1072,7 @@ export class Game implements GenHost, RenderHost {
           } else {
             if (this.absorbShieldHit()) {
               const pushDir = pxc + pw / 2 < e.x + e.w / 2 ? -1 : 1;
-              this.px += pushDir * 6;
-              this.vx = pushDir * 1.2;
+              this.shieldPush(pushDir);
               shieldTriggered = true;
               break;
             }
@@ -1049,15 +1080,14 @@ export class Game implements GenHost, RenderHost {
             return false;
           }
         } else {
-          const stomping = fallVy > 0 && prevFeet <= e.y + 7;
+          const stomping = fallVy > 0 && prevFeet <= e.y + e.h;
           if (stomping || this.diving) {
             this.killEnemy(e, this.diving ? SLAM_PTS : STOMP_PTS, this.diving ? 'SLAM' : undefined);
             stompedThisFrame = true;
           } else if (!stompedThisFrame) {
             if (this.absorbShieldHit()) {
               const pushDir = pxc + pw / 2 < e.x + e.w / 2 ? -1 : 1;
-              this.px += pushDir * 6;
-              this.vx = pushDir * 1.2;
+              this.shieldPush(pushDir);
               shieldTriggered = true;
               break;
             }
@@ -1135,6 +1165,19 @@ export class Game implements GenHost, RenderHost {
             0.94,
           );
         }
+        for (let i = 0; i < 5; i++) {
+          this.particles.spawnP(
+            sp.x + (sp.mega ? 9 : 7) + rnd(-6, 6),
+            sp.y,
+            rnd(-1.5, 1.5),
+            -rnd(0.1, 0.8),
+            16,
+            3,
+            shade(this.zone.ground, -0.1),
+            0.02,
+            0.93,
+          );
+        }
       }
     }
     return true;
@@ -1149,9 +1192,13 @@ export class Game implements GenHost, RenderHost {
         if (this.eventTimer > 20) this.eventTimer = 20;
       }
       // Do not queue several weather effects while one is active. Triggers
-      // passed during the current effect are consumed and cannot restart it.
+      // passed during the current effect are consumed and cannot restart it,
+      // but they still count toward the biome-effect quest.
       for (const trigger of this.worldGen.eventTriggers) {
-        if (!trigger.used && this.px + PLAYER_W >= trigger.x - 12) trigger.used = true;
+        if (!trigger.used && this.px + PLAYER_W >= trigger.x - 12) {
+          trigger.used = true;
+          if (!this.questBiomeEffects.includes(trigger.kind)) this.questBiomeEffects.push(trigger.kind);
+        }
       }
       this.eventTimer--;
       if (this.eventTimer <= 0) {
@@ -1225,6 +1272,22 @@ export class Game implements GenHost, RenderHost {
     this.flash = 0.24;
     this.flashCol = POWERUP_COLORS[kind];
     sfx.play('powerup', kind === 'shield' ? 0 : kind === 'shoes' ? 1 : kind === 'triple' ? 2 : 3);
+  }
+
+  private shieldPush(dir: number) {
+    const pw = PLAYER_W;
+    const ph = PLAYER_H;
+    let px = this.px + dir * 6;
+    for (const p of this.platforms) {
+      if (p.float) continue;
+      const bh = GROUND_BOTTOM - p.y;
+      if (px + pw > p.x && px < p.x + p.w && this.py + ph > p.y + 3 && this.py < p.y + bh) {
+        const edge = dir < 0 ? p.x + p.w : p.x - pw;
+        px = dir < 0 ? Math.max(px, edge) : Math.min(px, edge);
+      }
+    }
+    this.px = px;
+    this.vx = dir * 1.2;
   }
 
   private absorbShieldHit() {

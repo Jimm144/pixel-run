@@ -58,20 +58,6 @@ canvas {
 }
 
 /* Animations -------------------------------------------------------------- */
-@keyframes blinkKF {
-  0%,
-  60% {
-    opacity: 1;
-  }
-  61%,
-  100% {
-    opacity: 0.25;
-  }
-}
-.animate-blink {
-  animation: blinkKF 1.05s steps(1, end) infinite;
-}
-
 @keyframes titleKF {
   0%,
   100% {
