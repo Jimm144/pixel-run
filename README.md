@@ -23,6 +23,20 @@ The player runs automatically. Jump, double jump and dive through four biomes: j
 
 The best run and the last run are stored locally (localStorage).
 
+## Daily Quests
+
+Four quests are generated for each local calendar day. Quests can track one run or the combined totals for the day.
+
+- Easy: 40%, green
+- Medium: 34%, orange
+- Hard: 20%, red
+- Special: 5%, purple
+- Impossible: 1%, black
+
+Quest objectives include collecting coins or power-ups, running meters, scoring points, defeating enemies, jumping, reaching a x10 combo, completing a run without pickups or kills, triggering every biome effect in one run, and having two power-ups active at once.
+
+Quest progress, completed quests, and completed quest totals by difficulty are stored locally. Daily definitions reset with the local date.
+
 ## Controls
 
 Keyboard:
