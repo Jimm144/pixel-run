@@ -1,10 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameCanvas } from './components/GameCanvas';
 import { GameOverScreen, PauseScreen, StartScreen } from './components/Overlays';
+import { DailyQuestAnnouncement, QuestCompletionToast } from './components/QuestPanels';
 import { type UI } from './components/useGameInput';
 import { Game, type Stats } from './game/engine';
 import { sfx } from './game/audio';
 import { bestScore, loadHighScore, loadLastRun, saveHighScore, saveLastRun } from './game/storage';
+import {
+  applyQuestRun,
+  emptyQuestRunStats,
+  getDailyQuests,
+  getQuestProgress,
+  loadQuestRecord,
+  markQuestAnnouncementSeen,
+  markQuestCompletions,
+  saveQuestRecord,
+  type QuestRunStats,
+} from './game/quests';
 
 const MUSIC_KEY = 'pixeldash.music';
 const SFX_KEY = 'pixeldash.sfx';
@@ -32,6 +44,13 @@ export function App() {
   });
   const [touch, setTouch] = useState(false);
   const [live, setLive] = useState({ score: 0, meters: 0 });
+  const [questRecord, setQuestRecord] = useState(() => loadQuestRecord());
+  const [questRun, setQuestRun] = useState<QuestRunStats>(() => emptyQuestRunStats());
+  const [questAnnouncement, setQuestAnnouncement] = useState(false);
+  const [questToast, setQuestToast] = useState<string[]>([]);
+  const questCommittedRef = useRef(true);
+  const questToastSeenRef = useRef(new Set<string>());
+  const quests = getDailyQuests(questRecord.date);
 
   useEffect(() => {
     // Listen for pointer-capability changes (hybrid devices) instead of
@@ -62,24 +81,81 @@ export function App() {
     sfx.setMuffled(ui === 'start');
   }, [ui]);
 
+  useEffect(() => {
+    if (!questAnnouncement) return;
+    const timer = window.setTimeout(() => setQuestAnnouncement(false), 5000);
+    return () => window.clearTimeout(timer);
+  }, [questAnnouncement]);
+
+  useEffect(() => {
+    if (questToast.length === 0) return;
+    const timer = window.setTimeout(() => setQuestToast([]), 5000);
+    return () => window.clearTimeout(timer);
+  }, [questToast]);
+
   /* --------------------------------------------------------------- actions */
+  const commitQuestRun = useCallback(() => {
+    if (questCommittedRef.current) return;
+    const g = gameRef.current;
+    if (!g) return;
+    const current = loadQuestRecord();
+    const next = applyQuestRun(current, getDailyQuests(current.date), g.getQuestRunStats());
+    const newlyCompleted = next.completed.filter((id) => !current.completed.includes(id) && !questToastSeenRef.current.has(id));
+    if (newlyCompleted.length > 0) {
+      newlyCompleted.forEach((id) => questToastSeenRef.current.add(id));
+      setQuestToast(newlyCompleted);
+    }
+    saveQuestRecord(next);
+    setQuestRecord(next);
+    setQuestRun(emptyQuestRunStats());
+    questCommittedRef.current = true;
+  }, []);
+
+  const handleQuestProgress = useCallback((run: QuestRunStats) => {
+    const record = loadQuestRecord();
+    const definitions = getDailyQuests(record.date);
+    const newlyCompleted = definitions
+      .filter((quest) => !record.completed.includes(quest.id) && !questToastSeenRef.current.has(quest.id))
+      .filter((quest) => getQuestProgress(quest, record, run).done)
+      .map((quest) => quest.id);
+    if (newlyCompleted.length === 0) return;
+    newlyCompleted.forEach((id) => questToastSeenRef.current.add(id));
+    const next = markQuestCompletions(record, definitions, newlyCompleted);
+    saveQuestRecord(next);
+    setQuestRecord(next);
+    setQuestToast(newlyCompleted);
+  }, []);
+
   const start = useCallback(() => {
+    commitQuestRun();
     sfx.init();
     sfx.setMusicMuted(!musicOn);
     sfx.setSfxMuted(!sfxOn);
     const g = gameRef.current;
     if (!g) return;
+    let current = loadQuestRecord();
+    if (!current.announcementSeen) {
+      current = markQuestAnnouncementSeen(current);
+      saveQuestRecord(current);
+      setQuestAnnouncement(true);
+    }
+    setQuestRecord(current);
     g.best = bestScore();
     g.startRun();
+    questCommittedRef.current = false;
+    questToastSeenRef.current.clear();
+    setQuestToast([]);
+    setQuestRun(emptyQuestRunStats());
     setNewBest(false);
     setUi('playing');
-  }, [musicOn, sfxOn]);
+  }, [commitQuestRun, musicOn, sfxOn]);
 
   const pause = useCallback((feedback = true) => {
     const g = gameRef.current;
     if (!g || g.phase !== 'playing') return;
     g.pause();
     setLive({ score: g.score, meters: g.stats.meters });
+    setQuestRun(g.getQuestRunStats());
     setUi('paused');
     if (feedback) sfx.play('ui');
   }, []);
@@ -91,13 +167,16 @@ export function App() {
   }, []);
 
   const toMenu = useCallback(() => {
+    commitQuestRun();
     gameRef.current?.toReady();
+    setQuestRun(emptyQuestRunStats());
     setUi('start');
     setBest(bestScore());
     sfx.play('ui');
-  }, []);
+  }, [commitQuestRun]);
 
   const handleDeath = useCallback((s: Stats) => {
+    commitQuestRun();
     setStats(s);
     const entry = { score: s.score, meters: s.meters, coins: s.coins, ts: Date.now() };
     setLastRun(saveLastRun(entry));
@@ -108,7 +187,7 @@ export function App() {
     if (beatBest) setBest(saveHighScore(entry, previous)?.score ?? s.score);
     setNewBest(beatBest);
     setUi('over');
-  }, []);
+  }, [commitQuestRun]);
 
   /* -------------------------------------------------------------- auto-pause */
   // Auto pause when the page or its window loses focus
@@ -142,6 +221,7 @@ export function App() {
             setMusicOn(bothOff ? true : !musicOn);
             setSfxOn(bothOff ? true : !sfxOn);
           }}
+          onQuestProgress={handleQuestProgress}
         />
 
         {ui === 'start' && (
@@ -154,6 +234,9 @@ export function App() {
             sfxOn={sfxOn}
             onToggleMusic={() => setMusicOn((v) => !v)}
             onToggleSfx={() => setSfxOn((v) => !v)}
+            quests={quests}
+            questRecord={questRecord}
+            questRun={questRun}
           />
         )}
         {ui === 'paused' && (
@@ -175,6 +258,10 @@ export function App() {
             touch={touch}
           />
         )}
+        {ui === 'playing' && questAnnouncement && (
+          <DailyQuestAnnouncement quests={quests} record={questRecord} run={questRun} />
+        )}
+        {questToast.length > 0 && <QuestCompletionToast quests={quests} completed={questToast} touch={touch} />}
       </div>
     </div>
   );

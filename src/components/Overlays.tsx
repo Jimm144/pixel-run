@@ -1,5 +1,7 @@
 import type { Stats } from '../game/engine';
+import { DailyQuestPanel } from './QuestPanels';
 import { PauseIcon, PixelButton, Panel, Stat } from './ui';
+import type { QuestDefinition, QuestRecord, QuestRunStats } from '../game/quests';
 
 const pad = (n: number, l: number) => Math.max(0, Math.floor(n)).toString().padStart(l, '0');
 
@@ -60,6 +62,9 @@ export function StartScreen({
   sfxOn,
   onToggleMusic,
   onToggleSfx,
+  quests,
+  questRecord,
+  questRun,
 }: {
   best: number;
   lastRun: number;
@@ -69,13 +74,16 @@ export function StartScreen({
   sfxOn: boolean;
   onToggleMusic: () => void;
   onToggleSfx: () => void;
+  quests: QuestDefinition[];
+  questRecord: QuestRecord;
+  questRun: QuestRunStats;
 }) {
   return (
     <div
       className="absolute inset-0 z-10 flex cursor-pointer items-center justify-center overflow-y-auto bg-[#08040f]/88 p-4"
       onClick={onStart}
     >
-      <div className="flex w-full max-w-[340px] flex-col items-center gap-3 tablet:max-w-[800px]">
+      <div className="flex w-full max-w-[420px] flex-col items-center gap-3 tablet:max-w-[800px]">
         <div className="text-center">
           <h1 className="font-pixel text-[26px] leading-none drop-shadow-[0_4px_0_#08040f] sm:text-[34px] tablet:text-[48px]">
             <span className="animate-title block text-[#3ef2c8]">PIXEL</span>
@@ -113,7 +121,8 @@ export function StartScreen({
             </div>
           </div>
         </Panel>
-        <div className="flex w-full max-w-[340px] gap-2 tablet:max-w-[800px]">
+        <DailyQuestPanel quests={quests} record={questRecord} run={questRun} compact decorated={false} />
+        <div className="flex w-full max-w-[420px] gap-2 tablet:max-w-[800px]">
           <button
             onClick={(e) => { e.stopPropagation(); onToggleMusic(); }}
             aria-pressed={musicOn}

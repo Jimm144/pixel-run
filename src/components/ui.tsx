@@ -48,17 +48,19 @@ export function PauseIcon({ className = 'h-5 w-5' }: { className?: string }) {
   );
 }
 
-export function Panel({ children, className }: { children: ReactNode; className?: string }) {  return (
+export function Panel({ children, className, decorated = true }: { children: ReactNode; className?: string; decorated?: boolean }) {  return (
     <div
       className={cn(
         'relative border-4 border-[#3ef2c8] bg-[#140a26]/95 p-5 shadow-[0_0_0_4px_#08040f,0_0_40px_rgba(62,242,200,0.22)] backdrop-blur-[2px]',
         className,
       )}
     >
-      <span className="pointer-events-none absolute -left-[10px] -top-[10px] h-2 w-2 bg-[#ff4d6d]" />
-      <span className="pointer-events-none absolute -right-[10px] -top-[10px] h-2 w-2 bg-[#ff4d6d]" />
-      <span className="pointer-events-none absolute -bottom-[10px] -left-[10px] h-2 w-2 bg-[#ff4d6d]" />
-      <span className="pointer-events-none absolute -bottom-[10px] -right-[10px] h-2 w-2 bg-[#ff4d6d]" />
+      {decorated && <>
+        <span className="pointer-events-none absolute -left-[10px] -top-[10px] h-2 w-2 bg-[#ff4d6d]" />
+        <span className="pointer-events-none absolute -right-[10px] -top-[10px] h-2 w-2 bg-[#ff4d6d]" />
+        <span className="pointer-events-none absolute -bottom-[10px] -left-[10px] h-2 w-2 bg-[#ff4d6d]" />
+        <span className="pointer-events-none absolute -bottom-[10px] -right-[10px] h-2 w-2 bg-[#ff4d6d]" />
+      </>}
       {children}
     </div>
   );

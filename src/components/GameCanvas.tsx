@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import { BASE_VW, Game, setViewportSize, VH, VW, type Stats } from '../game/engine';
 import { PauseIcon } from './ui';
+import type { QuestRunStats } from '../game/quests';
 import { useGameInput, type UI } from './useGameInput';
 
 interface Props {
@@ -11,11 +12,12 @@ interface Props {
   onResume: () => void;
   onStart: () => void;
   onToggleMute: () => void;
+  onQuestProgress: (stats: QuestRunStats) => void;
   ui: UI;
   showTouch: boolean;
 }
 
-export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onToggleMute, ui, showTouch }: Props) {
+export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onToggleMute, onQuestProgress, ui, showTouch }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<{ portrait: boolean; w: number; h: number } | null>(null);
@@ -25,6 +27,11 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
   /** True while the 3-2-1 countdown dims the scene — buttons dim too. */
   const [counting, setCounting] = useState(false);
   const countingRef = useRef(false);
+  const questProgressRef = useRef(onQuestProgress);
+
+  useEffect(() => {
+    questProgressRef.current = onQuestProgress;
+  }, [onQuestProgress]);
 
   const { wrapHandlers, diveHandlers, pauseHandlers } = useGameInput({
     gameRef,
@@ -88,6 +95,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
           countingRef.current = countingNow;
           setCounting(countingNow);
         }
+        if (game.phase === 'playing') questProgressRef.current(game.getQuestRunStats());
       }
     };
     raf = requestAnimationFrame(loop);

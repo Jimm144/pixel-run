@@ -1029,8 +1029,10 @@ export class Renderer {
         c.fillRect(x + 1 + eo, yy - 1, 4, 4);
         c.fillRect(x + 9 + eo, yy - 1, 4, 4);
         c.fillStyle = '#1a0a2a';
-        c.fillRect(x + 3 + eo, yy + 1, 2, 2);
-        c.fillRect(x + 11 + eo, yy + 1, 2, 2);
+        const pupilLeft = e.vx > 0 ? 3 : 1;
+        const pupilRight = e.vx > 0 ? 11 : 9;
+        c.fillRect(x + pupilLeft + eo, yy + 1, 2, 2);
+        c.fillRect(x + pupilRight + eo, yy + 1, 2, 2);
       } else if (e.kind === 'scarab') {
         // desert scarab — fast, low
         const front = e.vx > 0 ? x + 22 : x - 2;
@@ -1089,8 +1091,10 @@ export class Renderer {
         c.fillRect(x + 4 + eo, yy + 4, 3, 4);
         c.fillRect(x + 10 + eo, yy + 4, 3, 4);
         c.fillStyle = '#1a0a2a';
-        c.fillRect(x + 5 + eo, yy + 5, 2, 2);
-        c.fillRect(x + 11 + eo, yy + 5, 2, 2);
+        const pupilLeft = e.vx > 0 ? 5 : 4;
+        const pupilRight = e.vx > 0 ? 11 : 10;
+        c.fillRect(x + pupilLeft + eo, yy + 5, 2, 2);
+        c.fillRect(x + pupilRight + eo, yy + 5, 2, 2);
       }
   }
 
@@ -1233,7 +1237,7 @@ export class Renderer {
   }
 
   private drawBiomeEvent() {
-    if (this.g.eventTimer <= 0 || this.g.eventMax <= 0) return;
+    if (this.g.phase !== 'playing' || this.g.eventTimer <= 0 || this.g.eventMax <= 0) return;
     const c = this.ctx;
     const fade = Math.min(1, (this.g.eventMax - this.g.eventTimer) / 24, this.g.eventTimer / 24);
     const strength = 0.25 + 0.75 * Math.max(0, fade);

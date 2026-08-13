@@ -1,6 +1,7 @@
 import { sfx } from './audio';
 import { shade, ZONES, type BgKind, type Zone } from './palette';
 import { ParticleSystem } from './particles';
+import type { QuestRunStats } from './quests';
 import { Renderer } from './renderer';
 import { FloatTexts } from './texts';
 import {
@@ -170,6 +171,15 @@ export class Game implements GenHost, RenderHost {
   private countdownTicks = false;
   bestCombo!: number;
   nextMilestone!: number;
+  questCoins!: number;
+  questEnemies!: number;
+  questPowerups!: number;
+  questJumps!: number;
+  questCleanRun!: boolean;
+  questCleanMeters!: number;
+  questCleanScore!: number;
+  questBiomeEffects!: BgKind[];
+  questTwoPowerups!: boolean;
   eventTimer!: number;
   eventMax!: number;
   eventSeed!: number;
@@ -257,6 +267,15 @@ export class Game implements GenHost, RenderHost {
       goTimer: 0,
       bestCombo: 0,
       nextMilestone: 250,
+      questCoins: 0,
+      questEnemies: 0,
+      questPowerups: 0,
+      questJumps: 0,
+      questCleanRun: true,
+      questCleanMeters: 0,
+      questCleanScore: 0,
+      questBiomeEffects: [],
+      questTwoPowerups: false,
       eventTimer: 0,
       eventMax: 0,
       eventSeed: 0,
@@ -363,6 +382,23 @@ export class Game implements GenHost, RenderHost {
     };
   }
 
+  getQuestRunStats(): QuestRunStats {
+    return {
+      coins: this.questCoins,
+      meters: Math.floor(this.distance / 10),
+      score: this.score,
+      enemies: this.questEnemies,
+      powerups: this.questPowerups,
+      jumps: this.questJumps,
+      maxCombo: this.bestCombo,
+      cleanMeters: this.questCleanRun ? this.questCleanMeters : 0,
+      cleanScore: this.questCleanRun ? this.questCleanScore : 0,
+      cleanRun: this.questCleanRun,
+      biomeEffects: [...this.questBiomeEffects],
+      twoPowerups: this.questTwoPowerups,
+    };
+  }
+
   /* ----------------------------------------------------------------- input */
   pressJump() {
     if (this.phase === 'paused' || this.phase === 'dead') return;
@@ -411,12 +447,16 @@ export class Game implements GenHost, RenderHost {
     return 2.1 + 1.4 * this.diff();
   }
   mult() {
-    return Math.min(8, 1 + Math.floor(this.combo / 4));
+    return Math.min(10, 1 + Math.floor(this.combo / 4));
   }
 
   private syncDistanceScore() {
     this.distance = Math.max(this.distance, this.px - this.startX);
     this.score = Math.floor(this.distance / 8) + this.bonus;
+    if (this.questCleanRun) {
+      this.questCleanMeters = Math.floor(this.distance / 10);
+      this.questCleanScore = this.score;
+    }
   }
 
   private addShake(v: number) {
@@ -424,6 +464,7 @@ export class Game implements GenHost, RenderHost {
   }
 
   private addCombo(x: number, y: number, base: number, label?: string) {
+    this.questCleanRun = false;
     this.combo++;
     this.comboT = COMBO_TIME;
     this.comboPulse = 1; // smooth colour flash, decays in step()
@@ -680,6 +721,7 @@ export class Game implements GenHost, RenderHost {
     this.vy = -(dbl ? DJUMP_V : JUMP_V) * jumpScale;
     if (dbl) this.padFlight = 0;
     this.jumps = dbl ? Math.min(3, this.jumps + 1) : 1;
+    if (this.phase === 'playing') this.questJumps++;
     this.onGround = false;
     this.coyote = 0;
     this.sx = 0.74;
@@ -823,6 +865,7 @@ export class Game implements GenHost, RenderHost {
   private killEnemy(e: Enemy, pts: number, label?: string) {
     e.dead = true;
     this.kills++;
+    this.questEnemies++;
     this.addCombo(e.x + e.w / 2, e.y - 8, pts, label);
     this.particles.burst(e.x + e.w / 2, e.y + e.h / 2, 14, [this.zone.slimeBody, this.zone.accent, '#ffffff'], 2.6, 0.16);
     sfx.play(e.kind === 'spiker' ? 'slam' : 'stomp');
@@ -847,6 +890,7 @@ export class Game implements GenHost, RenderHost {
         c.dead = true;
         if (c.gem) {
           this.coins += 5;
+          this.questCoins += 5;
           this.addCombo(c.x, c.y - 6, GEM_PTS, 'GEM');
           this.particles.burst(c.x, c.y, 16, ['#7ef7ff', '#ffffff', '#3ef2c8'], 2.4, 0.05);
           this.addShake(0.22);
@@ -856,6 +900,7 @@ export class Game implements GenHost, RenderHost {
           sfx.play('gem');
         } else {
           this.coins++;
+          this.questCoins++;
           this.addCombo(c.x, c.y - 4, COIN_PTS);
           this.particles.burst(c.x, c.y, 6, ['#ffd166', '#ffffff'], 1.7, 0.04);
           sfx.play('coin');
@@ -1103,13 +1148,24 @@ export class Game implements GenHost, RenderHost {
       if (this.eventKind !== this.zone.bg) {
         if (this.eventTimer > 20) this.eventTimer = 20;
       }
+      // Do not queue several weather effects while one is active. Triggers
+      // passed during the current effect are consumed and cannot restart it.
+      for (const trigger of this.worldGen.eventTriggers) {
+        if (!trigger.used && this.px + PLAYER_W >= trigger.x - 12) trigger.used = true;
+      }
       this.eventTimer--;
+      if (this.eventTimer <= 0) {
+        this.eventTimer = 0;
+        this.eventMax = 0;
+      }
       return;
     }
+    this.eventMax = 0;
     for (const trigger of this.worldGen.eventTriggers) {
       if (trigger.used || this.px + PLAYER_W < trigger.x - 12) continue;
       trigger.used = true;
       this.eventKind = trigger.kind;
+      if (!this.questBiomeEffects.includes(trigger.kind)) this.questBiomeEffects.push(trigger.kind);
       this.eventMax = ri(900, 1500);
       this.eventTimer = this.eventMax;
       this.eventSeed = ri(1, 99999);
@@ -1160,6 +1216,9 @@ export class Game implements GenHost, RenderHost {
       this.propellerFlashing = false;
       this.propellerFlashTimer = 0;
     }
+    this.questPowerups++;
+    const activePowerups = Number(this.shielded) + Number(this.jumpShoes > 0) + Number(this.tripleJump > 0) + Number(this.propellerHat > 0 || this.propellerFlashing);
+    if (activePowerups >= 2) this.questTwoPowerups = true;
     this.addCombo(x, y - 8, POWERUP_PTS, labels[kind]);
     this.texts.popText(x, y - 20, labels[kind], POWERUP_COLORS[kind], 1);
     this.particles.burst(x, y, 14, [POWERUP_COLORS[kind], '#ffffff'], 2.2, 0.04);
