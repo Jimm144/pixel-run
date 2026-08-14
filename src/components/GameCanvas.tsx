@@ -21,7 +21,6 @@ interface Props {
 export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onToggleMute, onRestartHint, onQuestProgress, ui, showTouch }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const viewportRef = useRef<{ portrait: boolean; w: number; h: number } | null>(null);
   /** Zone accent for the touch pause button — follows the biome. */
   const [biomeAccent, setBiomeAccent] = useState('#3ef2c8');
   const lastZoneName = useRef('');
@@ -111,6 +110,8 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
 
   /* -------------------------------------------------------------- fit size */
   useEffect(() => {
+    let fitFrame = 0;
+
     const fit = () => {
       const wrap = wrapRef.current;
       const cv = canvasRef.current;
@@ -118,8 +119,17 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       const r = wrap.getBoundingClientRect();
       if (r.width < 4 || r.height < 4) return;
 
-      const applySize = (w: number, h: number) => {
-        if (w === VW && h === VH) return;
+      // Derive the buffer from the wrapper's actual aspect ratio. This keeps
+      // desktop resizes and mobile browser-chrome changes in sync instead of
+      // relying on a stale orientation bucket.
+      const portrait = r.height > r.width;
+      const w = portrait ? 240 : BASE_VW;
+      const ratio = portrait
+        ? Math.min(2.2, Math.max(1.45, r.height / r.width))
+        : Math.min(1.15, Math.max(0.45, r.height / r.width));
+      const h = Math.round(w * ratio);
+      const sizeChanged = w !== VW || h !== VH;
+      if (sizeChanged) {
         setViewportSize(w, h);
         cv.width = VW;
         cv.height = VH;
@@ -127,31 +137,14 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
         if (ctx) ctx.imageSmoothingEnabled = false;
         gameRef.current?.invalidateViewport();
         gameRef.current?.render();
-      };
-
-      // Use the browser's orientation bucket instead of a ratio threshold;
-      // mobile address-bar resizing must not randomly change the game zoom.
-      const portrait = window.matchMedia('(orientation: portrait)').matches;
-
-      // Lock the internal buffer for the current orientation. Mobile browser
-      // chrome resizes the wrapper while it expands/collapses; recomputing
-      // from that changing height would cause random zoom and vertical world
-      // shifts, so only rebuild after an orientation switch.
-      let viewport = viewportRef.current;
-      if (!viewport || viewport.portrait !== portrait) {
-        const w = portrait ? 240 : BASE_VW;
-        const ratio = portrait
-          ? Math.min(2.2, Math.max(1.45, r.height / r.width))
-          : Math.min(1.15, Math.max(0.45, r.height / r.width));
-        const h = Math.round(w * ratio);
-        viewport = { portrait, w, h };
-        viewportRef.current = viewport;
       }
-      applySize(viewport.w, viewport.h);
 
       const s = Math.min(r.width / VW, r.height / VH);
-      cv.style.width = Math.round(VW * s) + 'px';
-      cv.style.height = Math.round(VH * s) + 'px';
+      // Use one scale for both dimensions. Pixelated rendering keeps the
+      // enlarged bitmap hard-edged without shrinking the playfield to an
+      // integer-only desktop scale.
+      cv.style.width = `${Math.round(VW * s)}px`;
+      cv.style.height = `${Math.round(VH * s)}px`;
       // Keep the HUD at a steady on-screen size: it is drawn inside the
       // buffer, so it zooms with the canvas — compensate by scaling it up
       // when the canvas is small (phones), never down (desktop stays 1).
@@ -161,26 +154,40 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       const coarse = window.matchMedia('(pointer: coarse)').matches;
       gameRef.current?.setMobileView(coarse);
     };
-    fit();
-    window.addEventListener('resize', fit);
-    window.addEventListener('orientationchange', fit);
+
+    const scheduleFit = () => {
+      window.cancelAnimationFrame(fitFrame);
+      fitFrame = window.requestAnimationFrame(() => {
+        fitFrame = 0;
+        fit();
+      });
+    };
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleFit) : null;
+    if (observer && wrapRef.current) observer.observe(wrapRef.current);
+    window.addEventListener('resize', scheduleFit);
+    window.addEventListener('orientationchange', scheduleFit);
+    window.visualViewport?.addEventListener('resize', scheduleFit);
+    scheduleFit();
     return () => {
-      window.removeEventListener('resize', fit);
-      window.removeEventListener('orientationchange', fit);
+      observer?.disconnect();
+      window.removeEventListener('resize', scheduleFit);
+      window.removeEventListener('orientationchange', scheduleFit);
+      window.visualViewport?.removeEventListener('resize', scheduleFit);
+      window.cancelAnimationFrame(fitFrame);
     };
   }, [gameRef]);
 
   return (
     <div
       ref={wrapRef}
-      className="relative flex h-full w-full touch-none select-none items-center justify-center overflow-hidden"
+      className="relative flex h-full min-h-0 min-w-0 w-full touch-none select-none items-center justify-center overflow-hidden"
       {...wrapHandlers}
     >
       <canvas
         ref={canvasRef}
         width={VW}
         height={VH}
-        className="block"
+        className="absolute left-1/2 top-1/2 block h-full max-h-none max-w-none w-full -translate-x-1/2 -translate-y-1/2"
         style={{ imageRendering: 'pixelated' }}
       />
       <div className="pointer-events-none absolute inset-0 scanlines" />

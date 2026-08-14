@@ -43,6 +43,12 @@ export interface QuestRecord {
   chestOpen: boolean;
   lastCompletedDate: string | null;
   streak: number;
+  /** Runs started this day — used for the share card. */
+  tries: number;
+  /** Epoch-ms of the first run started today (share card start). */
+  firstRunAt: number | null;
+  /** Epoch-ms when all 4 quests were completed (share card end). */
+  completedAt: number | null;
 }
 
 export const QUEST_DIFFICULTY_COLORS: Record<QuestDifficulty, string> = {
@@ -242,6 +248,9 @@ export function createQuestRecord(date = dateKey(), counts = zeroDifficultyCount
     chestOpen: false,
     lastCompletedDate: null,
     streak: 0,
+    tries: 0,
+    firstRunAt: null,
+    completedAt: null,
   };
 }
 
@@ -277,6 +286,9 @@ function normalizeRecord(value: unknown, date: string, counts: Record<QuestDiffi
         ? source.lastCompletedDate
         : null,
     streak: Math.min(nonNegativeInt(source.streak), 7),
+    tries: nonNegativeInt(source.tries),
+    firstRunAt: typeof source.firstRunAt === 'number' && Number.isFinite(source.firstRunAt) ? source.firstRunAt : null,
+    completedAt: typeof source.completedAt === 'number' && Number.isFinite(source.completedAt) ? source.completedAt : null,
   };
 }
 
@@ -342,7 +354,35 @@ function openChestIfComplete(next: QuestRecord, quests: QuestDefinition[]) {
   if (quests.every((quest) => next.completed.includes(quest.id))) {
     next.chestOpen = true;
     next.totalReward += 2000;
+    if (next.completedAt === null) next.completedAt = Date.now();
   }
+}
+
+/** Count a run started for today's share stats (tries + first-run clock). */
+export function markRunStarted(record: QuestRecord): QuestRecord {
+  if (record.chestOpen) return record;
+  const next = { ...record, tries: record.tries + 1 };
+  if (next.firstRunAt === null) next.firstRunAt = Date.now();
+  return next;
+}
+
+/** "43m 12s" / "1h 05m" — the share card's elapsed-time format. */
+export function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+  if (m > 0) return `${m}m ${String(s).padStart(2, '0')}s`;
+  return `${s}s`;
+}
+
+/** Share card for finishing all of today's quests. */
+export function questShareText(record: QuestRecord, best: number): string {
+  const time = record.completedAt !== null && record.firstRunAt !== null ? formatDuration(record.completedAt - record.firstRunAt) : '';
+  const tries = Math.max(record.tries, 1);
+  const bestPart = best > 0 ? ` Best score: ${best.toLocaleString()}.` : '';
+  return `PIXEL RUN: I cleared all 4 daily quests in ${tries} ${tries === 1 ? 'try' : 'tries'}${time ? ` (${time})` : ''}!${bestPart} Can you beat me?`;
 }
 
 export function markQuestCompletions(record: QuestRecord, quests: QuestDefinition[], ids: string[]): QuestRecord {

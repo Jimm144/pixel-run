@@ -129,7 +129,9 @@ export class Renderer {
   }
 
   setHudScale(v: number) {
-    this.hudScale = Math.max(1, v);
+    // Keep the HUD transform on the pixel grid. The canvas itself may still
+    // use a fractional CSS fit scale, but its logical HUD raster stays crisp.
+    this.hudScale = Math.max(1, Math.round(v));
   }
 
   setMobileView(v: boolean) {
@@ -285,6 +287,9 @@ export class Renderer {
     c.restore();
 
     this.drawForeground();
+    // World effects restore their own alpha, but the HUD must never inherit a
+    // transient particle/flash alpha from a future renderer path.
+    c.globalAlpha = 1;
     this.drawHud();
 
     if (this.g.flash > 0.002) {

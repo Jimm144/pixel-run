@@ -55,6 +55,32 @@ const G: Record<string, string> = {
   '<': '...#./..#../.#.../#..../.#.../..#../...#.',
   '>': '.#.../..#../...#./....#/...#./..#../.#...',
   '#': '.#.#./#####/.#.#./#####/.#.#./...../.....',
+  a: '.###./....#/.####/#...#/#...#/.####/.....',
+  b: '#..../#..../####./#...#/#...#/####./.....',
+  c: '...../.####/#..../#..../#..../.####/.....',
+  d: '....#/....#/.####/#...#/#...#/.####/.....',
+  e: '.###./#...#/#####/#..../#...#/.###./.....',
+  f: '..##./.#.../.###./.#.../.#.../.#.../.....',
+  g: '.####/#...#/#...#/.####/....#/...#./.###.',
+  h: '#..../#..../####./#...#/#...#/#...#/.....',
+  i: '..#../...../.##../..#../..#../..#../.###.',
+  j: '...#./...../..##./...#./...#./#..#./.##..',
+  k: '#..../#..../#..#./#.#../##.../#..#./.....',
+  l: '.#.../.#.../.#.../.#.../.#.../...##/.....',
+  m: '...../##.##/#.#.#/#.#.#/#...#/...../.....',
+  n: '...../####./#...#/#...#/#...#/#...#/.....',
+  o: '...../.###./#...#/#...#/#...#/.###./.....',
+  p: '...../####./#...#/#...#/####./#..../#....',
+  q: '...../.####/#...#/#...#/.####/....#/....#',
+  r: '...../#.##./##.../#..../#..../#..../.....',
+  s: '...../.####/#..../.###./....#/####./.....',
+  t: '.#.../#####/.#.../.#.../.#.../...##/.....',
+  u: '...../#...#/#...#/#...#/#...#/.####/.....',
+  v: '...../#...#/#...#/#...#/.#.#./..#../.....',
+  w: '...../#...#/#...#/#.#.#/#.#.#/##.##/.....',
+  x: '...../#...#/.#.#./..#../.#.#./#...#/.....',
+  y: '...../#...#/#...#/.####/....#/...#./.###.',
+  z: '...../#####/...#./..#../.#.../#####/.....',
 };
 
 const CHARS: string[] = [];
@@ -102,8 +128,18 @@ function atlas(color: string): HTMLCanvasElement {
   return a;
 }
 
+function glyphMetrics(scale: number) {
+  return {
+    advance: Math.max(1, Math.round(CELL * scale)),
+    width: Math.max(1, Math.round(FONT_W * scale)),
+    height: Math.max(1, Math.round(FONT_H * scale)),
+  };
+}
+
 export function textWidth(text: string, scale = 1): number {
-  return Math.max(0, text.length * CELL - 1) * scale;
+  if (text.length === 0 || scale <= 0) return 0;
+  const { advance, width } = glyphMetrics(scale);
+  return (text.length - 1) * advance + width;
 }
 
 function blit(
@@ -114,7 +150,11 @@ function blit(
   scale: number,
   color: string,
 ) {
+  if (text.length === 0 || scale <= 0) return;
   const a = atlas(color);
+  const { advance, width, height } = glyphMetrics(scale);
+  const smoothing = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = false;
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (ch === ' ') continue;
@@ -126,12 +166,13 @@ function blit(
       0,
       FONT_W,
       FONT_H,
-      x + i * CELL * scale,
-      y,
-      FONT_W * scale,
-      FONT_H * scale,
+      x + i * advance,
+      Math.round(y),
+      width,
+      height,
     );
   }
+  ctx.imageSmoothingEnabled = smoothing;
 }
 
 export function drawText(
@@ -142,12 +183,13 @@ export function drawText(
   scale = 1,
   color = '#ffffff',
   shadow?: string,
+  uppercase = true,
 ) {
-  const up = text.toUpperCase();
+  const rendered = uppercase ? text.toUpperCase() : text;
   const px = Math.round(x);
   const py = Math.round(y);
-  if (shadow) blit(ctx, up, px, py + scale, scale, shadow);
-  blit(ctx, up, px, py, scale, color);
+  if (shadow) blit(ctx, rendered, px, py + Math.max(1, Math.round(scale)), scale, shadow);
+  blit(ctx, rendered, px, py, scale, color);
 }
 
 export function drawTextCentered(
@@ -158,8 +200,9 @@ export function drawTextCentered(
   scale = 1,
   color = '#ffffff',
   shadow?: string,
+  uppercase = true,
 ) {
-  drawText(ctx, text, Math.round(cx - textWidth(text, scale) / 2), y, scale, color, shadow);
+  drawText(ctx, text, Math.round(cx - textWidth(text, scale) / 2), y, scale, color, shadow, uppercase);
 }
 
 export function pad(n: number, len: number): string {

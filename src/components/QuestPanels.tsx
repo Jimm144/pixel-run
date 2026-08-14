@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Panel } from './ui';
 import {
+  formatDuration,
   getQuestLabel,
   getQuestProgress,
   nextQuestResetAt,
@@ -18,6 +19,7 @@ interface QuestPanelProps {
   announcement?: boolean;
   decorated?: boolean;
   onDayRollover?: () => void;
+  onShare?: () => void;
 }
 
 function useQuestReset(onDayRollover?: () => void) {
@@ -92,8 +94,12 @@ function QuestCard({ quest, record, run, compact }: { quest: QuestDefinition; re
   );
 }
 
-export function DailyQuestPanel({ quests, record, run, compact = false, announcement = false, decorated = true, onDayRollover }: QuestPanelProps) {
+export function DailyQuestPanel({ quests, record, run, compact = false, announcement = false, decorated = true, onDayRollover, onShare }: QuestPanelProps) {
   const { remaining } = useQuestReset(onDayRollover);
+  const allDone = record.chestOpen;
+  const tries = Math.max(record.tries, 1);
+  const elapsed =
+    record.completedAt !== null && record.firstRunAt !== null ? formatDuration(record.completedAt - record.firstRunAt) : null;
   return (
     <Panel decorated={decorated} className={`w-full ${compact ? 'p-2.5' : 'p-4'} border-2 border-[#3ef2c8] bg-[#140a26]/95 shadow-[0_0_24px_rgba(62,242,200,0.16)] ${announcement ? 'bg-[#140a26]/80' : ''}`}>
       <div className={`${compact ? 'mb-2' : 'mb-3'} flex items-center justify-between gap-3`}>
@@ -104,29 +110,50 @@ export function DailyQuestPanel({ quests, record, run, compact = false, announce
         {quests.map((quest) => <QuestCard key={quest.id} quest={quest} record={record} run={run} compact={compact} />)}
       </div>
       {!announcement && (
-        <div className={`${compact ? 'mt-2 pt-2' : 'mt-3 pt-3'} flex flex-wrap justify-center gap-x-3 gap-y-1 border-t-2 border-[#221741] font-pixel text-[6px]`}>
-          <span style={{ color: QUEST_DIFFICULTY_COLORS.easy }}>EASY {record.completedByDifficulty.easy}</span>
-          <span style={{ color: QUEST_DIFFICULTY_COLORS.medium }}>MEDIUM {record.completedByDifficulty.medium}</span>
-          <span style={{ color: QUEST_DIFFICULTY_COLORS.hard }}>HARD {record.completedByDifficulty.hard}</span>
-          <span style={{ color: QUEST_DIFFICULTY_COLORS.special }}>SPECIAL {record.completedByDifficulty.special}</span>
-          <span className="text-[#d1d5db]">IMPOSSIBLE {record.completedByDifficulty.impossible}</span>
+        <div className={`${compact ? 'mt-2 pt-2' : 'mt-3 pt-3'} border-t-2 border-[#221741] font-pixel text-[6px]`}>
+          <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
+            <span style={{ color: QUEST_DIFFICULTY_COLORS.easy }}>EASY {record.completedByDifficulty.easy}</span>
+            <span style={{ color: QUEST_DIFFICULTY_COLORS.medium }}>MEDIUM {record.completedByDifficulty.medium}</span>
+            <span style={{ color: QUEST_DIFFICULTY_COLORS.hard }}>HARD {record.completedByDifficulty.hard}</span>
+            <span style={{ color: QUEST_DIFFICULTY_COLORS.special }}>SPECIAL {record.completedByDifficulty.special}</span>
+            <span className="text-[#d1d5db]">IMPOSSIBLE {record.completedByDifficulty.impossible}</span>
+          </div>
+          {allDone && (
+            <div className="mt-2 flex items-center justify-center gap-3">
+              <span className="text-[#3ef2c8]">ALL DONE · {tries} TR{tries === 1 ? 'Y' : 'IES'}</span>
+              {elapsed !== null && <span className="text-[#ffd166]">· {elapsed}</span>}
+              {onShare && record.completedAt !== null && (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onShare();
+                  }}
+                  className="pointer-events-auto cursor-pointer border-2 border-[#3ef2c8] bg-[#0d0619] px-2 py-1 text-[6px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+                >
+                  SHARE
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </Panel>
   );
 }
 
-export function DailyQuestAnnouncement({ quests, record, run, onDayRollover }: Omit<QuestPanelProps, 'compact' | 'announcement'>) {
+export function DailyQuestAnnouncement({ quests, record, run, onDayRollover, onShare }: Omit<QuestPanelProps, 'compact' | 'announcement'>) {
   return (
     <div className="animate-quest-announcement pointer-events-none absolute top-3 left-1/2 z-30 w-[min(94vw,720px)] -translate-x-1/2 opacity-80">
-      <DailyQuestPanel quests={quests} record={record} run={run} compact announcement decorated={false} onDayRollover={onDayRollover} />
+      <DailyQuestPanel quests={quests} record={record} run={run} compact announcement decorated={false} onDayRollover={onDayRollover} onShare={onShare} />
     </div>
   );
 }
 
 export function QuestCompletionToast({ quests, completed, touch }: { quests: QuestDefinition[]; completed: string[]; touch: boolean }) {
   const labels = quests.filter((quest) => completed.includes(quest.id));
-  if (labels.length === 0) return null;
+  const extras = completed.filter((id) => !quests.some((quest) => quest.id === id));
+  if (labels.length === 0 && extras.length === 0) return null;
   return (
     <div
       role="status"
@@ -134,11 +161,16 @@ export function QuestCompletionToast({ quests, completed, touch }: { quests: Que
       className={`animate-quest-announcement pointer-events-none absolute z-30 w-[min(88vw,360px)] -translate-x-1/2 opacity-85 ${touch ? 'bottom-24 left-1/2' : 'top-32 left-[calc(100%-190px)]'}`}
     >
       <Panel decorated={false} className="border-2 bg-[#140a26]/90 p-3 shadow-[0_0_24px_rgba(62,242,200,0.16)]">
-        <p className="font-pixel text-[9px] text-[#ffd166]">QUEST COMPLETE</p>
+        <p className="font-pixel text-[9px] text-[#ffd166]">{labels.length > 0 ? 'QUEST COMPLETE' : 'SHARE'}</p>
         <div className="mt-2 space-y-1">
           {labels.map((quest) => (
             <p key={quest.id} className="font-pixel text-[7px] leading-[1.5] text-white">
               {getQuestLabel(quest)}
+            </p>
+          ))}
+          {extras.map((text) => (
+            <p key={text} className="font-pixel text-[7px] leading-[1.5] text-white">
+              {text}
             </p>
           ))}
         </div>

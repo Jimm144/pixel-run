@@ -66,6 +66,7 @@ export function StartScreen({
   questRecord,
   questRun,
   questOnDayRollover,
+  questOnShare,
 }: {
   best: number;
   lastRun: number;
@@ -79,11 +80,11 @@ export function StartScreen({
   questRecord: QuestRecord;
   questRun: QuestRunStats;
   questOnDayRollover?: () => void;
+  questOnShare?: () => void;
 }) {
   return (
     <div
-      className="absolute inset-0 z-10 flex cursor-pointer items-start justify-center overflow-y-auto bg-[#08040f]/88 p-4"
-      onClick={onStart}
+      className="absolute inset-0 z-10 flex cursor-default items-start justify-center overflow-y-auto bg-[#08040f]/88 p-4"
     >
       <div className="my-auto flex w-full max-w-[420px] flex-col items-center gap-3 tablet:max-w-[800px]">
         <div className="text-center">
@@ -123,7 +124,7 @@ export function StartScreen({
             </div>
           </div>
         </Panel>
-        <DailyQuestPanel quests={quests} record={questRecord} run={questRun} compact decorated={false} onDayRollover={questOnDayRollover} />
+        <DailyQuestPanel quests={quests} record={questRecord} run={questRun} compact decorated={false} onDayRollover={questOnDayRollover} onShare={questOnShare} />
         <div className="flex w-full max-w-[420px] gap-2 tablet:max-w-[800px]">
           <button
             onClick={(e) => { e.stopPropagation(); onToggleMusic(); }}
