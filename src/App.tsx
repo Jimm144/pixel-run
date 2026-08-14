@@ -97,7 +97,7 @@ function createQuestShareCard(record: QuestRecord, best: number): Promise<Blob |
     });
   }
 
-  drawTextCentered(context, 'https://jimm144.github.io/pixel-run/', QUEST_SHARE_WIDTH / 2, 426, 2, '#6f5fa8', undefined, false);
+  drawTextCentered(context, 'https://jimm144.github.io/pixel-run/', QUEST_SHARE_WIDTH / 2, 420, 4, '#6f5fa8', undefined, false);
 
   return new Promise((resolve) => {
     canvas.toBlob((blob) => resolve(blob), 'image/png');
