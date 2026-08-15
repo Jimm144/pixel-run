@@ -84,7 +84,7 @@ export function SkinsModal({
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const cols = touch ? 2 : windowWidth < 768 ? 2 : 3;
+  const cols = touch ? (windowWidth >= 768 ? 3 : 2) : windowWidth < 768 ? 2 : 3;
 
   // Auto-scroll selected card into view
   useEffect(() => {
@@ -403,15 +403,15 @@ export function SkinsModal({
     <div
       className={
         touch
-          ? 'fixed inset-0 z-50 flex flex-col bg-[#0d0619] p-3 text-white overflow-y-auto'
+          ? 'fixed inset-0 z-50 flex flex-col overflow-y-auto bg-[#0d0619] p-3 text-white tablet:items-center tablet:justify-center tablet:bg-[#08040f]/90 tablet:p-4'
           : 'fixed inset-0 z-50 flex items-center justify-center bg-[#08040f]/90 p-3'
       }
     >
       <div
         className={
           touch
-            ? 'flex w-full flex-col bg-[#0d0619] text-white p-0'
-            : 'flex max-h-[94vh] w-full max-w-[840px] flex-col border-4 border-[#3ef2c8] bg-[#0d0619] p-4 text-white shadow-[0_0_0_4px_#08040f,0_0_35px_rgba(62,242,200,0.25)]'
+          ? 'flex w-full flex-col bg-[#0d0619] p-0 text-white tablet:max-w-[840px] tablet:border-4 tablet:border-[#3ef2c8] tablet:p-4 tablet:shadow-[0_0_0_4px_#08040f,0_0_35px_rgba(62,242,200,0.25)]'
+             : 'flex max-h-[94vh] w-full max-w-[840px] flex-col border-4 border-[#3ef2c8] bg-[#0d0619] p-4 text-white shadow-[0_0_0_4px_#08040f,0_0_35px_rgba(62,242,200,0.25)] tablet:max-w-[min(840px,calc(100vw-32px))]'
         }
       >
         {/* Header */}
@@ -430,8 +430,8 @@ export function SkinsModal({
             onClick={onClose}
             className={
               touch
-                ? 'shrink-0 border border-[#ff4d6d] bg-[#ff4d6d]/20 px-2 py-0.5 font-pixel text-[8px] text-[#ff4d6d] shadow-[1px_1px_0_#08040f] whitespace-nowrap hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px]'
-                : 'shrink-0 border-2 border-[#ff4d6d] bg-[#ff4d6d]/20 px-2 py-0.5 font-pixel text-[8.5px] text-[#ff4d6d] shadow-[2px_2px_0_#08040f] whitespace-nowrap hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px] sm:px-2.5 sm:py-1 sm:text-[9px]'
+                  ? 'flex h-10 w-10 shrink-0 items-center justify-center border border-[#ff4d6d] bg-[#ff4d6d]/20 px-0 py-0 font-pixel text-[14px] text-[#ff4d6d] shadow-[1px_1px_0_#08040f] whitespace-nowrap hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px] tablet:h-12 tablet:w-12 tablet:border-2 tablet:text-[16px]'
+                 : 'flex h-7 min-w-[64px] shrink-0 items-center justify-center border-2 border-[#ff4d6d] bg-[#ff4d6d]/20 px-2 py-0.5 font-pixel text-[9px] text-[#ff4d6d] shadow-[2px_2px_0_#08040f] whitespace-nowrap hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px] sm:min-w-[70px] sm:text-[10px]'
             }
           >
             {touch ? '✕' : '[ X ]'}
@@ -468,8 +468,8 @@ export function SkinsModal({
         {/* Content Area */}
         <div
           className={
-            touch
-              ? 'mt-3 grid grid-cols-1 gap-3 overflow-hidden'
+              touch
+                ? 'mt-3 grid grid-cols-1 gap-3 overflow-hidden tablet:grid-cols-[230px_1fr] tablet:gap-4'
               : 'mt-3 flex flex-col md:grid md:grid-cols-[230px_1fr] md:items-start gap-3 md:gap-4 overflow-hidden'
           }
         >
@@ -533,7 +533,7 @@ export function SkinsModal({
           <div
             className={
               touch
-                ? 'grid max-h-[350px] grid-cols-2 gap-2 overflow-y-auto p-0'
+                 ? 'grid max-h-[350px] grid-cols-2 gap-2 overflow-y-auto p-0 tablet:max-h-[600px] tablet:grid-cols-3'
                 : 'grid max-h-[340px] sm:max-h-[380px] md:max-h-[420px] grid-cols-2 md:grid-cols-3 gap-2 overflow-y-auto p-0'
             }
           >

@@ -145,8 +145,14 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       // Use one scale for both dimensions. Pixelated rendering keeps the
       // enlarged bitmap hard-edged without shrinking the playfield to an
       // integer-only desktop scale.
-      cv.style.width = `${Math.round(VW * s)}px`;
-      cv.style.height = `${Math.round(VH * s)}px`;
+      const displayWidth = Math.round(VW * s);
+      const displayHeight = Math.round(VH * s);
+      cv.style.width = `${displayWidth}px`;
+      cv.style.height = `${displayHeight}px`;
+      cv.style.left = `${Math.round((r.width - displayWidth) / 2)}px`;
+      cv.style.top = `${Math.round((r.height - displayHeight) / 2)}px`;
+      cv.style.transform = 'none';
+      cv.style.translate = 'none';
       // Keep the HUD at a steady on-screen size: it is drawn inside the
       // buffer, so it zooms with the canvas — compensate by scaling it up
       // when the canvas is small (phones), never down (desktop stays 1).
@@ -189,7 +195,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
         ref={canvasRef}
         width={VW}
         height={VH}
-        className="absolute left-1/2 top-1/2 block h-full max-h-none max-w-none w-full -translate-x-1/2 -translate-y-1/2"
+        className="absolute block h-full max-h-none max-w-none w-full"
         style={{ imageRendering: 'pixelated' }}
       />
       <div className="pointer-events-none absolute inset-0 scanlines" />

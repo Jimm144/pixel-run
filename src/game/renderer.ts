@@ -608,7 +608,7 @@ export class Renderer {
     col: string,
   ) {
     const c = this.ctx;
-    const camOffset = this.g.camX * spd;
+    const camOffset = Math.round(this.g.camX * spd);
     const H = VH + 48;
 
     c.fillStyle = col;
@@ -722,7 +722,8 @@ export class Renderer {
     c.globalAlpha = 1;
   }
 
-  // Grounded landmark silhouettes — infinite smooth continuous virtual grid (zero jitter/popping)
+  // Grounded landmark silhouettes — infinite deterministic grid on the pixel
+  // grid, so subpixel camera movement cannot alter a landmark's geometry.
   private drawLandmarks(
     Z: Zone,
     col: string,
@@ -740,7 +741,7 @@ export class Renderer {
     c.fillStyle = col;
     c.fillRect(-40, Math.round(baseY), VW + 80, VH + 60 - Math.round(baseY));
 
-    const cam = this.g.camX * spd;
+    const cam = Math.round(this.g.camX * spd);
     const startK = Math.floor((cam - 80) / spacing);
     const endK = Math.ceil((cam + VW + 80) / spacing);
 
