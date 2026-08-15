@@ -412,7 +412,7 @@ export function evaluateSkinUnlocks(
     if (currentRun.meters > nextStats.maxDistance) {
       nextStats.maxDistance = currentRun.meters;
     }
-    if (currentRun.moonPhase && currentRun.moonPhase >= 3) {
+    if (currentRun.moonPhase && currentRun.moonPhase >= 4) {
       nextStats.bloodMoonDone = true;
     }
   }

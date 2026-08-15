@@ -346,6 +346,7 @@ export function App() {
 
   // Main-menu, Locker, & Pause-menu sounds and music sound muffled.
   useEffect(() => {
+    sfx.init();
     sfx.setMuffled(ui === 'start' || ui === 'paused' || skinsModalOpen);
   }, [ui, skinsModalOpen]);
 

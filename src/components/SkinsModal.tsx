@@ -324,7 +324,7 @@ export function SkinsModal({
       const pct = Math.min(100, Math.max(0, Math.round((cur / max) * 100)));
       return (
         <div className="w-full">
-          <div className="mb-0.5 flex justify-between font-pixel text-[6.5px] leading-none text-[#ffd166] sm:text-[7.5px]">
+          <div className="mb-1.5 flex justify-between font-pixel text-[6.5px] leading-none text-[#ffd166] sm:text-[7.5px]">
             <span>{pct}%</span>
             <span>{cur}/{max}</span>
           </div>
@@ -340,7 +340,7 @@ export function SkinsModal({
       const pct = Math.min(100, Math.max(0, Math.round((cur / max) * 100)));
       return (
         <div className="w-full">
-          <div className="mb-0.5 flex justify-between font-pixel text-[6.5px] leading-none text-[#ffd166] sm:text-[7.5px]">
+          <div className="mb-1.5 flex justify-between font-pixel text-[6.5px] leading-none text-[#ffd166] sm:text-[7.5px]">
             <span>{pct}%</span>
             <span>{Math.floor(cur / 1000)}K/{Math.floor(max / 1000)}K</span>
           </div>
@@ -356,7 +356,7 @@ export function SkinsModal({
       const pct = Math.min(100, Math.max(0, Math.round((cur / max) * 100)));
       return (
         <div className="w-full">
-          <div className="mb-0.5 flex justify-between font-pixel text-[6.5px] leading-none text-[#ffd166] sm:text-[7.5px]">
+          <div className="mb-1.5 flex justify-between font-pixel text-[6.5px] leading-none text-[#ffd166] sm:text-[7.5px]">
             <span>{pct}%</span>
             <span>{Math.floor(cur / 1000)}K/{Math.floor(max / 1000)}K</span>
           </div>
@@ -372,7 +372,7 @@ export function SkinsModal({
       const pct = Math.min(100, Math.max(0, Math.round((cur / max) * 100)));
       return (
         <div className="w-full">
-          <div className="mb-0.5 flex justify-between font-pixel text-[6.5px] leading-none text-[#ffd166] sm:text-[7.5px]">
+          <div className="mb-1.5 flex justify-between font-pixel text-[6.5px] leading-none text-[#ffd166] sm:text-[7.5px]">
             <span>{pct}%</span>
             <span>{cur}/{max} SETS</span>
           </div>
@@ -554,7 +554,7 @@ export function SkinsModal({
                     setFocusedIndex(idx);
                     setFocusSection('grid');
                   }}
-                  className={`flex h-[74px] w-full flex-col justify-between border-2 p-2.5 text-left transition-all sm:h-[78px] ${
+                  className={`flex h-[104px] w-full flex-col justify-between border-2 p-3 text-left transition-all sm:h-[112px] ${
                     selected || isCardFocused
                       ? 'border-[#3ef2c8] bg-[#221038] shadow-[2px_2px_0_#3ef2c8]'
                       : 'border-[#2a1b49] bg-[#140a26] shadow-[2px_2px_0_#08040f] hover:border-[#4f3680]'
@@ -564,7 +564,7 @@ export function SkinsModal({
                     <div className="flex w-full items-center justify-between leading-none">
                       <span className="truncate font-pixel text-[8px] text-white sm:text-[9px]">{skin.name}</span>
                       <span
-                        className="border px-1 font-pixel text-[5.5px] uppercase sm:text-[6px]"
+                        className="inline-flex min-h-[14px] items-center justify-center border px-1 font-pixel text-[6.5px] leading-none uppercase whitespace-nowrap sm:min-h-[16px] sm:text-[7px]"
                         style={{
                           color: tierTheme.text,
                           borderColor: tierTheme.border,
@@ -584,7 +584,7 @@ export function SkinsModal({
                   </div>
 
                   {/* Status / Progress slot with uniform height */}
-                  <div className="mt-auto flex h-[16px] w-full flex-col justify-end">
+                  <div className="mt-auto flex h-[26px] w-full flex-col justify-end">
                     {equipped ? (
                       <span className="font-pixel text-[7.5px] text-[#3ef2c8]">EQUIPPED</span>
                     ) : unlocked ? (
