@@ -2,6 +2,8 @@ import { drawText, drawTextCentered, pad, textWidth } from './font';
 import { lerpZone, mix, sampleSky, shade, ZONES, type Zone } from './palette';
 import { ParticleSystem } from './particles';
 import { FloatTexts } from './texts';
+import { SKINS, type SkinDef } from './skins';
+import { drawPlayerSprite } from './playerSprite';
 import {
   clamp,
   COIN_HW,
@@ -10,14 +12,7 @@ import {
   FADE_WINDOW,
   GROUND_BOTTOM,
   hash,
-  PLAYER_BOOT,
-  PLAYER_BOOT_SHOES,
   PLAYER_H,
-  PLAYER_RUN_LEGS,
-  PLAYER_SCARF,
-  PLAYER_SKIN,
-  PLAYER_SUIT,
-  PLAYER_SUIT_D,
   PLAYER_W,
   PLATFORM_CACHE_PAD,
   POWERUP_COLORS,
@@ -88,8 +83,8 @@ export class Renderer {
   private hudBestStr = '';
   private hudM = -1;
   private hudMText = '';
-  private hudCoins = -1;
-  private hudCoinsText = '';
+  private hudGems = -1;
+  private hudGemsText = '';
   private hudComboKey = '';
   private hudComboStr = '';
 
@@ -447,7 +442,7 @@ export class Renderer {
 
     // Subtle atmospheric ambient lighting on foreground (noticeable difference between day and night, but not too extreme)
     const period = VW + 140;
-    const progress = 300 - this.g.camX * 0.12;
+    const progress = 300 - this.g.camX * 0.045;
     const cycle = Math.floor(progress / period);
     const isMoon = (((cycle % 2) + 2) % 2) === 1;
     const angle = ((progress - 300) / period) * Math.PI;
@@ -537,7 +532,7 @@ export class Renderer {
 
     // Celestial geometry & Day/Night progression
     const period = VW + 140;
-    const progress = 300 - this.g.camX * 0.12;
+    const progress = 300 - this.g.camX * 0.045;
     const celestialX = (((progress % period) + period) % period) - 70;
     const cycle = Math.floor(progress / period);
     const isMoon = (((cycle % 2) + 2) % 2) === 1;
@@ -603,40 +598,6 @@ export class Renderer {
     }
   }
 
-  private getBandTile(
-    horizon: number,
-    amp: number,
-    freq: number,
-    sharpness: number,
-    seed: number,
-    col: string,
-  ): HTMLCanvasElement {
-    const key = `${horizon}|${amp}|${freq}|${sharpness}|${seed}|${col}`;
-    let tile = this.bandCache.get(key);
-    if (tile) return tile;
-
-    const W = 512;
-    const H = VH + 48;
-    tile = document.createElement('canvas');
-    tile.width = W;
-    tile.height = H;
-    const tc = tile.getContext('2d')!;
-    tc.fillStyle = col;
-    // Hard 1px columns baked once. Scroll will be integer-only.
-    for (let x = 0; x < W; x++) {
-      const wx = x * freq + seed;
-      let h =
-        Math.sin(wx) * 0.55 +
-        Math.sin(wx * 2.13 + 1.4) * 0.28 +
-        Math.sin(wx * 4.7 + 0.6) * 0.17;
-      if (sharpness > 0) h = 1 - Math.pow(1 - Math.abs(h), 1 + sharpness);
-      const top = Math.round(horizon - amp * (h * 0.5 + 0.5));
-      tc.fillRect(x, Math.max(0, top), 1, H - top);
-    }
-    this.bandCache.set(key, tile);
-    return tile;
-  }
-
   private seeBand(
     spd: number,
     horizon: number,
@@ -646,24 +607,59 @@ export class Renderer {
     seed: number,
     col: string,
   ) {
-    const tile = this.getBandTile(horizon, amp, freq, sharpness, seed, col);
-    const tw = tile.width;
-    // Integer scroll only — never subpixel. Blit enough copies to cover any
-    // viewport width with extra margin for shake/scroll padding.
-    let ox = Math.floor(this.g.camX * spd) % tw;
-    if (ox < 0) ox += tw;
     const c = this.ctx;
-    for (let x = -ox - tw; x < VW + tw; x += tw) c.drawImage(tile, x, 0);
+    const camOffset = this.g.camX * spd;
+    const H = VH + 48;
+
+    c.fillStyle = col;
+    for (let screenX = -20; screenX <= VW + 20; screenX++) {
+      const worldX = screenX + camOffset;
+      const wx = worldX * freq + seed;
+      let h =
+        Math.sin(wx) * 0.55 +
+        Math.sin(wx * 2.13 + 1.4) * 0.28 +
+        Math.sin(wx * 4.7 + 0.6) * 0.17;
+      if (sharpness > 0) h = 1 - Math.pow(1 - Math.abs(h), 1 + sharpness);
+      const top = Math.max(0, Math.round(horizon - amp * (h * 0.5 + 0.5)));
+      c.fillRect(screenX, top, 1, H - top);
+    }
+  }
+
+  private getShadedLayerColors(Z: Zone, nightT: number, isEclipse: boolean) {
+    // Night shadow silhouette tone: always deeper and darker than the night sky base
+    const nightShadowFar = isEclipse
+      ? mix(Z.far, '#10030c', 0.84)
+      : mix(Z.far, Z.skyNight[0], 0.82);
+    const nightShadowMid = isEclipse
+      ? mix(Z.mid, '#070205', 0.90)
+      : mix(Z.mid, '#020104', 0.88);
+
+    const far = mix(Z.far, nightShadowFar, nightT);
+    const mid = mix(Z.mid, nightShadowMid, nightT);
+    const back = mix(far, mid, 0.5);
+
+    const decoFar = isEclipse
+      ? mix(Z.decoFar, '#ff4d6d', 0.6)
+      : mix(Z.decoFar, Z.skyNight[3], nightT * 0.5);
+    const decoMid = isEclipse
+      ? mix(Z.decoMid, '#ffd166', 0.5)
+      : mix(Z.decoMid, Z.skyNight[2], nightT * 0.5);
+
+    return { far, mid, back, decoFar, decoMid };
   }
 
   private drawParallax() {
     const c = this.ctx;
 
-    // Celestial progress for atmospheric cloud lighting
+    // Celestial progress for atmospheric cloud and mountain lighting
     const period = VW + 140;
-    const progress = 300 - this.g.camX * 0.12;
+    const progress = 300 - this.g.camX * 0.045;
     const angle = ((progress - 300) / period) * Math.PI;
     const nightT = clamp(0.5 - 0.5 * Math.cos(angle), 0, 1);
+    const cycle = Math.floor(progress / period);
+    const isMoon = (((cycle % 2) + 2) % 2) === 1;
+    const nightIndex = Math.max(0, Math.floor((-cycle - 1) / 2));
+    const isEclipse = isMoon && Math.min(4, nightIndex) === 4;
 
     // Soft high-altitude distant clouds — gentle slow drift, far above the mountain peaks
     const dayCloud = mix('#ffffff', this.g.zone.star, 0.2);
@@ -689,39 +685,39 @@ export class Renderer {
     // incoming biome smoothly fades in from 0 up to 1.
     const t = this.zoneFadeT;
     if (t <= 0) {
-      this.drawParallaxLayer(this.transOut, 1);
+      this.drawParallaxLayer(this.transOut, 1, nightT, isEclipse);
     } else if (t >= 1) {
-      this.drawParallaxLayer(this.transIn, 1);
+      this.drawParallaxLayer(this.transIn, 1, nightT, isEclipse);
     } else {
-      this.drawParallaxLayer(this.transOut, 1 - t);
-      this.drawParallaxLayer(this.transIn, t);
+      this.drawParallaxLayer(this.transOut, 1 - t, nightT, isEclipse);
+      this.drawParallaxLayer(this.transIn, t, nightT, isEclipse);
     }
   }
 
   // One biome's far band + landmark rows. alpha blends the layer over what is
   // already on screen (used to crossfade the old biome out / new one in).
-  private drawParallaxLayer(Z: Zone, alpha: number) {
+  private drawParallaxLayer(Z: Zone, alpha: number, nightT: number, isEclipse: boolean) {
     const c = this.ctx;
     const bg = Z.bg;
-    const back = mix(Z.far, Z.mid, 0.5);
+    const colors = this.getShadedLayerColors(Z, nightT, isEclipse);
     c.globalAlpha = alpha;
     const m = this.mobileView;
     if (bg === 'jungle') {
-      this.seeBand(0.12, m ? 116 : 120, m ? 40 : 30, 0.02, 0.15, 0, Z.far);
-      this.drawLandmarks(Z, back, 0.19, m ? 124 : 142, 38, 29, Z.decoMid, m ? 0.8 : 0.65);
-      this.drawLandmarks(Z, Z.mid, 0.28, m ? 158 : 160, 46, 73, Z.decoMid, 1);
+      this.seeBand(0.12, m ? 116 : 120, m ? 40 : 30, 0.02, 0.15, 0, colors.far);
+      this.drawLandmarks(Z, colors.back, 0.19, m ? 124 : 142, 38, 29, colors.decoMid, m ? 0.8 : 0.65);
+      this.drawLandmarks(Z, colors.mid, 0.28, m ? 158 : 160, 46, 73, colors.decoMid, 1);
     } else if (bg === 'desert') {
-      this.seeBand(0.12, m ? 120 : 124, m ? 40 : 24, 0.014, 0.08, 0, Z.far);
-      this.drawLandmarks(Z, back, 0.19, m ? 126 : 144, 44, 23, Z.decoMid, m ? 0.8 : 0.65);
-      this.drawLandmarks(Z, Z.mid, 0.28, m ? 160 : 162, 54, 67, Z.decoMid, 1);
+      this.seeBand(0.12, m ? 120 : 124, m ? 40 : 24, 0.014, 0.08, 0, colors.far);
+      this.drawLandmarks(Z, colors.back, 0.19, m ? 126 : 144, 44, 23, colors.decoMid, m ? 0.8 : 0.65);
+      this.drawLandmarks(Z, colors.mid, 0.28, m ? 160 : 162, 54, 67, colors.decoMid, 1);
     } else if (bg === 'tundra') {
-      this.seeBand(0.11, m ? 116 : 118, m ? 40 : 30, 0.018, 1.6, 0.5, Z.far);
-      this.drawLandmarks(Z, back, 0.18, m ? 126 : 144, 40, 41, Z.decoMid, m ? 0.8 : 0.65);
-      this.drawLandmarks(Z, Z.mid, 0.28, m ? 160 : 162, 50, 59, Z.decoMid, 1);
+      this.seeBand(0.11, m ? 116 : 118, m ? 40 : 30, 0.018, 1.6, 0.5, colors.far);
+      this.drawLandmarks(Z, colors.back, 0.18, m ? 126 : 144, 40, 41, colors.decoMid, m ? 0.8 : 0.65);
+      this.drawLandmarks(Z, colors.mid, 0.28, m ? 160 : 162, 50, 59, colors.decoMid, 1);
     } else {
-      this.seeBand(0.13, m ? 118 : 122, m ? 40 : 38, 0.05, 0.2, 0.9, Z.far);
-      this.drawLandmarks(Z, back, 0.18, m ? 124 : 142, 42, 19, Z.decoFar, m ? 0.8 : 0.7);
-      this.drawLandmarks(Z, Z.mid, 0.28, m ? 158 : 160, 52, 37, Z.decoFar, 1);
+      this.seeBand(0.13, m ? 118 : 122, m ? 40 : 38, 0.05, 0.2, 0.9, colors.far);
+      this.drawLandmarks(Z, colors.back, 0.18, m ? 124 : 142, 42, 19, colors.decoFar, m ? 0.8 : 0.7);
+      this.drawLandmarks(Z, colors.mid, 0.28, m ? 158 : 160, 52, 37, colors.decoFar, 1);
     }
     c.globalAlpha = 1;
   }
@@ -1377,16 +1373,35 @@ export class Renderer {
       const y = Math.round(k.y + bob);
       if (k.gem) {
         const pulse = (Math.sin(k.t * 1.6) + 1) * 0.5;
-        c.globalAlpha = 0.25 + pulse * 0.25;
+        // Soft aura glow
+        c.globalAlpha = 0.2 + pulse * 0.2;
         c.fillStyle = '#7ef7ff';
-        c.fillRect(x - 7, y - 7, 14, 14);
+        c.fillRect(x - 5, y - 5, 10, 10);
         c.globalAlpha = 1;
+
+        // Clean pixel diamond outline
+        c.fillStyle = '#08121e';
+        c.fillRect(x - 4, y - 4, 8, 8);
+        c.fillRect(x - 3, y - 5, 6, 10);
+        c.fillRect(x - 5, y - 3, 10, 6);
+
+        // Bright vibrant cyan jewel body (clean, flat, radiant with no dark muddy shading)
         c.fillStyle = '#3ef2c8';
-        c.fillRect(x - 1, y - 5, 2, 10);
         c.fillRect(x - 3, y - 4, 6, 8);
-        c.fillRect(x - 4, y - 2, 8, 4);
+        c.fillRect(x - 4, y - 3, 8, 6);
+
+        // Radiant jewel highlight
+        c.fillStyle = '#7ef7ff';
+        c.fillRect(x - 2, y - 4, 4, 3);
+        c.fillRect(x - 4, y - 2, 3, 4);
+
+        // Crisp white glint
         c.fillStyle = '#ffffff';
         c.fillRect(x - 2, y - 3, 2, 2);
+        if (Math.sin(k.t * 4.5) > 0.3) {
+          c.fillRect(x - 4, y - 4, 1, 1);
+          c.fillRect(x + 2, y + 2, 1, 1);
+        }
       } else {
         const Z = this.g.zone;
         if (Z.bg === 'tundra') {
@@ -1645,12 +1660,26 @@ export class Renderer {
       c.globalAlpha = 1;
     }
 
+    /* active skin & ghost trails */
+    const skinId = this.g.activeSkin || 'bob';
+    const skinDef: SkinDef = SKINS[skinId] || SKINS.bob;
+
     /* ghosts */
     if (this.g.phase === 'playing' && this.g.countdown === 0) {
       for (const g of this.g.ghosts) {
         c.globalAlpha = (g.life / 14) * 0.28;
-        c.fillStyle = '#7ef7ff';
-        c.fillRect(Math.round(g.x - cam), Math.round(g.y), PLAYER_W, PLAYER_H);
+        c.fillStyle = skinDef.ghostTrail;
+        if (skinId === 'outline') {
+          // Pure 1px hollow frame for ghost
+          const gx = Math.round(g.x - cam);
+          const gy = Math.round(g.y);
+          c.fillRect(gx, gy, PLAYER_W, 1);
+          c.fillRect(gx, gy + PLAYER_H - 1, PLAYER_W, 1);
+          c.fillRect(gx, gy, 1, PLAYER_H);
+          c.fillRect(gx + PLAYER_W - 1, gy, 1, PLAYER_H);
+        } else {
+          c.fillRect(Math.round(g.x - cam), Math.round(g.y), PLAYER_W, PLAYER_H);
+        }
       }
       c.globalAlpha = 1;
     }
@@ -1660,8 +1689,6 @@ export class Renderer {
     const cy = Math.round(this.g.py + PLAYER_H / 2);
     const qx = Math.abs(this.g.sx - 1) < 0.05 ? 1 : this.g.sx;
     const qy = Math.abs(this.g.sy - 1) < 0.05 ? 1 : this.g.sy;
-    // Landing squash — engine sets playerSquashX/Y (decays to 1); absent
-    // fields (or a 1) leave the transform untouched.
     const host = this.g as RenderHost & { playerSquashX?: number; playerSquashY?: number };
     const sqx = host.playerSquashX ?? 1;
     const sqy = host.playerSquashY ?? 1;
@@ -1670,54 +1697,34 @@ export class Renderer {
     if (this.g.spin > 0) c.rotate(this.g.spin * Math.PI * 2);
     if (qx * sqx !== 1 || qy * sqy !== 1) c.scale(qx * sqx, qy * sqy);
     const run = this.g.onGround ? Math.floor(this.g.animT) % 4 : -1;
-    const air = !this.g.onGround;
-    const f = (x: number, y: number, w: number, h: number, col: string) => {
-      c.fillStyle = col;
-      c.fillRect(x - PLAYER_W / 2, y - PLAYER_H / 2, w, h);
-    };
     const flashing = this.g.invuln > 0;
     const flash = flashing ? 0.35 + (Math.sin(this.g.frame * 0.75) + 1) * 0.325 : 0;
-    const tint = (base: string, extra?: string) => {
-      if (!flashing) return extra ?? base;
-      return mix(extra ?? base, '#ffffff', flash);
-    };
-    const SUIT = tint(PLAYER_SUIT);
-    const SUIT_D = tint(PLAYER_SUIT_D);
-    const SKIN = tint(PLAYER_SKIN);
-    const BOOT = tint(PLAYER_BOOT, this.g.jumpShoes > 0 ? PLAYER_BOOT_SHOES : PLAYER_BOOT);
 
-    // legs
-    if (this.g.diving) {
-      f(1, 10, 4, 4, BOOT);
-      f(5, 9, 5, 3, BOOT);
-    } else if (air) {
-      f(2, 10, 3, 4, BOOT);
-      f(6, 9, 3, 4, BOOT);
-    } else {
-      const legs = PLAYER_RUN_LEGS[run];
-      f(legs[0], legs[1], legs[2], legs[3], BOOT);
-      f(legs[4], legs[5], legs[6], legs[7], BOOT);
+    drawPlayerSprite(c, 0, 0, {
+      skinId,
+      frame: this.g.frame,
+      run,
+      onGround: this.g.onGround,
+      diving: this.g.diving,
+      flashing,
+      flashAmount: flash,
+      jumpShoes: this.g.jumpShoes > 0,
+      vx: this.g.vx,
+    });
+
+    // Gold Bob Sparkles
+    if (skinId === 'gold_bob' && Math.random() < 0.3) {
+      this.particles.spawnP(
+        this.g.px + rnd(-2, 12),
+        this.g.py + rnd(0, 14),
+        rnd(-0.5, 0.5),
+        -rnd(0.2, 0.8),
+        12,
+        1,
+        '#fff3a3',
+      );
     }
-    // body
-    f(2, 5, 7, 6, SUIT);
-    f(2, 9, 7, 2, SUIT_D);
-    // arm
-    if (air) {
-      f(6, 3, 2, 3, SUIT_D);
-      f(8, 3, 2, 2, SKIN);
-    } else {
-      const armX = [5, 6, 7, 6][run];
-      f(armX, 6, 2, 3, SUIT_D);
-      f(armX + 2, 6, 2, 2, SKIN);
-    }
-    // head
-    f(2, 0, 7, 6, SUIT);
-    f(5, 2, 4, 4, SKIN);
-    f(2, 0, 8, 2, SUIT_D);
-    // eye
-    f(7, 3, 1, 2, '#20122e');
-    // scarf knot
-    f(1, 5, 3, 2, tint(PLAYER_SCARF));
+
     c.restore();
     this.drawPowerUpEffects(c, cx, cy);
 
@@ -1734,8 +1741,11 @@ export class Renderer {
   private drawBiomeEvent() {
     if (this.g.phase !== 'playing' || this.g.eventTimer <= 0 || this.g.eventMax <= 0) return;
     const c = this.ctx;
-    const fade = Math.min(1, (this.g.eventMax - this.g.eventTimer) / 24, this.g.eventTimer / 24);
-    const strength = 0.25 + 0.75 * Math.max(0, fade);
+    const fadeWindow = 60;
+    const inFade = Math.min(1, Math.max(0, (this.g.eventMax - this.g.eventTimer) / fadeWindow));
+    const outFade = Math.min(1, Math.max(0, this.g.eventTimer / fadeWindow));
+    const strength = Math.min(inFade, outFade);
+    if (strength <= 0.001) return;
     const alpha = 0.2 * strength;
     const Z = this.g.zone;
 
@@ -1844,7 +1854,7 @@ export class Renderer {
       const col = POWERUP_COLORS[kind];
       // Same art as the pickup sprites, at half scale for the HUD row.
       c.drawImage(this.powerupSprite(kind), x, y, 9, 9);
-      if (text) drawText(c, text, x + 11, y, 1, col, '#150a24');
+      if (text) drawText(c, text, x + 11, y + 1, 1, col, '#150a24');
       x += width + 4;
     };
     if (this.g.shielded) status(this.g.shieldTimer, 'shield');
@@ -1861,11 +1871,10 @@ export class Renderer {
     // while the world keeps its pixel grid; W is the virtual width there.
     const hs = this.hudScale;
     const mobile = this.mobileView;
-    // Mobile: score/best shrink so the top-center combo banner stays clear.
-    const lblS = mobile ? 0.75 : 1;
-    const digS = mobile ? 1.5 : 2;
-    const bestS = mobile ? 0.75 : 1;
-    const bestY = mobile ? 30 : 32;
+    const lblS = 1;
+    const digS = 2;
+    const bestS = 1;
+    const bestY = 32;
     const adv = 6 * digS;
     c.save();
     if (hs !== 1) c.scale(hs, hs);
@@ -1887,18 +1896,24 @@ export class Renderer {
     }
     drawText(c, scoreStr.slice(leadingZeroes), 6 + leadingZeroes * adv, 15, digS, '#ffffff', '#150a24');
 
-    // best
+    // best / high score
     if (this.g.best > 0) {
-      if (this.hudBest !== this.g.best) {
-        this.hudBest = this.g.best;
-        this.hudBestStr = pad(this.g.best, 6);
+      const isNewHigh = this.g.score > this.g.best;
+      const displayBest = isNewHigh ? this.g.score : this.g.best;
+      if (this.hudBest !== displayBest) {
+        this.hudBest = displayBest;
+        this.hudBestStr = pad(displayBest, 6);
       }
-      drawText(c, 'BEST', 6, bestY, bestS, this.g.zone.accent, '#150a24');
-      drawText(c, this.hudBestStr, 36, bestY, bestS, this.g.zone.accent, '#150a24');
+      const label = isNewHigh ? 'NEW BEST!' : 'BEST';
+      const labelCol = isNewHigh ? '#ffd166' : this.g.zone.accent;
+      const scoreCol = isNewHigh ? '#ffd166' : this.g.zone.accent;
+      drawText(c, label, 6, bestY, bestS, labelCol, '#150a24');
+      const scoreX = 6 + textWidth(label, bestS) + 6;
+      drawText(c, this.hudBestStr, scoreX, bestY, bestS, scoreCol, '#150a24');
     }
     this.drawPowerUpHud();
 
-    // distance + coins (right) — mobile keeps the top-right corner clean
+    // distance + gems (right) — mobile keeps the top-right corner clean
     if (!mobile) {
       if (this.hudM !== m) {
         this.hudM = m;
@@ -1906,58 +1921,30 @@ export class Renderer {
       }
       const dtxt = this.hudMText;
       drawText(c, dtxt, W - 6 - textWidth(dtxt, 2), 6, 2, this.g.zone.accent, '#150a24');
-      if (this.hudCoins !== this.g.coins) {
-        this.hudCoins = this.g.coins;
-        this.hudCoinsText = 'X' + pad(this.g.coins, 3);
+
+      // Gems counter (y: 22) - shows gems collected in this run
+      if (this.hudGems !== this.g.runGems) {
+        this.hudGems = this.g.runGems;
+        this.hudGemsText = 'X' + pad(this.g.runGems, 2);
       }
-      const ctxt = this.hudCoinsText;
-      const cw = textWidth(ctxt, 1) + 10;
-      const cx0 = W - 6 - cw;
-      // HUD coin matches world coin shape per biome
-      if (this.g.zone.bg === 'tundra') {
-        c.fillStyle = this.g.zone.coinEdge;
-        c.fillRect(cx0, 22, 8, 7);
-        c.fillStyle = this.g.zone.coinFill;
-        c.fillRect(cx0 + 1, 23, 6, 5);
-        c.fillStyle = this.g.zone.coinShine;
-        c.fillRect(cx0 + 3, 22, 2, 1);
-        c.fillRect(cx0 + 3, 29, 2, 1);
-        c.fillRect(cx0, 25, 1, 2);
-        c.fillRect(cx0 + 7, 25, 1, 2);
-      } else if (this.g.zone.bg === 'desert') {
-        c.fillStyle = this.g.zone.coinEdge;
-        c.fillRect(cx0, 23, 7, 7);
-        c.fillStyle = this.g.zone.coinFill;
-        c.fillRect(cx0, 23, 7, 6);
-        c.fillStyle = this.g.zone.coinShine;
-        c.fillRect(cx0 + 1, 24, 1, 3);
-        c.fillRect(cx0 - 1, 22, 1, 1);
-        c.fillRect(cx0 + 7, 22, 1, 1);
-        c.fillRect(cx0 - 1, 30, 1, 1);
-        c.fillRect(cx0 + 7, 30, 1, 1);
-      } else if (this.g.zone.bg === 'jungle') {
-        // fruit coin — round (matches world coin shape), stem aligned with the
-        // other biome icons' tops (y 22) so the icon doesn't sit higher.
-        c.fillStyle = this.g.zone.coinEdge;
-        c.fillRect(cx0 + 1, 24, 6, 1);
-        c.fillRect(cx0, 25, 8, 5);
-        c.fillRect(cx0 + 1, 30, 6, 1);
-        c.fillStyle = this.g.zone.coinFill;
-        c.fillRect(cx0 + 1, 25, 6, 4);
-        c.fillStyle = this.g.zone.coinShine;
-        c.fillRect(cx0 + 2, 26, 2, 2);
-        c.fillStyle = this.g.zone.accent2;
-        c.fillRect(cx0 + 3, 22, 1, 2);
-        c.fillRect(cx0 + 4, 22, 2, 1);
-      } else {
-        c.fillStyle = this.g.zone.coinEdge;
-        c.fillRect(cx0, 23, 7, 7);
-        c.fillStyle = this.g.zone.coinFill;
-        c.fillRect(cx0, 23, 7, 6);
-        c.fillStyle = this.g.zone.coinShine;
-        c.fillRect(cx0 + 1, 24, 1, 3);
-      }
-      drawText(c, ctxt, cx0 + 10, 23, 1, this.g.zone.coinFill, '#150a24');
+      const gtxt = this.hudGemsText;
+      const gw = textWidth(gtxt, 1) + 10;
+      const gx0 = W - 6 - gw;
+      const gy = 22;
+
+      // Exact matching diamond jewel sprite
+      c.fillStyle = '#08121e';
+      c.fillRect(gx0, gy + 1, 6, 6);
+      c.fillRect(gx0 + 1, gy, 4, 8);
+      c.fillStyle = '#3ef2c8';
+      c.fillRect(gx0 + 1, gy + 1, 4, 6);
+      c.fillRect(gx0, gy + 2, 6, 4);
+      c.fillStyle = '#7ef7ff';
+      c.fillRect(gx0 + 1, gy + 1, 2, 2);
+      c.fillStyle = '#ffffff';
+      c.fillRect(gx0 + 1, gy + 2, 1, 1);
+
+      drawText(c, gtxt, gx0 + 9, 22, 1, '#3ef2c8', '#150a24');
     }
 
     // combo — fixed layout, colour-only pulse (no size jitter). Mobile sits
@@ -1985,11 +1972,11 @@ export class Renderer {
     const flash = this.g.comboPulse;
     const col = flash > 0.4 ? '#ffffff' : '#ffd166';
     // Bar grows with the label so a long "X8 COMBO 9999" can't overflow it.
-    const bw = Math.max(78, textWidth(label, 1) + 8);
+    const bw = Math.max(84, textWidth(label, 1) + 12);
     drawTextCentered(c, label, labelCenterX, y, 1, col, '#150a24');
     c.fillStyle = '#150a24';
-    c.fillRect(labelCenterX - bw / 2 - 1, y + 10, bw + 2, 5);
+    c.fillRect(labelCenterX - bw / 2 - 1, y + 9, bw + 2, 7);
     c.fillStyle = t > 0.3 ? this.g.zone.accent : '#ff4d6d';
-    c.fillRect(labelCenterX - bw / 2, y + 11, Math.round(bw * t), 3);
+    c.fillRect(labelCenterX - bw / 2, y + 10, Math.round(bw * t), 5);
   }
 }

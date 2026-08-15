@@ -68,6 +68,7 @@ export function StartScreen({
   questRun,
   questOnDayRollover,
   questOnShare,
+  onOpenSkins,
 }: {
   best: number;
   lastRun: number;
@@ -82,6 +83,7 @@ export function StartScreen({
   questRun: QuestRunStats;
   questOnDayRollover?: () => void;
   questOnShare?: () => void;
+  onOpenSkins?: () => void;
 }) {
   return (
     <div
@@ -179,12 +181,25 @@ export function StartScreen({
             {sfxOn ? 'SFX ON' : 'SFX OFF'}
           </button>
         </div>
-        <span onClick={(e) => e.stopPropagation()}>
-          <PixelButton onClick={onStart} className="flex min-w-[280px] items-center justify-center gap-3 tablet:min-w-[480px] tablet:py-4 tablet:text-[15px]">
-            <PlayIcon />
-            <span>START RUN</span>
-          </PixelButton>
-        </span>
+        <div className="flex w-full min-w-[280px] max-w-[480px] items-stretch gap-2 tablet:min-w-[480px]">
+          <span className="flex flex-[3]" onClick={(e) => e.stopPropagation()}>
+            <PixelButton onClick={onStart} className="flex h-full w-full items-center justify-center gap-3 py-3.5 text-[11px] tablet:py-4 tablet:text-[14px]">
+              <PlayIcon />
+              <span>START RUN</span>
+            </PixelButton>
+          </span>
+          {onOpenSkins && (
+            <span className="flex flex-1" onClick={(e) => e.stopPropagation()}>
+              <PixelButton
+                variant="ghost"
+                onClick={onOpenSkins}
+                className="flex h-full w-full items-center justify-center border-[#3ef2c8]/60 bg-[#0d2822]/80 py-3.5 text-[11px] text-[#3ef2c8] hover:bg-[#165044] hover:text-[#7ef7ff] tablet:py-4 tablet:text-[13px]"
+              >
+                SKINS
+              </PixelButton>
+            </span>
+          )}
+        </div>
         <a
           href="https://github.com/Jimm144/pixel-run"
           target="_blank"
@@ -281,6 +296,7 @@ export function PauseScreen({
   onResume,
   onRestart,
   onQuit,
+  onMenu,
   stats,
   musicVol,
   sfxVol,
@@ -289,13 +305,16 @@ export function PauseScreen({
 }: {
   onResume: () => void;
   onRestart: () => void;
-  onQuit: () => void;
+  onQuit?: () => void;
+  onMenu?: () => void;
   stats: Stats;
   musicVol: number;
   sfxVol: number;
   onMusicVol: (v: number) => void;
   onSfxVol: (v: number) => void;
 }) {
+  const handleMenu = onMenu ?? onQuit ?? (() => {});
+
   return (
     <div className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-[#08040f]/80 p-3 [@media(max-height:640px)]:items-end [@media(max-height:640px)]:pb-8">
       <Panel className="w-full max-w-[300px] p-4 tablet:max-w-[420px] tablet:p-6">
@@ -321,7 +340,7 @@ export function PauseScreen({
             <PixelButton variant="danger" onClick={onRestart} small className="py-2.5 tablet:py-3 tablet:text-[10px]">
               RESTART
             </PixelButton>
-            <PixelButton variant="ghost" onClick={onQuit} small className="py-2.5 tablet:py-3 tablet:text-[10px]">
+            <PixelButton variant="ghost" onClick={handleMenu} small className="py-2.5 tablet:py-3 tablet:text-[10px]">
               MENU
             </PixelButton>
           </div>
@@ -379,9 +398,10 @@ export function GameOverScreen({
               </p>
             )}
           </div>
-          <div className="mb-3 grid grid-cols-4 gap-1.5 tablet:gap-3">
+          <div className="mb-3 grid grid-cols-5 gap-1 tablet:gap-2">
             <Stat label="DIST" value={stats.meters + 'M'} color="#3ef2c8" />
-            <Stat label="COINS" value={String(stats.coins)} color="#ffd166" />
+            <Stat label="COINS" value={String(stats.coins ?? 0)} color="#ffd166" />
+            <Stat label="GEMS" value={String(stats.gems ?? 0)} color="#3ef2c8" />
             <Stat label="KILLS" value={String(stats.kills)} color="#ff4d6d" />
             <Stat label="COMBO" value={'X' + stats.combo} color="#c98cff" />
           </div>

@@ -16,9 +16,10 @@ interface Props {
   onQuestProgress: (stats: QuestRunStats) => void;
   ui: UI;
   showTouch: boolean;
+  modalOpen?: boolean;
 }
 
-export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onToggleMute, onRestartHint, onQuestProgress, ui, showTouch }: Props) {
+export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onToggleMute, onRestartHint, onQuestProgress, ui, showTouch, modalOpen }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   /** Zone accent for the touch pause button — follows the biome. */
@@ -36,6 +37,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
   const { wrapHandlers, diveHandlers, pauseHandlers } = useGameInput({
     gameRef,
     ui,
+    modalOpen,
     onStart,
     onPause,
     onResume,

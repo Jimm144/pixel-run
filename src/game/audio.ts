@@ -215,14 +215,14 @@ export class Sfx {
       musicGain.gain.value = Sfx.MUSIC_VOL;
       const musicFilter = ctx.createBiquadFilter();
       musicFilter.type = 'lowpass';
-      musicFilter.frequency.value = this.muffled ? 520 : 22000;
+      musicFilter.frequency.value = this.muffled ? 350 : 2800;
       musicGain.connect(musicFilter);
       musicFilter.connect(master);
 
       // Lowpass on the SFX chain — `setMuffled` drops it for menus
       const sfxFilter = ctx.createBiquadFilter();
       sfxFilter.type = 'lowpass';
-      sfxFilter.frequency.value = this.muffled ? 520 : 22000;
+      sfxFilter.frequency.value = this.muffled ? 600 : 7500;
       const sfxGain = ctx.createGain();
       sfxGain.gain.value = 1;
       sfxFilter.connect(sfxGain);
@@ -240,6 +240,9 @@ export class Sfx {
       this.sfxGain = sfxGain;
       this.sfxFilter = sfxFilter;
       this.noiseBuf = buf;
+
+      this.applyVolumes();
+      this.setMuffled(this.muffled);
     } catch {
       this.ctx = null;
       this.master = null;
@@ -315,8 +318,8 @@ export class Sfx {
   setMuffled(m: boolean) {
     this.muffled = m;
     if (!this.ctx) return;
-    const sfxFreq = m ? 1800 : 22000;
-    const musicFreq = m ? 700 : 22000;
+    const sfxFreq = m ? 600 : 7500;
+    const musicFreq = m ? 350 : 2800;
     if (this.sfxFilter) this.sfxFilter.frequency.setTargetAtTime(sfxFreq, this.ctx.currentTime, 0.04);
     if (this.musicFilter) this.musicFilter.frequency.setTargetAtTime(musicFreq, this.ctx.currentTime, 0.04);
   }
@@ -351,6 +354,13 @@ export class Sfx {
     this.musicStep = 0;
     this.musicNextTime = ctx.currentTime + 0.05;
     this.musicGain.gain.cancelScheduledValues(ctx.currentTime);
+    for (const n of this.musicTonePool) {
+      try {
+        n.gain.gain.cancelScheduledValues(ctx.currentTime);
+        n.gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+        n.freeAt = ctx.currentTime;
+      } catch {}
+    }
     this.applyMusicGain();
     this.ensureMusicTimer();
     this.scheduleMusic();
@@ -361,6 +371,18 @@ export class Sfx {
     if (biome !== this.musicBiome) {
       this.musicBiome = biome;
       this.musicStep = 0;
+      const ctx = this.ctx;
+      if (ctx && ctx.state !== 'closed') {
+        const now = ctx.currentTime;
+        this.musicNextTime = now + 0.05;
+        for (const n of this.musicTonePool) {
+          try {
+            n.gain.gain.cancelScheduledValues(now);
+            n.gain.gain.setValueAtTime(0.0001, now);
+            n.freeAt = now;
+          } catch {}
+        }
+      }
     }
     this.musicIntensity = Math.max(0, Math.min(1, intensity));
     // Gentle linear pacing matching player stride without racing ahead
@@ -448,6 +470,7 @@ export class Sfx {
     }
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
+    gain.gain.value = 0.0001;
     osc.connect(gain);
     gain.connect(this.musicGain);
     osc.start(0);
@@ -464,27 +487,34 @@ export class Sfx {
   ) {
     const ctx = this.ctx;
     if (!ctx || ctx.state === 'closed' || this.muted || this.musicMuted) return;
-    const t = ctx.currentTime + delay;
+    const t = Math.max(ctx.currentTime + 0.005, ctx.currentTime + delay);
     const n = this.acquireTone(t);
     if (!n) return;
-    n.osc.type = type;
-    n.osc.frequency.setValueAtTime(f0, t);
-    n.osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
-    n.gain.gain.setValueAtTime(0.0001, t);
-    n.gain.gain.exponentialRampToValueAtTime(vol, t + 0.01);
-    n.gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    n.freeAt = t + dur + 0.03;
-    this.musicTonePool.push(n);
+    try {
+      n.osc.type = type;
+      n.osc.frequency.cancelScheduledValues(t);
+      n.osc.frequency.setValueAtTime(f0, t);
+      if (f0 !== f1) {
+        n.osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+      }
+      n.gain.gain.cancelScheduledValues(t);
+      n.gain.gain.setValueAtTime(0.0001, t);
+      n.gain.gain.linearRampToValueAtTime(vol, t + 0.01);
+      n.gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      n.freeAt = t + dur + 0.03;
+      this.musicTonePool.push(n);
+    } catch {}
   }
 
   private musicDrum(type: 'kick' | 'snare' | 'hihat', delay: number) {
     const ctx = this.ctx;
     if (!ctx || ctx.state === 'closed' || !this.musicGain || this.muted || this.musicMuted) return;
-    const t = ctx.currentTime + delay;
+    const t = Math.max(ctx.currentTime + 0.005, ctx.currentTime + delay);
 
     if (type === 'kick') {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
+      gain.gain.value = 0.0001;
       osc.type = 'sine';
       osc.frequency.setValueAtTime(150, t);
       osc.frequency.exponentialRampToValueAtTime(40, t + 0.1);
@@ -501,6 +531,7 @@ export class Sfx {
       filt.type = 'highpass';
       filt.frequency.value = 1000;
       const gain = ctx.createGain();
+      gain.gain.value = 0.0001;
       gain.gain.setValueAtTime(0.5, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
       src.connect(filt);
@@ -510,6 +541,7 @@ export class Sfx {
       src.stop(t + 0.12);
       const osc = ctx.createOscillator();
       const oscGain = ctx.createGain();
+      oscGain.gain.value = 0.0001;
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(200, t);
       osc.frequency.exponentialRampToValueAtTime(100, t + 0.05);
@@ -526,6 +558,7 @@ export class Sfx {
       filt.type = 'highpass';
       filt.frequency.value = 5000;
       const gain = ctx.createGain();
+      gain.gain.value = 0.0001;
       gain.gain.setValueAtTime(0.22, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
       src.connect(filt);
@@ -545,24 +578,24 @@ export class Sfx {
     const pattern = BIOME_MUSIC[this.musicBiome];
     const base = pattern.base;
     const interval = pattern.baseInterval / this.musicSpeed;
-    const noteVol = 0.12 + this.musicIntensity * 0.04;
+    const noteVol = 0.07 + this.musicIntensity * 0.02;
     const len = pattern.melody.length;
     while (this.musicNextTime < now + 0.24) {
       const step = this.musicStep++ % len;
       const delay = Math.max(0, this.musicNextTime - now);
 
-      // melody — square lead
+      // melody — warm triangle / square lead
       const melodyNote = pattern.melody[step];
       if (melodyNote !== -1) {
         const freq = base * Math.pow(2, melodyNote / 12);
-        this.musicTone('square', freq, freq * 1.008, interval * 0.78, noteVol, delay);
+        this.musicTone('triangle', freq, freq, interval * 0.82, noteVol * 1.2, delay);
       }
 
       // bass — triangle, lower octave
       const bassNote = pattern.bass[step];
       if (bassNote !== -1) {
         const freq = base * Math.pow(2, bassNote / 12);
-        this.musicTone('triangle', freq, freq, interval * 1.4, 0.14, delay);
+        this.musicTone('triangle', freq, freq, interval * 1.4, 0.10, delay);
       }
 
       // drums — kick/snare/hihat
@@ -575,11 +608,11 @@ export class Sfx {
         this.musicDrum('hihat', delay);
       }
 
-      // arpeggio — fast square, quiet
+      // arpeggio — quiet melodic tone
       const arpNote = pattern.arp[step];
       if (arpNote !== -1) {
         const freq = base * Math.pow(2, arpNote / 12);
-        this.musicTone('square', freq, freq, interval * 0.35, noteVol * 0.65, delay);
+        this.musicTone('triangle', freq, freq, interval * 0.35, noteVol * 0.5, delay);
       }
 
       this.musicNextTime += interval;
@@ -596,19 +629,24 @@ export class Sfx {
   ) {
     const ctx = this.ctx;
     if (!ctx || ctx.state === 'closed' || !this.master || !this.sfxFilter || this.muted) return;
-    const t = ctx.currentTime + delay;
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(f0, t);
-    osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    osc.connect(g);
-    g.connect(this.sfxFilter);
-    osc.start(t);
-    osc.stop(t + dur + 0.02);
+    const t = Math.max(ctx.currentTime + 0.002, ctx.currentTime + delay);
+    try {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      g.gain.value = 0.0001;
+      osc.type = type;
+      osc.frequency.setValueAtTime(f0, t);
+      if (f0 !== f1) {
+        osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+      }
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(g);
+      g.connect(this.sfxFilter);
+      osc.start(t);
+      osc.stop(t + dur + 0.02);
+    } catch {}
   }
 
   private noise(dur: number, vol = 0.25, freq = 1200, delay = 0) {
@@ -622,6 +660,7 @@ export class Sfx {
     filt.frequency.setValueAtTime(freq, t);
     filt.frequency.exponentialRampToValueAtTime(Math.max(80, freq * 0.25), t + dur);
     const g = ctx.createGain();
+    g.gain.value = 0.0001;
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     src.connect(filt);
@@ -671,19 +710,17 @@ export class Sfx {
         break;
       case 'combo': {
         const note = Math.min(16, param);
-        const f = 440 * Math.pow(1.0595, [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24][note % 11] ?? 0);
-        this.tone('triangle', f, f, 0.1, 0.15);
-        this.tone('sine', f * 2, f * 2, 0.12, 0.08, 0.02);
+        const f = 330 * Math.pow(1.0595, [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24][note % 11] ?? 0);
+        this.tone('triangle', f, f, 0.08, 0.08);
         break;
       }
       case 'ui':
-        this.tone('triangle', 520, 680, 0.04, 0.15);
-        this.tone('sine', 1040, 1040, 0.03, 0.06);
+        this.tone('triangle', 360, 480, 0.03, 0.05);
         break;
       case 'start':
-        this.tone('triangle', 440, 440, 0.07, 0.16);
-        this.tone('triangle', 660, 660, 0.07, 0.16, 0.07);
-        this.tone('triangle', 880, 880, 0.16, 0.18, 0.14);
+        this.tone('triangle', 330, 330, 0.06, 0.1);
+        this.tone('triangle', 440, 440, 0.06, 0.1, 0.06);
+        this.tone('triangle', 660, 660, 0.12, 0.12, 0.12);
         break;
       case 'event':
         this.tone('triangle', 360 + param * 30, 540 + param * 40, 0.15, 0.14);

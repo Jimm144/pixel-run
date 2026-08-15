@@ -1,4 +1,5 @@
 import type { BgKind, Zone } from './palette';
+import type { SkinId } from './skins';
 
 /** Gameplay is authored against this size; physics never changes. */
 export const BASE_VW = 400;
@@ -31,9 +32,11 @@ export type Phase = 'ready' | 'playing' | 'paused' | 'dead';
 export interface Stats {
   score: number;
   meters: number;
-  coins: number;
+  gems: number;
   kills: number;
   combo: number;
+  coins?: number;
+  moonPhase?: number;
 }
 
 /* ------------------------------------------------------------------ tuning */
@@ -243,7 +246,10 @@ export interface RenderHost {
   distance: number;
   score: number;
   coins: number;
+  gems: number;
+  runGems: number;
   best: number;
+  passedHighScore: boolean;
   combo: number;
   comboT: number;
   comboPulse: number;
@@ -285,4 +291,6 @@ export interface RenderHost {
   eventMax: number;
   eventKind: BgKind;
   eventSeed: number;
+  activeSkin: SkinId;
+  moonPhase: number;
 }

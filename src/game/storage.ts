@@ -113,3 +113,64 @@ export function saveVolumes(volumes: Volumes): Volumes {
   } catch {}
   return volumes;
 }
+
+const TOTAL_RUNS_KEY = 'pixeldash.total_runs.v1';
+const FEEDBACK_NEVER_KEY = 'pixeldash.feedback_never.v1';
+const LAST_FEEDBACK_PROMPT_KEY = 'pixeldash.feedback_last_prompt_run.v1';
+
+export function loadTotalRuns(): number {
+  try {
+    const raw = localStorage.getItem(TOTAL_RUNS_KEY);
+    return raw ? parseInt(raw, 10) || 0 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function incrementTotalRuns(): number {
+  const next = loadTotalRuns() + 1;
+  try {
+    localStorage.setItem(TOTAL_RUNS_KEY, String(next));
+  } catch {}
+  return next;
+}
+
+export function isFeedbackNeverShow(): boolean {
+  try {
+    return localStorage.getItem(FEEDBACK_NEVER_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setFeedbackNeverShow(never: boolean) {
+  try {
+    localStorage.setItem(FEEDBACK_NEVER_KEY, never ? 'true' : 'false');
+  } catch {}
+}
+
+export function loadLastFeedbackPromptRun(): number {
+  try {
+    const raw = localStorage.getItem(LAST_FEEDBACK_PROMPT_KEY);
+    return raw ? parseInt(raw, 10) || 0 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function saveLastFeedbackPromptRun(runCount: number) {
+  try {
+    localStorage.setItem(LAST_FEEDBACK_PROMPT_KEY, String(runCount));
+  } catch {}
+}
+
+/** Check if the feedback prompt should appear for this runCount */
+export function shouldShowFeedbackPrompt(runCount: number): boolean {
+  if (isFeedbackNeverShow()) return false;
+  if (runCount < 10) return false;
+  const lastPromptRun = loadLastFeedbackPromptRun();
+  if (lastPromptRun === 0) {
+    return runCount >= 10;
+  }
+  return runCount - lastPromptRun >= 200;
+}

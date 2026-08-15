@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { cn } from '../utils/cn';
 
 export function PixelButton({
@@ -6,12 +6,14 @@ export function PixelButton({
   onClick,
   variant = 'primary',
   className,
+  style,
   small,
 }: {
   children: ReactNode;
   onClick?: () => void;
   variant?: 'primary' | 'danger' | 'ghost';
   className?: string;
+  style?: CSSProperties;
   small?: boolean;
 }) {
   const styles = {
@@ -20,14 +22,15 @@ export function PixelButton({
     danger:
       'bg-[#ff4d6d] text-[#180512] hover:bg-[#ff7a90] shadow-[4px_4px_0_#08040f] active:shadow-[1px_1px_0_#08040f]',
     ghost:
-      'bg-transparent text-[#9d8fd6] border-[#4a3a7a] hover:text-[#e9e2ff] hover:border-[#9d8fd6] shadow-[4px_4px_0_#08040f] active:shadow-[1px_1px_0_#08040f]',
+      'bg-transparent text-[#3ef2c8] border-[#3ef2c8]/50 hover:bg-[#3ef2c8]/15 hover:border-[#3ef2c8] hover:text-[#7ef7ff] shadow-[4px_4px_0_#08040f] active:shadow-[1px_1px_0_#08040f]',
   }[variant];
   return (
     <button
       type="button"
       onClick={onClick}
+      style={style}
       className={cn(
-        'font-pixel border-2 border-[#08040f] uppercase leading-none tracking-wide transition-[transform,box-shadow,background-color] duration-75 active:translate-x-[3px] active:translate-y-[3px]',
+        'font-pixel border-2 border-[#08040f] uppercase leading-none tracking-wide transition-[transform,box-shadow,background-color] duration-75 active:translate-x-[3px] active:translate-y-[3px] focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3ef2c8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#08040f]',
         small ? 'px-3 py-2 text-[8px]' : 'px-5 py-3.5 text-[11px]',
         styles,
         className,

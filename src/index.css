@@ -25,6 +25,16 @@ body {
   touch-action: manipulation;
 }
 
+*:focus {
+  outline: none !important;
+}
+
+*:focus-visible {
+  outline: 2px solid #3ef2c8 !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 2px #08040f, 0 0 10px rgba(62, 242, 200, 0.45) !important;
+}
+
 canvas {
   image-rendering: -moz-crisp-edges;
   image-rendering: crisp-edges;
@@ -34,6 +44,9 @@ canvas {
 .font-pixel {
   font-family: "Press Start 2P", ui-monospace, "Courier New", monospace;
   letter-spacing: 0.02em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* CRT flavour ------------------------------------------------------------- */

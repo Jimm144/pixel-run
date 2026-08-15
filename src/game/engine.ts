@@ -51,6 +51,7 @@ import {
   type Spring,
   type Stats,
 } from './types';
+import { type SkinId, loadEquippedSkin, loadLifetimeStats, saveLifetimeStats, MILESTONES } from './skins';
 import { WorldGen } from './worldGen';
 
 export { BASE_VW, BASE_VH, MAX_VH, VW, VH, worldOffsetY, setViewportSize } from './types';
@@ -160,6 +161,7 @@ export class Game implements GenHost, RenderHost {
   /* ---- score */
   distance!: number;
   score!: number;
+  passedHighScore!: boolean;
   bonus!: number;
   coins!: number;
   kills!: number;
@@ -190,6 +192,10 @@ export class Game implements GenHost, RenderHost {
   zoneIdx!: number;
   zone!: Zone;
   zoneOrder!: number[];
+  activeSkin!: SkinId;
+  gems!: number;
+  runGems = 0;
+  moonPhase!: number;
 
   /* ---- subsystems */
   private renderer!: Renderer;
@@ -199,6 +205,7 @@ export class Game implements GenHost, RenderHost {
 
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
+    this.activeSkin = loadEquippedSkin();
     Object.assign(this, this.defaults());
     this.particles = new ParticleSystem();
     this.texts = new FloatTexts();
@@ -262,6 +269,7 @@ export class Game implements GenHost, RenderHost {
       startX: 0,
       distance: 0,
       score: 0,
+      passedHighScore: false,
       bonus: 0,
       coins: 0,
       kills: 0,
@@ -289,6 +297,10 @@ export class Game implements GenHost, RenderHost {
       zoneIdx: 0,
       zone: ZONES[0],
       zoneOrder: ZONES.map((_, i) => i),
+      activeSkin: this.activeSkin || loadEquippedSkin(),
+      gems: 0,
+      runGems: 0,
+      moonPhase: 0,
     };
   }
 
@@ -324,7 +336,6 @@ export class Game implements GenHost, RenderHost {
     this.flash = 0.35;
     this.flashCol = '#ffffff';
     sfx.startMusic(this.zone.bg, 0);
-    sfx.play('start');
   }
 
   /** Called when the canvas size changes — drops size-dependent art caches. */
@@ -381,13 +392,19 @@ export class Game implements GenHost, RenderHost {
     this.phase = 'ready';
   }
 
+  setSkin(skin: SkinId) {
+    this.activeSkin = skin;
+  }
+
   get stats(): Stats {
     return {
       score: this.score,
       meters: Math.floor(this.distance / 10),
       coins: this.coins,
+      gems: this.runGems,
       kills: this.kills,
       combo: this.bestCombo,
+      moonPhase: this.questMaxMoonPhase,
     };
   }
 
@@ -471,7 +488,7 @@ export class Game implements GenHost, RenderHost {
       this.questCleanScore = this.score;
     }
     const period = VW + 140;
-    const progress = 300 - this.camX * 0.12;
+    const progress = 300 - this.camX * 0.045;
     const cycle = Math.floor(progress / period);
     const isMoon = (((cycle % 2) + 2) % 2) === 1;
     if (isMoon) {
@@ -499,7 +516,6 @@ export class Game implements GenHost, RenderHost {
     this.texts.popText(x, y, (label ? label + ' ' : '+') + pts, this.mult() > 1 ? '#ffd166' : '#ffffff');
     if (this.combo > 1 && this.combo % 4 === 0) {
       this.texts.popText(x, y - 12, 'X' + this.mult(), '#ff4d6d', 1);
-      sfx.play('combo', this.mult());
     }
   }
 
@@ -720,13 +736,31 @@ export class Game implements GenHost, RenderHost {
     /* ---- score */
     if (this.phase === 'playing') {
       this.syncDistanceScore();
+
+      // High Score milestone celebration during live run
+      if (this.best > 0 && this.score > this.best && !this.passedHighScore) {
+        this.passedHighScore = true;
+        this.texts.popText(this.px, this.py - 30, 'NEW HIGH SCORE!', '#ffd166', 1);
+        this.particles.burst(
+          this.px + PLAYER_W / 2,
+          this.py - 4,
+          24,
+          ['#ffd166', '#ffffff', '#7ef7ff', '#ff4d6d'],
+          3.2,
+          0.06,
+        );
+        this.flash = 0.28;
+        this.flashCol = '#ffd166';
+        this.addShake(0.18);
+        sfx.play('gem');
+      }
+
       const m = Math.floor(this.distance / 10);
       if (m >= this.nextMilestone) {
         this.bonus += 100;
         this.texts.popText(this.px, this.py - 24, this.nextMilestone + 'M!', '#3ef2c8', 1);
         this.nextMilestone += 250;
         this.addShake(0.16);
-        sfx.play('combo', 6);
       }
       if (this.comboT > 0) {
         this.comboT--;
@@ -786,10 +820,12 @@ export class Game implements GenHost, RenderHost {
     for (const p of this.platforms) {
       if (p.float) continue;
       const bh = GROUND_BOTTOM - p.y;
+      // Corner ledge forgiveness: if player's feet are within 6px of the platform top,
+      // allow stepping up/landing on the ledge instead of fatal wall collision.
       if (
         this.px + pw > p.x &&
         this.px < p.x + p.w &&
-        this.py + ph > p.y + 3 &&
+        this.py + ph > p.y + 6 &&
         this.py < p.y + bh
       ) {
         if (this.vx > 0 && this.px + pw - this.vx <= p.x + WALL_MARGIN) {
@@ -826,10 +862,10 @@ export class Game implements GenHost, RenderHost {
     let landing: Platform | null = null;
     let bonked = false;
     for (const p of this.platforms) {
-      if (this.px + pw <= p.x + WALL_MARGIN || this.px >= p.x + p.w - WALL_MARGIN) continue;
+      if (this.px + pw <= p.x - 2 || this.px >= p.x + p.w + 2) continue;
       const bh = p.float ? 8 : GROUND_BOTTOM - p.y;
       if (this.py + ph > p.y && this.py < p.y + bh) {
-        if (this.vy >= 0 && prevBottom <= p.y + Math.max(4, this.vy)) {
+        if (this.vy >= 0 && (prevBottom <= p.y + Math.max(6, this.vy + 2) || this.py + ph <= p.y + 7)) {
           // If surfaces overlap, land on the first surface crossed, not on
           // whichever platform happened to be iterated last.
           if (!landing || p.y < landing.y) landing = p;
@@ -850,6 +886,9 @@ export class Game implements GenHost, RenderHost {
       this.coyote = COYOTE;
       this.diving = false;
       this.spin = 0;
+      if (this.propellerHat <= 0 && this.propellerFlashTimer <= 0) {
+        this.propellerFlashing = false;
+      }
       if (impact > 2) {
         this.playerSquashX = 1 + Math.min(0.35, impact * 0.035);
         this.playerSquashY = 1 - Math.min(0.4, impact * 0.04);
@@ -944,18 +983,27 @@ export class Game implements GenHost, RenderHost {
       ) {
         c.dead = true;
         if (c.gem) {
-          this.coins += 5;
-          this.questCoins += 5;
+          this.gems++;
+          this.runGems++;
+          const currentLifetime = loadLifetimeStats();
+          currentLifetime.gems = (currentLifetime.gems || 0) + 1;
+          saveLifetimeStats(currentLifetime);
           this.addCombo(c.x, c.y - 6, GEM_PTS, 'GEM');
-          this.particles.burst(c.x, c.y, 16, ['#7ef7ff', '#ffffff', '#3ef2c8'], 2.4, 0.05);
-          this.addShake(0.22);
-          this.flash = 0.3;
-          this.flashCol = '#7ef7ff';
-          this.freeze = 2;
+          this.particles.burst(c.x, c.y, 14, ['#7ef7ff', '#ffffff', '#3ef2c8'], 2.2, 0.05);
+          this.addShake(0.14);
           sfx.play('gem');
         } else {
           this.coins++;
           this.questCoins++;
+          const currentLifetime = loadLifetimeStats();
+          if (!currentLifetime.coinsDone) {
+            currentLifetime.coins = (currentLifetime.coins || 0) + 1;
+            if (currentLifetime.coins >= MILESTONES.COINS_TARGET) {
+              currentLifetime.coins = MILESTONES.COINS_TARGET;
+              currentLifetime.coinsDone = true;
+            }
+            saveLifetimeStats(currentLifetime);
+          }
           this.addCombo(c.x, c.y - 4, COIN_PTS);
           this.particles.burst(c.x, c.y, 6, ['#ffd166', '#ffffff'], 1.7, 0.04);
           sfx.play('coin');
@@ -1080,11 +1128,17 @@ export class Game implements GenHost, RenderHost {
       if (e.dead) continue;
       if (e.x < this.camX - 40 || e.x > this.camX + VW + 90) continue;
       if (this.invuln > 0) continue;
+
+      // Tighten flyer hitbox: provide 4px clearance underneath so running under a flyer is safe
+      const hPadTop = e.kind === 'flyer' ? 2 : 1;
+      const hPadBottom = e.kind === 'flyer' ? 4 : 0;
+      const xPad = e.kind === 'flyer' ? 2 : 1;
+
       if (
-        pxc + pw > e.x + 1 &&
-        pxc < e.x + e.w - 1 &&
-        pyc + ph > e.y + 1 &&
-        pyc < e.y + e.h
+        pxc + pw > e.x + xPad &&
+        pxc < e.x + e.w - xPad &&
+        pyc + ph > e.y + hPadTop &&
+        pyc < e.y + e.h - hPadBottom
       ) {
         if (e.kind === 'spiker') {
           if (this.diving) {
@@ -1101,7 +1155,11 @@ export class Game implements GenHost, RenderHost {
             return false;
           }
         } else {
-          const stomping = fallVy > 0 && prevFeet <= e.y + e.h;
+          // Stomping: descending onto enemy, diving, or falling near flyer top
+          const stomping =
+            (fallVy > 0 && prevFeet <= e.y + e.h) ||
+            (e.kind === 'flyer' && fallVy >= -0.5 && pyc + ph <= e.y + e.h + 2);
+
           if (stomping || this.diving) {
             this.killEnemy(e, this.diving ? SLAM_PTS : STOMP_PTS, this.diving ? 'SLAM' : undefined);
             stompedThisFrame = true;
@@ -1207,10 +1265,9 @@ export class Game implements GenHost, RenderHost {
   private updateBiomeEvent() {
     if (this.eventTimer > 0) {
       // Biome flipped mid-event: don't cut it off cold. Wind the timer down
-      // to the last 20 frames — the renderer's fade envelope (eventTimer/24)
-      // fades the weather out over that window instead of snapping it off.
+      // over a smooth 60-frame window (1 full second) so weather gently dissipates.
       if (this.eventKind !== this.zone.bg) {
-        if (this.eventTimer > 20) this.eventTimer = 20;
+        if (this.eventTimer > 60) this.eventTimer = 60;
       }
       // Do not queue several weather effects while one is active. Triggers
       // passed during the current effect are consumed and cannot restart it,
@@ -1237,7 +1294,6 @@ export class Game implements GenHost, RenderHost {
       this.eventMax = ri(900, 1500);
       this.eventTimer = this.eventMax;
       this.eventSeed = ri(1, 99999);
-      sfx.play('event', this.eventKind === 'tundra' ? 1 : this.eventKind === 'desert' ? 2 : 0);
       break;
     }
   }
@@ -1260,7 +1316,9 @@ export class Game implements GenHost, RenderHost {
     }
     if (this.propellerFlashing && this.propellerFlashTimer > 0) {
       this.propellerFlashTimer--;
-      if (this.propellerFlashTimer === 0) this.propellerFlashing = false;
+      if (this.propellerFlashTimer === 0 && this.onGround) {
+        this.propellerFlashing = false;
+      }
     }
   }
 

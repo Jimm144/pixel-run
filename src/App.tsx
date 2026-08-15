@@ -6,7 +6,18 @@ import { type UI } from './components/useGameInput';
 import { Game, type Stats } from './game/engine';
 import { dispose, setMusicVolume, setSfxVolume, sfx, unlock } from './game/audio';
 import { drawText, drawTextCentered, textWidth } from './game/font';
-import { bestScore, loadHighScore, loadLastRun, loadVolumes, saveHighScore, saveLastRun, saveVolumes } from './game/storage';
+import {
+  bestScore,
+  loadHighScore,
+  loadLastRun,
+  loadVolumes,
+  saveHighScore,
+  saveLastRun,
+  saveVolumes,
+  incrementTotalRuns,
+  shouldShowFeedbackPrompt,
+  saveLastFeedbackPromptRun,
+} from './game/storage';
 import {
   commitQuestRun as commitQuestRunRecord,
   emptyQuestRunStats,
@@ -21,6 +32,21 @@ import {
   type QuestRecord,
   type QuestRunStats,
 } from './game/quests';
+import { SkinsModal } from './components/SkinsModal';
+import { SkinUnlockModal } from './components/SkinUnlockModal';
+import { FeedbackModal } from './components/FeedbackModal';
+import {
+  loadEquippedSkin,
+  loadUnlockedSkins,
+  loadLifetimeStats,
+  saveEquippedSkin,
+  saveUnlockedSkins,
+  evaluateSkinUnlocks,
+  type SkinId,
+  type LifetimeStats,
+  SKINS,
+} from './game/skins';
+import { inputManager } from './game/input';
 
 const QUEST_SHARE_WIDTH = 1200;
 const QUEST_SHARE_HEIGHT = 500;
@@ -146,7 +172,7 @@ function createScoreShareCard(stats: Stats, isNewBest: boolean): Promise<Blob | 
   };
 
   drawMetric(88, 'DISTANCE', `${stats.meters}M`, '#3ef2c8');
-  drawMetric(352, 'COINS', String(stats.coins), '#ffd166');
+  drawMetric(352, 'GEMS', String(stats.gems ?? 0), '#3ef2c8');
   drawMetric(616, 'KILLS', String(stats.kills), '#ff4d6d');
   drawMetric(880, 'MAX COMBO', `X${stats.combo}`, '#c98cff');
 
@@ -165,7 +191,7 @@ function todayKey() {
 export function App() {
   const gameRef = useRef<Game | null>(null);
   const [ui, setUi] = useState<UI>('start');
-  const [stats, setStats] = useState<Stats>({ score: 0, meters: 0, coins: 0, kills: 0, combo: 0 });
+  const [stats, setStats] = useState<Stats>({ score: 0, meters: 0, gems: 0, coins: 0, kills: 0, combo: 0 });
   const [best, setBest] = useState(() => bestScore());
   const [lastRun, setLastRun] = useState(() => loadLastRun());
   const [newBest, setNewBest] = useState(false);
@@ -199,7 +225,7 @@ export function App() {
   }, []);
 
   const [touch, setTouch] = useState(false);
-  const [live, setLive] = useState<Stats>({ score: 0, meters: 0, coins: 0, kills: 0, combo: 0 });
+  const [live, setLive] = useState<Stats>({ score: 0, meters: 0, gems: 0, coins: 0, kills: 0, combo: 0 });
   const [questRecord, setQuestRecord] = useState(() => loadQuestRecord());
   const [questRun, setQuestRun] = useState<QuestRunStats>(() => emptyQuestRunStats());
   const [questAnnouncement, setQuestAnnouncement] = useState(0);
@@ -224,6 +250,49 @@ export function App() {
     questRecordCache.current = { day: key, record };
     return record;
   };
+
+  const [equippedSkin, setEquippedSkin] = useState<SkinId>(() => loadEquippedSkin());
+  const [unlockedSkins, setUnlockedSkins] = useState<SkinId[]>(() => loadUnlockedSkins());
+  const [lifetimeStats, setLifetimeStats] = useState<LifetimeStats>(() => loadLifetimeStats());
+  const [skinsModalOpen, setSkinsModalOpen] = useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [skinToast, setSkinToast] = useState<string | null>(null);
+  const [unlockedSkinPopup, setUnlockedSkinPopup] = useState<SkinId | null>(null);
+  const skinToastTimer = useRef(0);
+
+  const triggerSkinToast = useCallback((name: string, skinId?: SkinId) => {
+    setSkinToast(name);
+    if (skinId) setUnlockedSkinPopup(skinId);
+    window.clearTimeout(skinToastTimer.current);
+    skinToastTimer.current = window.setTimeout(() => setSkinToast(null), 3500);
+  }, []);
+
+  // Konami Code listener
+  useEffect(() => {
+    const cleanup = inputManager.onKonami(() => {
+      const currentUnlocked = loadUnlockedSkins();
+      if (!currentUnlocked.includes('question')) {
+        const next = [...currentUnlocked, 'question' as SkinId];
+        saveUnlockedSkins(next);
+        setUnlockedSkins(next);
+        setEquippedSkin('question');
+        saveEquippedSkin('question');
+        gameRef.current?.setSkin('question');
+        sfx.play('gem');
+        triggerSkinToast('??? (QUESTION MARK)', 'question');
+      }
+    });
+    return () => {
+      cleanup();
+    };
+  }, [triggerSkinToast]);
+
+  // Sync active skin to gameRef
+  useEffect(() => {
+    if (gameRef.current) {
+      gameRef.current.setSkin(equippedSkin);
+    }
+  }, [equippedSkin]);
 
   const [swUpdate, setSwUpdate] = useState<ServiceWorkerRegistration | null>(null);
 
@@ -275,10 +344,10 @@ export function App() {
     saveVolumes(volumes);
   }, [volumes]);
 
-  // Main-menu & Pause-menu sounds and music sound muffled.
+  // Main-menu, Locker, & Pause-menu sounds and music sound muffled.
   useEffect(() => {
-    sfx.setMuffled(ui === 'start' || ui === 'paused');
-  }, [ui]);
+    sfx.setMuffled(ui === 'start' || ui === 'paused' || skinsModalOpen);
+  }, [ui, skinsModalOpen]);
 
   useEffect(() => {
     if (questAnnouncement === 0) return;
@@ -295,14 +364,21 @@ export function App() {
   // Browsers only let audio start after a user gesture — resume the context
   // on the first one so music/SFX are never silently blocked.
   useEffect(() => {
-    const unlockOnce = () => unlock();
+    const unlockOnce = () => {
+      unlock();
+      setMusicVolume(volumes.music);
+      setSfxVolume(volumes.sfx);
+      sfx.setMusicMuted(volumes.music === 0);
+      sfx.setSfxMuted(volumes.sfx === 0);
+      sfx.setMuffled(ui === 'start' || ui === 'paused' || skinsModalOpen);
+    };
     window.addEventListener('pointerdown', unlockOnce);
     window.addEventListener('keydown', unlockOnce);
     return () => {
       window.removeEventListener('pointerdown', unlockOnce);
       window.removeEventListener('keydown', unlockOnce);
     };
-  }, []);
+  }, [ui, skinsModalOpen, volumes]);
 
   useEffect(() => {
     return () => {
@@ -347,7 +423,26 @@ export function App() {
     questRecordCache.current = { day: record.date, record: next };
     setQuestRecord(next);
     setQuestToast(newlyCompleted);
-  }, []);
+
+    if (next.completed.length >= 3 && record.completed.length < 3) {
+      const nextLifetime = { ...lifetimeStats };
+      if (!nextLifetime.dailySetsDone) {
+        nextLifetime.dailySets = (nextLifetime.dailySets || 0) + 1;
+        nextLifetime.dailyStreak = (nextLifetime.dailyStreak || 0) + 1;
+        if (nextLifetime.dailyStreak >= 15) {
+          nextLifetime.dailyStreak = 15;
+          nextLifetime.dailySetsDone = true;
+        }
+      }
+      const { newUnlocks, updatedStats } = evaluateSkinUnlocks(nextLifetime);
+      setLifetimeStats(updatedStats);
+      if (newUnlocks.length > 0) {
+        setUnlockedSkins(loadUnlockedSkins());
+        triggerSkinToast(SKINS[newUnlocks[0]].name, newUnlocks[0]);
+        sfx.play('gem');
+      }
+    }
+  }, [lifetimeStats, triggerSkinToast]);
 
   const handleQuestRollover = useCallback(() => {
     setQuestRecord(loadQuestRecord());
@@ -364,22 +459,23 @@ export function App() {
     questShareBusyRef.current = true;
     try {
       if (typeof navigator.clipboard?.write !== 'function' || typeof ClipboardItem === 'undefined') {
-        setQuestToast(['IMAGE COPY UNAVAILABLE']);
+        questShareBusyRef.current = false;
         return;
       }
-      const blob = await createQuestShareCard(record, best);
+      const best = loadHighScore()?.score ?? 0;
+       const blob = await createQuestShareCard(record, best);
       if (!blob) {
-        setQuestToast(['IMAGE COPY FAILED']);
+        questShareBusyRef.current = false;
         return;
       }
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-      setQuestToast(['IMAGE COPIED']);
+      triggerSkinToast('SHARE CARD COPIED');
     } catch {
-      setQuestToast(['IMAGE COPY FAILED']);
+      // ignore clipboard failures
     } finally {
       questShareBusyRef.current = false;
     }
-  }, [best]);
+  }, [triggerSkinToast]);
 
   const scoreShareBusyRef = useRef(false);
   const handleShareScore = useCallback(async () => {
@@ -406,6 +502,7 @@ export function App() {
 
   const start = useCallback(() => {
     commitQuestRun();
+    questCommittedRef.current = false;
     sfx.init();
     sfx.setMusicMuted(!musicOn);
     sfx.setSfxMuted(!sfxOn);
@@ -429,7 +526,6 @@ export function App() {
     window.clearTimeout(restartHintTimer.current);
     g.best = bestScore();
     g.startRun();
-    questCommittedRef.current = false;
     questToastSeenRef.current.clear();
     setQuestToast([]);
     setQuestRun(emptyQuestRunStats());
@@ -443,44 +539,74 @@ export function App() {
     restartHintTimer.current = window.setTimeout(() => setRestartHint(false), 900);
   }, []);
 
-  const pause = useCallback((feedback = true) => {
+  const pause = useCallback((fromUser = false) => {
     const g = gameRef.current;
     if (!g || g.phase !== 'playing') return;
+    if (fromUser) sfx.play('ui');
     g.pause();
     setLive(g.stats);
     setQuestRun(g.getQuestRunStats());
     setUi('paused');
-    if (feedback) sfx.play('ui');
   }, []);
 
   const resume = useCallback(() => {
-    gameRef.current?.resume();
+    const g = gameRef.current;
+    if (!g || g.phase !== 'paused') return;
+    sfx.play('start');
+    g.resume();
     setUi('playing');
-    sfx.play('ui');
   }, []);
 
   const toMenu = useCallback(() => {
+    const g = gameRef.current;
+    if (g) g.toReady();
     commitQuestRun();
-    gameRef.current?.toReady();
-    setQuestRun(emptyQuestRunStats());
+    setQuestRecord(loadQuestRecord());
+    sfx.play('ui');
     setUi('start');
     setBest(bestScore());
-    sfx.play('ui');
   }, [commitQuestRun]);
 
   const handleDeath = useCallback((s: Stats) => {
     commitQuestRun();
+    setQuestRecord(loadQuestRecord());
     setStats(s);
-    const entry = { score: s.score, meters: s.meters, coins: s.coins, ts: Date.now() };
-    setLastRun(saveLastRun(entry));
+    const entry = { score: s.score, meters: s.meters, coins: s.coins ?? 0, ts: Date.now() };
+    saveLastRun(entry);
+    setLastRun(entry);
+
     // Load the stored best once and pass it through — saveHighScore would
     // otherwise re-read it internally.
     const previous = loadHighScore();
     const beatBest = s.score > 0 && (!previous || s.score > previous.score);
     if (beatBest) setBest(saveHighScore(entry, previous)?.score ?? s.score);
     setNewBest(beatBest);
+
+    // Evaluate skin unlocks with fresh stats from storage
+    const latestStats = loadLifetimeStats();
+    const { newUnlocks, updatedStats } = evaluateSkinUnlocks(latestStats, {
+      score: s.score,
+      meters: s.meters,
+      coins: s.coins ?? 0,
+      gems: s.gems,
+      moonPhase: s.moonPhase,
+    });
+    setLifetimeStats(updatedStats);
+    if (newUnlocks.length > 0) {
+      setUnlockedSkins(loadUnlockedSkins());
+      triggerSkinToast(SKINS[newUnlocks[0]].name, newUnlocks[0]);
+      sfx.play('gem');
+    }
+
+    // Run feedback prompt trigger (10 runs, then every 200 runs unless never show)
+    const runCount = incrementTotalRuns();
+    if (shouldShowFeedbackPrompt(runCount)) {
+      setShowFeedbackModal(true);
+      saveLastFeedbackPromptRun(runCount);
+    }
+
     setUi('over');
-  }, [commitQuestRun]);
+  }, [commitQuestRun, lifetimeStats, triggerSkinToast]);
 
   /* -------------------------------------------------------------- auto-pause */
   // Auto pause when the page or its window loses focus
@@ -506,13 +632,11 @@ export function App() {
           ui={ui}
           showTouch={touch && ui === 'playing'}
           onDeath={handleDeath}
-          onPause={pause}
+          onPause={() => pause(true)}
           onResume={resume}
           onStart={start}
           onToggleMute={() => {
             if (musicOn || sfxOn) {
-              if (musicOn) prevMusicVolRef.current = volumes.music;
-              if (sfxOn) prevSfxVolRef.current = volumes.sfx;
               setVolumes({ music: 0, sfx: 0 });
             } else {
               setVolumes({
@@ -523,8 +647,8 @@ export function App() {
           }}
           onRestartHint={showRestartHint}
           onQuestProgress={handleQuestProgress}
+          modalOpen={showFeedbackModal || skinsModalOpen || !!unlockedSkinPopup}
         />
-
         {restartHint && (ui === 'playing' || ui === 'paused') && (
           <div className="pointer-events-none absolute inset-x-0 top-[36%] z-30 flex justify-center">
             <div className="border-2 border-[#ff4d6d]/70 bg-[#140a26]/95 px-4 py-2 font-pixel text-[8px] text-[#ffd166] shadow-[4px_4px_0_#08040f] tablet:text-[10px]">
@@ -532,8 +656,7 @@ export function App() {
             </div>
           </div>
         )}
-
-        {ui === 'start' && (
+        {ui === 'start' && !skinsModalOpen && (
           <StartScreen
             best={best}
             lastRun={lastRun?.score ?? 0}
@@ -548,14 +671,18 @@ export function App() {
             questRun={questRun}
             questOnDayRollover={handleQuestRollover}
             questOnShare={handleShareQuests}
+            onOpenSkins={() => {
+              setLifetimeStats(loadLifetimeStats());
+              setSkinsModalOpen(true);
+            }}
           />
         )}
         {ui === 'paused' && (
           <PauseScreen
+            stats={live}
             onResume={resume}
             onRestart={start}
-            onQuit={toMenu}
-            stats={live}
+            onMenu={toMenu}
             musicVol={volumes.music}
             sfxVol={volumes.sfx}
             onMusicVol={(v) => {
@@ -583,6 +710,39 @@ export function App() {
           <DailyQuestAnnouncement quests={quests} record={questRecord} run={questRun} onDayRollover={handleQuestRollover} onShare={handleShareQuests} />
         )}
         {questToast.length > 0 && <QuestCompletionToast quests={quests} completed={questToast} touch={touch} />}
+        {skinToast && (
+          <div className="fixed top-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 border-2 border-[#ffd166] bg-[#140a26]/95 px-4 py-2 font-pixel text-[#ffd166] shadow-[4px_4px_0_#08040f]">
+            <span className="text-[8px] tablet:text-[10px]">★ NEW SKIN UNLOCKED: {skinToast} ★</span>
+          </div>
+        )}
+        {unlockedSkinPopup && (
+          <SkinUnlockModal
+            skinId={unlockedSkinPopup}
+            onEquip={(id) => {
+              setEquippedSkin(id);
+              saveEquippedSkin(id);
+              gameRef.current?.setSkin(id);
+            }}
+            onClose={() => setUnlockedSkinPopup(null)}
+          />
+        )}
+        {skinsModalOpen && (
+          <SkinsModal
+            equippedSkin={equippedSkin}
+            unlockedSkins={unlockedSkins}
+            lifetimeStats={lifetimeStats}
+            onEquip={(id) => setEquippedSkin(id)}
+            onUpdateUnlocked={(unlocked, nextStats) => {
+              setUnlockedSkins(unlocked);
+              setLifetimeStats(nextStats);
+            }}
+            onClose={() => setSkinsModalOpen(false)}
+            touch={touch}
+          />
+        )}
+        {showFeedbackModal && (
+          <FeedbackModal onClose={() => setShowFeedbackModal(false)} />
+        )}
         {swUpdate && ui !== 'playing' && (
           <div className="fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 border-2 border-[#ffd166] bg-[#140a26]/95 px-3 py-1.5 font-pixel text-[#ffd166] shadow-[3px_3px_0_#08040f]">
             <span className="text-[7px] tablet:text-[9px]">⚡ UPDATE READY</span>

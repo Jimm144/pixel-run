@@ -170,7 +170,7 @@ export class WorldGen {
     const kind = this.pickPowerUp();
     this.h.powerups.push({
       x: p.x + p.w * 0.52,
-      y: p.y - 9,
+      y: p.y - 18,
       t: rnd(0, 6),
       kind,
       dead: false,
