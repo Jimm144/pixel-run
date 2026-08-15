@@ -104,19 +104,20 @@ export function useGameInput({ gameRef, ui, onStart, onPause, onResume, onToggle
     if (e.repeat) return;
     const menuKey =
       code === 'Space' || code === 'Enter' || code === 'Escape' || code === 'KeyP' ||
-      code === 'KeyR' || code === 'KeyM' || code === 'KeyW' || code === 'ArrowUp';
+      code === 'KeyR' || code === 'KeyM' || code === 'KeyW' || code === 'ArrowUp' ||
+      code === 'KeyZ' || code === 'KeyK';
     if (menuKey) e.preventDefault();
     if (code === 'KeyM') {
       cbRef.current.onToggleMute();
       return;
     }
     if (u === 'start') {
-      if (code === 'Space' || code === 'Enter' || code === 'KeyW' || code === 'ArrowUp') cbRef.current.onStart();
+      if (code === 'Space' || code === 'Enter' || code === 'KeyW' || code === 'ArrowUp' || code === 'KeyR' || code === 'KeyZ' || code === 'KeyK') cbRef.current.onStart();
     } else if (u === 'paused') {
       if (code === 'Escape' || code === 'KeyP' || code === 'Space' || code === 'Enter') cbRef.current.onResume();
       else if (code === 'KeyR') handleRestart();
     } else if (u === 'over') {
-      if (code === 'Space' || code === 'Enter' || code === 'KeyR' || code === 'ArrowUp') cbRef.current.onStart();
+      if (code === 'Space' || code === 'Enter' || code === 'KeyR' || code === 'KeyW' || code === 'ArrowUp' || code === 'KeyZ' || code === 'KeyK') cbRef.current.onStart();
     }
   };
 

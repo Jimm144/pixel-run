@@ -3,7 +3,7 @@ import type { BgKind } from './palette';
 export type QuestDifficulty = 'easy' | 'medium' | 'hard' | 'special' | 'impossible';
 export type QuestScope = 'day' | 'run';
 export type QuestMetric = 'coins' | 'meters' | 'score' | 'enemies' | 'powerups';
-export type QuestKind = 'metric' | 'cleanMeters' | 'cleanScore' | 'jumps' | 'biomeEffects' | 'twoPowerups' | 'combo';
+export type QuestKind = 'metric' | 'cleanMeters' | 'cleanScore' | 'jumps' | 'biomeEffects' | 'twoPowerups' | 'combo' | 'moonPhase';
 
 export interface QuestDefinition {
   id: string;
@@ -31,6 +31,7 @@ export interface QuestRunStats extends QuestTotals {
   cleanRun: boolean;
   biomeEffects: BgKind[];
   twoPowerups: boolean;
+  maxMoonPhase: number;
 }
 
 export interface QuestRecord {
@@ -56,7 +57,7 @@ export const QUEST_DIFFICULTY_COLORS: Record<QuestDifficulty, string> = {
   medium: '#ffb03e',
   hard: '#ff4d6d',
   special: '#c98cff',
-  impossible: '#08040f',
+  impossible: '#ff2e63',
 };
 
 const QUEST_KEY = 'pixeldash.quests.v2';
@@ -148,11 +149,12 @@ function specialCandidate(date: string, slot: number, kind: QuestKind, scope: Qu
   if (kind === 'jumps') return { id, difficulty: 'special', scope, kind, target: scope === 'day' ? 150 : 50, reward: REWARDS.special };
   if (kind === 'biomeEffects') return { id, difficulty: 'special', scope, kind, target: 4, reward: REWARDS.special };
   if (kind === 'twoPowerups') return { id, difficulty: 'special', scope, kind, target: 1, reward: REWARDS.special };
+  if (kind === 'moonPhase') return { id, difficulty: 'impossible', scope: 'run', kind, target: 4, reward: REWARDS.impossible };
   return { id, difficulty: 'special', scope, kind: 'combo', target: 10, reward: REWARDS.special };
 }
 
 function rollSpecial(seed: { value: number }, date: string, slot: number): QuestDefinition {
-  const special = Math.floor(random(seed) * 6);
+  const special = Math.floor(random(seed) * 7);
   if (special === 0) return specialCandidate(date, slot, 'cleanMeters', 'run');
   if (special === 1) return specialCandidate(date, slot, 'cleanScore', 'run');
   if (special === 2) {
@@ -161,6 +163,7 @@ function rollSpecial(seed: { value: number }, date: string, slot: number): Quest
   }
   if (special === 3) return specialCandidate(date, slot, 'biomeEffects', 'run');
   if (special === 4) return specialCandidate(date, slot, 'twoPowerups', 'run');
+  if (special === 5) return specialCandidate(date, slot, 'moonPhase', 'run');
   return specialCandidate(date, slot, 'combo', 'run');
 }
 
@@ -168,6 +171,11 @@ function rollQuest(seed: { value: number }, date: string, slot: number): QuestDe
   const id = `${date}-q${slot}`;
   const difficulty = pickDifficulty(random(seed));
   if (difficulty === 'special') return rollSpecial(seed, date, slot);
+  if (difficulty === 'impossible') {
+    if (random(seed) < 0.6) {
+      return specialCandidate(date, slot, 'moonPhase', 'run');
+    }
+  }
   const scope = random(seed) < 0.55 ? 'day' : 'run';
   const metric = METRICS[Math.floor(random(seed) * METRICS.length)];
   return {
@@ -203,6 +211,7 @@ function distinctFallback(quest: QuestDefinition, seen: Set<string>, date: strin
     ['biomeEffects', 'run'],
     ['twoPowerups', 'run'],
     ['combo', 'run'],
+    ['moonPhase', 'run'],
   ];
   const pick = kinds.find(([kind, scope]) => !seen.has(questKey(specialCandidate(date, slot, kind, scope))));
   return pick ? specialCandidate(date, slot, pick[0], pick[1]) : quest;
@@ -234,7 +243,7 @@ export function nextQuestResetAt() {
 }
 
 export function emptyQuestRunStats(): QuestRunStats {
-  return { ...zeroTotals(), maxCombo: 0, cleanMeters: 0, cleanScore: 0, cleanRun: true, biomeEffects: [], twoPowerups: false };
+  return { ...zeroTotals(), maxCombo: 0, cleanMeters: 0, cleanScore: 0, cleanRun: true, biomeEffects: [], twoPowerups: false, maxMoonPhase: 0 };
 }
 
 export function createQuestRecord(date = dateKey(), counts = zeroDifficultyCounts()): QuestRecord {
@@ -411,7 +420,8 @@ export function getQuestLabel(quest: QuestDefinition) {
   if (quest.kind === 'jumps') return `Jump ${quest.target} times ${scope}`;
   if (quest.kind === 'biomeEffects') return 'Trigger every biome effect in one run';
   if (quest.kind === 'twoPowerups') return 'Activate two power-ups at once';
-  if (quest.kind === 'combo') return `Pick up ${quest.target} items in a row in one run`;
+  if (quest.kind === 'combo') return `Reach a x${quest.target} combo in one run`;
+  if (quest.kind === 'moonPhase') return 'Reach the final moon phase in one run';
   const labels: Record<QuestMetric, string> = {
     coins: 'coins',
     meters: 'meters',
@@ -431,11 +441,12 @@ export function getQuestLabel(quest: QuestDefinition) {
 }
 
 function valueFor(quest: QuestDefinition, record: QuestRecord, run: QuestRunStats) {
-  if (quest.kind === 'cleanMeters') return run.cleanRun ? run.cleanMeters : 0;
-  if (quest.kind === 'cleanScore') return run.cleanRun ? run.cleanScore : 0;
+  if (quest.kind === 'cleanMeters') return run.cleanMeters;
+  if (quest.kind === 'cleanScore') return run.cleanScore;
   if (quest.kind === 'biomeEffects') return new Set(run.biomeEffects).size;
   if (quest.kind === 'twoPowerups') return run.twoPowerups ? 1 : 0;
   if (quest.kind === 'combo') return run.maxCombo;
+  if (quest.kind === 'moonPhase') return run.maxMoonPhase;
   if (quest.kind === 'jumps') return (quest.scope === 'day' ? record.totals.jumps : 0) + run.jumps;
   const metric = quest.metric!;
   return (quest.scope === 'day' ? record.totals[metric] : 0) + run[metric];

@@ -63,16 +63,16 @@ export class Renderer {
   private platformCaches = new Map<string, HTMLCanvasElement>();
   private stars: [x: number, y: number, phase: number, size: number][] = [];
   private motes: [x: number, y: number, spd: number, phase: number][] = [];
-  private skyBands: string[] = [];
   /** Pre-baked silhouette strip (512px wide). Built once per shape/colour,
    *  then scrolled with integer drawImage offsets — no live sampling, no
    *  subpixel crawl, no antialiased diagonals. */
   private bandCache = new Map<string, HTMLCanvasElement>();
   /** Sun disc + glow, baked whenever the sky palette changes. */
   private sunSprite: HTMLCanvasElement | null = null;
+  /** Moon phase sprites (Full -> Waning Gibbous -> Half -> Crescent -> Eclipse), baked whenever the sky palette changes. */
+  private moonPhaseSprites: HTMLCanvasElement[] = [];
   /** Dark backing + icon per power-up kind, baked once. */
   private powerupSprites = new Map<PowerUpKind, HTMLCanvasElement>();
-  private cCloud = shade(ZONES[0].far, 0.07);
   /** HUD zoom (1 on desktop) — keeps the score/distance text readable on
    *  phones, where the whole canvas is scaled up from a small buffer. */
   private hudScale = 1;
@@ -140,12 +140,12 @@ export class Renderer {
   }
 
   // Cache every derived platform colour once per zone change (never per frame).
-  refreshZoneColors(Z: Zone) {
-    this.cCloud = shade(Z.far, 0.07);
+  refreshZoneColors(_Z: Zone) {
     // Band tiles are immutable and keyed by (geometry, pure zone colour) —
     // the fade draws each biome with its own pure colours, so the cache
     // stays bounded (one tile per biome band) and never needs clearing.
     this.bakeSun();
+    this.bakeMoonPhases();
   }
 
   private bakeSun() {
@@ -156,7 +156,7 @@ export class Renderer {
     cv.height = size;
     const c = cv.getContext('2d')!;
     const r = 24;
-    c.globalAlpha = 0.12;
+    c.globalAlpha = 0.14;
     c.fillStyle = this.g.zone.sunB;
     for (let y = -gr; y <= gr; y++) {
       const hw = Math.round(Math.sqrt(Math.max(0, gr * gr - y * y)));
@@ -164,7 +164,6 @@ export class Renderer {
       c.fillRect(gr - hw, gr + y, hw * 2, 1);
     }
     c.globalAlpha = 1;
-    // Round the circle width so several centre rows share its maximum width.
     for (let y = -r; y <= r; y++) {
       const hw = Math.round(Math.sqrt(Math.max(0, r * r - y * y)));
       if (hw < 2) continue;
@@ -172,6 +171,109 @@ export class Renderer {
       c.fillRect(gr - hw, gr + y, hw * 2, 1);
     }
     this.sunSprite = cv;
+  }
+
+  private bakeMoonPhases() {
+    const gr = 32;
+    const size = gr * 2 + 1;
+    const r = 24;
+    this.moonPhaseSprites = [];
+
+    // Progressive phase angles: Full (0), Waning Gibbous (0.33π), Half Moon (0.5π), Waning Crescent (0.67π), Blood Eclipse (π)
+    const phaseAngles = [
+      0,
+      Math.PI * 0.33,
+      Math.PI * 0.5,
+      Math.PI * 0.67,
+      Math.PI,
+    ];
+
+    for (let phase = 0; phase < 5; phase++) {
+      const cv = document.createElement('canvas');
+      cv.width = size;
+      cv.height = size;
+      const c = cv.getContext('2d')!;
+      const isEclipse = phase === 4;
+
+      // 1. Soft atmospheric lunar aura
+      if (isEclipse) {
+        c.globalAlpha = 0.22;
+        c.fillStyle = '#ff2e63';
+        for (let y = -gr; y <= gr; y++) {
+          const hw = Math.round(Math.sqrt(Math.max(0, gr * gr - y * y)));
+          if (hw <= 0) continue;
+          c.fillRect(gr - hw, gr + y, hw * 2, 1);
+        }
+      } else {
+        c.globalAlpha = 0.12;
+        c.fillStyle = '#b8e2ff';
+        for (let y = -gr; y <= gr; y++) {
+          const hw = Math.round(Math.sqrt(Math.max(0, gr * gr - y * y)));
+          if (hw <= 0) continue;
+          c.fillRect(gr - hw, gr + y, hw * 2, 1);
+        }
+      }
+
+      // 2. Translucent spherical earthshine disc (shadow backing)
+      c.globalAlpha = isEclipse ? 0.95 : 0.28;
+      c.fillStyle = isEclipse ? '#09030d' : '#080d1e';
+      for (let y = -r; y <= r; y++) {
+        const hw = Math.round(Math.sqrt(Math.max(0, r * r - y * y)));
+        if (hw < 2) continue;
+        c.fillRect(gr - hw, gr + y, hw * 2, 1);
+      }
+      c.globalAlpha = 1;
+
+      // 3. Moon illuminated surface with curved phase terminator & craters
+      const angle = phaseAngles[phase];
+
+      for (let y = -r; y <= r; y++) {
+        const hw = Math.round(Math.sqrt(Math.max(0, r * r - y * y)));
+        if (hw < 2) continue;
+        const xTerm = Math.round(Math.cos(angle) * hw);
+        const yFrac = (y + r) / (2 * r);
+
+        if (isEclipse) {
+          // Blood Moon: fiery glowing rim with deep eclipsed dark center
+          for (let x = -hw; x <= hw; x++) {
+            const d_sq = x * x + y * y;
+            if (d_sq >= 16 * 16 && d_sq <= 24 * 24) {
+              const rimFrac = (Math.sqrt(d_sq) - 16) / 8;
+              c.fillStyle = mix('#ff2e63', '#ffd166', rimFrac * 0.7);
+              c.fillRect(gr + x, gr + y, 1, 1);
+            } else if (d_sq >= 10 * 10) {
+              c.fillStyle = '#4a0822';
+              c.fillRect(gr + x, gr + y, 1, 1);
+            }
+          }
+        } else {
+          // Lit surface from -hw to xTerm with soft lunar crater geography
+          for (let x = -hw; x <= xTerm; x++) {
+            const xFrac = (x + hw) / Math.max(1, hw + xTerm);
+            let col = mix('#ffffff', '#c8e2fa', yFrac * 0.45 + xFrac * 0.4);
+            if (xFrac > 0.85) {
+              col = mix(col, '#84a8cc', ((xFrac - 0.85) / 0.15) * 0.6);
+            }
+
+            // Authentic lunar craters (maria)
+            const nx = x + 12;
+            const ny = y + 12;
+            const isMaria =
+              (nx >= 4 && nx <= 10 && ny >= 6 && ny <= 12) ||
+              (nx >= 2 && nx <= 8 && ny >= 14 && ny <= 20) ||
+              (nx >= 12 && nx <= 16 && ny >= 10 && ny <= 15);
+            if (isMaria && phase <= 2) {
+              col = mix(col, '#98b8d8', 0.28);
+            }
+
+            c.fillStyle = col;
+            c.fillRect(gr + x, gr + y, 1, 1);
+          }
+        }
+      }
+
+      this.moonPhaseSprites.push(cv);
+    }
   }
 
   private powerupSprite(kind: PowerUpKind): HTMLCanvasElement {
@@ -190,41 +292,96 @@ export class Renderer {
     c.fillRect(1, 16, 16, 1);
     c.fillRect(1, 1, 1, 15);
     c.fillRect(16, 1, 1, 15);
+
     if (kind === 'shield') {
+      // 1. Aegis Shield: dark base, glowing cyan rim, radiant center crest
+      c.fillStyle = '#165e68';
       c.fillRect(5, 4, 8, 1);
-      c.fillRect(4, 5, 10, 1);
-      c.fillRect(4, 6, 10, 1);
-      c.fillRect(4, 7, 10, 1);
-      c.fillRect(4, 8, 10, 1);
-      c.fillRect(4, 9, 10, 1);
-      c.fillRect(5, 10, 8, 1);
-      c.fillRect(5, 11, 8, 1);
-      c.fillRect(6, 12, 6, 1);
-      c.fillRect(7, 13, 4, 1);
-      c.fillRect(8, 14, 2, 1);
-    } else if (kind === 'shoes') {
-      c.fillRect(4, 11, 4, 2);
-      c.fillRect(4, 8, 2, 3);
-      c.fillRect(10, 11, 4, 2);
-      c.fillRect(10, 8, 2, 3);
-    } else if (kind === 'triple') {
-      c.fillRect(4, 4, 3, 1);
-      c.fillRect(5, 5, 1, 4);
-      c.fillRect(8, 7, 3, 1);
-      c.fillRect(9, 8, 1, 4);
-      c.fillRect(12, 10, 3, 1);
-      c.fillRect(13, 11, 1, 4);
-    } else {
-      // Center hub
-      c.fillStyle = '#2a1a3c';
-      c.fillRect(6, 6, 7, 7);
+      c.fillRect(4, 5, 10, 5);
+      c.fillRect(5, 10, 8, 2);
+      c.fillRect(6, 12, 6, 2);
+      c.fillRect(7, 14, 4, 1);
+      c.fillRect(8, 15, 2, 1);
+
       c.fillStyle = col;
-      c.fillRect(7, 7, 5, 5);
-      // Three thin blades at 120-degree angles; the top blade reaches into
-      // the hub so it reads as one connected rotor.
-      c.fillRect(8, 1, 2, 7);
-      c.fillRect(3, 9, 5, 2);
-      c.fillRect(11, 9, 5, 2);
+      c.fillRect(6, 5, 6, 4);
+      c.fillRect(6, 9, 6, 2);
+      c.fillRect(7, 11, 4, 2);
+      c.fillRect(8, 13, 2, 1);
+
+      c.fillStyle = '#ffffff';
+      c.fillRect(5, 4, 8, 1);
+      c.fillRect(4, 5, 1, 4);
+      c.fillRect(8, 6, 2, 6);
+      c.fillRect(6, 8, 6, 2);
+    } else if (kind === 'shoes') {
+      // 2. Hermes Winged Sneaker: winged feather + high-top boot + sole
+      c.fillStyle = '#ffffff';
+      c.fillRect(3, 4, 3, 2);
+      c.fillRect(4, 6, 3, 2);
+      c.fillRect(5, 8, 3, 1);
+
+      c.fillStyle = '#ff9e22';
+      c.fillRect(7, 6, 4, 3);
+      c.fillStyle = '#ffffff';
+      c.fillRect(7, 5, 4, 1);
+
+      c.fillStyle = col;
+      c.fillRect(6, 9, 7, 3);
+      c.fillRect(9, 10, 5, 2);
+
+      c.fillStyle = '#fff4b8';
+      c.fillRect(12, 11, 2, 2);
+      c.fillRect(8, 7, 2, 1);
+      c.fillRect(8, 9, 2, 1);
+
+      c.fillStyle = '#ffffff';
+      c.fillRect(5, 12, 10, 2);
+      c.fillStyle = '#3a2010';
+      c.fillRect(5, 14, 10, 1);
+    } else if (kind === 'triple') {
+      // 3. Triple Jump: 3 ascending neon energy chevrons (^ ^ ^)
+      c.fillStyle = '#ffffff';
+      c.fillRect(8, 3, 2, 2);
+      c.fillStyle = '#e2b8ff';
+      c.fillRect(6, 5, 2, 2);
+      c.fillRect(10, 5, 2, 2);
+      c.fillStyle = col;
+      c.fillRect(4, 7, 2, 2);
+      c.fillRect(12, 7, 2, 2);
+
+      c.fillStyle = '#ffffff';
+      c.fillRect(8, 8, 2, 2);
+      c.fillStyle = col;
+      c.fillRect(6, 10, 2, 2);
+      c.fillRect(10, 10, 2, 2);
+
+      c.fillStyle = '#ffffff';
+      c.fillRect(8, 13, 2, 2);
+      c.fillStyle = '#6e2fa8';
+      c.fillRect(7, 15, 4, 1);
+    } else {
+      // 4. Propeller Beanie: dual aerodynamic rotor blades + cap dome & golden brim
+      c.fillStyle = '#ffffff';
+      c.fillRect(3, 4, 5, 2);
+      c.fillRect(10, 4, 5, 2);
+      c.fillStyle = '#ffd166';
+      c.fillRect(8, 3, 2, 4);
+
+      c.fillStyle = '#ff385c';
+      c.fillRect(6, 7, 6, 2);
+      c.fillRect(5, 9, 8, 3);
+
+      c.fillStyle = '#ff7a90';
+      c.fillRect(6, 7, 3, 2);
+      c.fillRect(5, 9, 3, 3);
+      c.fillStyle = '#ffffff';
+      c.fillRect(6, 8, 2, 1);
+
+      c.fillStyle = '#ffd166';
+      c.fillRect(4, 12, 10, 2);
+      c.fillStyle = '#e8a838';
+      c.fillRect(3, 13, 12, 1);
     }
     this.powerupSprites.set(kind, cv);
     return cv;
@@ -244,6 +401,7 @@ export class Renderer {
     const frac = df / ZONE_LEN_M - zi;
     const fadeT = frac > FADE_START_FRAC ? Math.min(1, (frac - FADE_START_FRAC) / FADE_WINDOW) : 0;
     const t = Math.floor(fadeT * FADE_STEPS) / FADE_STEPS;
+    this.zoneFadeT = fadeT;
     if (zi !== this.lastZoneZi || t !== this.lastZoneT) {
       const ziChanged = zi !== this.lastZoneZi;
       this.lastZoneZi = zi;
@@ -256,34 +414,54 @@ export class Renderer {
       this.g.zone = lerpZone(ZONES[i], ZONES[ni], t);
       this.transOut = ZONES[i];
       this.transIn = ZONES[ni];
-      this.zoneFadeT = fadeT;
       this.refreshZoneColors(this.g.zone);
-      this.skyBands.length = 0;
-      for (let b = 0; b < 15; b++) {
-        this.skyBands.push(sampleSky(this.g.zone.sky, (b + 0.5) / 15));
-      }
     }
 
     c.imageSmoothingEnabled = false;
     c.setTransform(1, 0, 0, 1, 0, 0);
     this.drawSky();
 
+    // Parallax background (clouds, far ridges, landmarks):
+    // Damped shake (0.25) keeps distant silhouettes stable against the static sky without jarring jitter.
     c.save();
-    // Integer shake only — subpixel translate would blur the whole scene.
-    // worldOffsetY pushes the world down on tall screens so the ground sits
-    // near the bottom and the extra space becomes sky instead of black bars.
-    // worldLift raises the world on phones so the play field sits higher.
+    c.translate(
+      Math.round(this.g.shakeX * 0.25),
+      Math.round(this.g.shakeY * 0.25) + worldOffsetY() + this.worldLift,
+    );
+    this.drawParallax();
+    c.restore();
+
+    // Foreground world (platforms, springs, spikes, pickups, enemies, player, particles, texts, shockwave):
+    // Full impact shake so stomp, slam, and landing feel punchy and juicy.
+    c.save();
     c.translate(
       Math.round(this.g.shakeX),
       Math.round(this.g.shakeY) + worldOffsetY() + this.worldLift,
     );
     this.applyDeathZoom();
-    this.drawParallax();
     this.drawWorld();
     this.particles.draw(c, this.g.camX);
     if (this.g.phase !== 'dead') this.drawPlayer();
     this.drawDeathShockwave();
     this.texts.draw(c, this.g.camX);
+
+    // Subtle atmospheric ambient lighting on foreground (noticeable difference between day and night, but not too extreme)
+    const period = VW + 140;
+    const progress = 300 - this.g.camX * 0.12;
+    const cycle = Math.floor(progress / period);
+    const isMoon = (((cycle % 2) + 2) % 2) === 1;
+    const angle = ((progress - 300) / period) * Math.PI;
+    const nightT = clamp(0.5 - 0.5 * Math.cos(angle), 0, 1);
+    const nightIndex = Math.max(0, Math.floor((-cycle - 1) / 2));
+    const isEclipse = isMoon && nightIndex >= 4;
+
+    if (nightT > 0.05) {
+      c.globalAlpha = isEclipse ? nightT * 0.16 : nightT * 0.13;
+      c.fillStyle = isEclipse ? '#680c26' : '#081232';
+      c.fillRect(-40, -40, VW + 80, VH + 80);
+      c.globalAlpha = 1;
+    }
+
     c.restore();
 
     this.drawForeground();
@@ -356,30 +534,73 @@ export class Renderer {
   private drawSky() {
     const c = this.ctx;
     const bh = Math.ceil(VH / 15);
+
+    // Celestial geometry & Day/Night progression
+    const period = VW + 140;
+    const progress = 300 - this.g.camX * 0.12;
+    const celestialX = (((progress % period) + period) % period) - 70;
+    const cycle = Math.floor(progress / period);
+    const isMoon = (((cycle % 2) + 2) % 2) === 1;
+
+    // Continuous day/night curve: 0.0 (Day / Sun zenith) -> 0.5 (Dusk/Dawn) -> 1.0 (Night / Moon zenith)
+    const angle = ((progress - 300) / period) * Math.PI;
+    const dayFactor = Math.cos(angle);
+    const nightT = clamp(0.5 - 0.5 * dayFactor, 0, 1);
+
+    let moonPhase = 0;
+    let sprite: HTMLCanvasElement | null = null;
+    if (isMoon) {
+      const nightIndex = Math.max(0, Math.floor((-cycle - 1) / 2));
+      moonPhase = Math.min(4, nightIndex);
+      sprite = this.moonPhaseSprites[moonPhase] ?? this.moonPhaseSprites[0] ?? null;
+    } else {
+      sprite = this.sunSprite;
+    }
+
+    // Blend sky gradient: Day Sky -> Night Sky (and Eclipse sky if final phase)
+    const baseSky = this.g.zone.sky;
+    const nightSky = this.g.zone.skyNight;
+    const isEclipse = isMoon && moonPhase === 4;
+    const eclipseSky: [string, string, string, string] = ['#0a0208', '#1c0514', '#3d0a24', '#661436'];
+
+    const targetSky = isEclipse ? eclipseSky : nightSky;
+    const activeStops: [string, string, string, string] = [
+      mix(baseSky[0], targetSky[0], nightT),
+      mix(baseSky[1], targetSky[1], nightT),
+      mix(baseSky[2], targetSky[2], nightT),
+      mix(baseSky[3], targetSky[3], nightT),
+    ];
+
     for (let i = 0; i < 15; i++) {
-      c.fillStyle = this.skyBands[i] || '#000';
+      c.fillStyle = sampleSky(activeStops, (i + 0.5) / 15);
       c.fillRect(0, i * bh, VW, bh + 1);
     }
-    // sun — baked 1px-per-pixel disc + glow, same pixel grid as everything else
-    const period = VW + 140;
-    const sunX = (((300 - this.g.camX * 0.04) % period) + period) % period - 70;
-    if (this.sunSprite) {
+
+    // Celestial body (Sun / Moon)
+    if (sprite) {
       // Mobile: low behind the mountains — only its top peeks over them.
-      c.drawImage(this.sunSprite, Math.round(sunX) - 32, (this.mobileView ? 100 : 68) - 32);
+      c.drawImage(sprite, Math.round(celestialX) - 32, (this.mobileView ? 100 : 68) - 32);
     }
-    // stars
-    c.fillStyle = this.g.zone.star;
-    for (const [sx0, sy0, ph, sz] of this.stars) {
-      const x = ((sx0 - this.g.camX * 0.06) % 1400 + 1400) % 1400;
-      if (x > VW) continue;
-      const tw = Math.sin(this.g.frame * 0.05 + ph);
-      if (tw < -0.4) continue;
-      c.globalAlpha = 0.35 + 0.65 * (tw * 0.5 + 0.5);
-      // Spread stars across the sky rather than bunching in the top 140px.
-      const starY = (sy0 / 140) * (VH * 0.66);
-      c.fillRect(Math.round(x), Math.round(starY), sz, sz);
+
+    // Stars: dynamically fade in at dusk/night, hidden during bright day
+    if (nightT > 0.15) {
+      const starVisibility = Math.min(1, (nightT - 0.15) / 0.65);
+      const starCol = isEclipse ? '#ffd166' : this.g.zone.star;
+      c.fillStyle = starCol;
+      const baseTw = this.g.frame * 0.05;
+      const camOffset = this.g.camX * 0.06;
+      const yFactor = (VH * 0.66) / 140;
+      for (const [sx0, sy0, ph, sz] of this.stars) {
+        const x = ((sx0 - camOffset) % 1400 + 1400) % 1400;
+        if (x > VW) continue;
+        const tw = Math.sin(baseTw + ph);
+        if (tw < -0.4) continue;
+        const twinkle = 0.35 + 0.65 * (tw * 0.5 + 0.5);
+        c.globalAlpha = starVisibility * twinkle;
+        c.fillRect(Math.round(x), Math.round(sy0 * yFactor), sz, sz);
+      }
+      c.globalAlpha = 1;
     }
-    c.globalAlpha = 1;
   }
 
   private getBandTile(
@@ -428,38 +649,51 @@ export class Renderer {
     const tile = this.getBandTile(horizon, amp, freq, sharpness, seed, col);
     const tw = tile.width;
     // Integer scroll only — never subpixel. Blit enough copies to cover any
-    // viewport width (band tiles are 512px; VW is 240/400 today, but the
-    // renderer doesn't assume that).
+    // viewport width with extra margin for shake/scroll padding.
     let ox = Math.floor(this.g.camX * spd) % tw;
     if (ox < 0) ox += tw;
     const c = this.ctx;
-    for (let x = -ox; x < VW; x += tw) c.drawImage(tile, x, 0);
+    for (let x = -ox - tw; x < VW + tw; x += tw) c.drawImage(tile, x, 0);
   }
 
   private drawParallax() {
     const c = this.ctx;
 
-    // soft distant clouds — always subtle, low contrast
-    c.globalAlpha = 0.6;
-    c.fillStyle = this.cCloud;
-    for (let i = 0; i < 4; i++) {
-      const cw = 46 + ((i * 37) % 30);
-      const x = ((i * 340 + 20 - this.g.camX * 0.1) % 1500 + 1500) % 1500;
-      if (x > VW + 60) continue;
-      const y = 36 + ((i * 53) % 54);
-      c.fillRect(Math.round(x), y, cw, 4);
-      c.fillRect(Math.round(x + 10), y - 3, cw - 26, 3);
+    // Celestial progress for atmospheric cloud lighting
+    const period = VW + 140;
+    const progress = 300 - this.g.camX * 0.12;
+    const angle = ((progress - 300) / period) * Math.PI;
+    const nightT = clamp(0.5 - 0.5 * Math.cos(angle), 0, 1);
+
+    // Soft high-altitude distant clouds — gentle slow drift, far above the mountain peaks
+    const dayCloud = mix('#ffffff', this.g.zone.star, 0.2);
+    const nightCloud = mix(this.g.zone.far, '#0b0616', 0.6);
+    const cloudColor = mix(dayCloud, nightCloud, nightT);
+    c.globalAlpha = 0.35 - nightT * 0.12;
+    c.fillStyle = cloudColor;
+    for (let i = 0; i < 5; i++) {
+      const cw = 42 + ((i * 31) % 24);
+      // High in the sky: y between 10 and 32 (mountain peaks start around 80-120)
+      const y = 10 + ((i * 19) % 22);
+      // Independent slow atmospheric drift
+      const x = (((i * 280 + 15 - this.g.camX * 0.03 - this.g.frame * 0.08) % 1400) + 1400) % 1400;
+      if (x > VW + 50 && x < 1400 - 50) continue;
+      const rx = x > VW + 50 ? x - 1400 : x;
+      c.fillRect(Math.round(rx), y, cw, 3);
+      c.fillRect(Math.round(rx + 8), y - 2, cw - 18, 2);
     }
     c.globalAlpha = 1;
 
-    // Biome structure crossfade: outside the transition window one layer is
-    // drawn; inside it the outgoing biome is drawn fully and the incoming one
-    // fades in on top — a clean weighted blend with no sky bleed-through.
+    // Biome structure crossfade:
+    // Outgoing biome smoothly fades out from 1 down to 0,
+    // incoming biome smoothly fades in from 0 up to 1.
     const t = this.zoneFadeT;
-    if (t <= 0 || t >= 1) {
-      this.drawParallaxLayer(this.g.zone, 1);
-    } else {
+    if (t <= 0) {
       this.drawParallaxLayer(this.transOut, 1);
+    } else if (t >= 1) {
+      this.drawParallaxLayer(this.transIn, 1);
+    } else {
+      this.drawParallaxLayer(this.transOut, 1 - t);
       this.drawParallaxLayer(this.transIn, t);
     }
   }
@@ -471,31 +705,28 @@ export class Renderer {
     const bg = Z.bg;
     const back = mix(Z.far, Z.mid, 0.5);
     c.globalAlpha = alpha;
-    // Mobile view spreads the planes: the ridge sits higher and the landmark
-    // rows sink, giving each parallax layer clear vertical breathing room.
     const m = this.mobileView;
     if (bg === 'jungle') {
       this.seeBand(0.12, m ? 116 : 120, m ? 40 : 30, 0.02, 0.15, 0, Z.far);
-      this.drawLandmarks(Z, back, 0.19, m ? 124 : 142, 47, 29, Z.decoMid, m ? 0.8 : 0.65);
-      this.drawLandmarks(Z, Z.mid, 0.28, m ? 158 : 160, 56, 73, Z.decoMid, 1);
+      this.drawLandmarks(Z, back, 0.19, m ? 124 : 142, 38, 29, Z.decoMid, m ? 0.8 : 0.65);
+      this.drawLandmarks(Z, Z.mid, 0.28, m ? 158 : 160, 46, 73, Z.decoMid, 1);
     } else if (bg === 'desert') {
       this.seeBand(0.12, m ? 120 : 124, m ? 40 : 24, 0.014, 0.08, 0, Z.far);
-      this.drawLandmarks(Z, back, 0.19, m ? 126 : 144, 72, 23, Z.decoMid, m ? 0.8 : 0.65);
-      this.drawLandmarks(Z, Z.mid, 0.28, m ? 160 : 162, 84, 67, Z.decoMid, 1);
+      this.drawLandmarks(Z, back, 0.19, m ? 126 : 144, 44, 23, Z.decoMid, m ? 0.8 : 0.65);
+      this.drawLandmarks(Z, Z.mid, 0.28, m ? 160 : 162, 54, 67, Z.decoMid, 1);
     } else if (bg === 'tundra') {
       this.seeBand(0.11, m ? 116 : 118, m ? 40 : 30, 0.018, 1.6, 0.5, Z.far);
-      this.drawLandmarks(Z, back, 0.18, m ? 126 : 144, 53, 41, Z.decoMid, m ? 0.8 : 0.65);
-      this.drawLandmarks(Z, Z.mid, 0.28, m ? 160 : 162, 58, 59, Z.decoMid, 1);
+      this.drawLandmarks(Z, back, 0.18, m ? 126 : 144, 40, 41, Z.decoMid, m ? 0.8 : 0.65);
+      this.drawLandmarks(Z, Z.mid, 0.28, m ? 160 : 162, 50, 59, Z.decoMid, 1);
     } else {
       this.seeBand(0.13, m ? 118 : 122, m ? 40 : 38, 0.05, 0.2, 0.9, Z.far);
-      this.drawLandmarks(Z, back, 0.18, m ? 124 : 142, 55, 19, Z.decoFar, m ? 0.8 : 0.7);
-      this.drawLandmarks(Z, Z.mid, 0.28, m ? 158 : 160, 62, 37, Z.decoFar, 1);
+      this.drawLandmarks(Z, back, 0.18, m ? 124 : 142, 42, 19, Z.decoFar, m ? 0.8 : 0.7);
+      this.drawLandmarks(Z, Z.mid, 0.28, m ? 158 : 160, 52, 37, Z.decoFar, 1);
     }
     c.globalAlpha = 1;
   }
 
-  // Grounded landmark silhouettes — trees / cacti / icebergs / buildings share
-  // one calm treeline base so nothing floats and everything reads as a set.
+  // Grounded landmark silhouettes — infinite smooth continuous virtual grid (zero jitter/popping)
   private drawLandmarks(
     Z: Zone,
     col: string,
@@ -509,23 +740,22 @@ export class Renderer {
     const c = this.ctx;
     const bg = Z.bg;
 
-    // Flat grounded strip under landmarks — integer-scrolled, no live sampling.
-    // Landmarks sit on a fixed baseY so they never swim relative to the ground.
+    // Flat grounded strip under landmarks with margin padding so shake never reveals edge gaps.
     c.fillStyle = col;
-    c.fillRect(0, Math.round(baseY), VW, VH + 40 - Math.round(baseY));
+    c.fillRect(-40, Math.round(baseY), VW + 80, VH + 60 - Math.round(baseY));
 
-    const cam = Math.floor(this.g.camX * spd);
-    const period = VW + spacing * 2;
-    for (let i = 0; i < 10; i++) {
-      const seed = i * seedStep;
-      // uneven spacing so they never march in a rigid line
-      const jitter = Math.floor((hash(seed + 11) - 0.5) * spacing * 0.85);
-      const raw = i * spacing + jitter - cam;
-      const nx = Math.floor(((raw % period) + period) % period - spacing);
-      // skip landmarks too close to viewport edges so they don't pop in/out
-      if (nx < -20 || nx > VW + 20) continue;
+    const cam = this.g.camX * spd;
+    const startK = Math.floor((cam - 80) / spacing);
+    const endK = Math.ceil((cam + VW + 80) / spacing);
+
+    for (let k = startK; k <= endK; k++) {
+      const seed = ((k % 10000 + 10000) % 10000) * seedStep;
+      // Controlled jitter per landmark index
+      const jitter = (hash(seed + 11) - 0.5) * spacing * 0.35;
+      const worldX = k * spacing + jitter;
+      const nx = Math.round(worldX - cam);
+      if (nx < -70 || nx > VW + 70) continue;
       const roll = hash(seed);
-      // Planted on the solid strip
       const ground = Math.round(baseY) + 2;
       if (bg === 'jungle') this.drawJungleShape(roll, nx, ground, seed, scale, col);
       else if (bg === 'desert') this.drawDesertShape(roll, nx, ground, seed, scale, col);
@@ -537,71 +767,139 @@ export class Renderer {
   private drawJungleShape(roll: number, nx: number, ground: number, seed: number, scale: number, col: string) {
     const c = this.ctx;
     c.fillStyle = col;
-    // tree family: broad canopy / tall palm / twin trunk
-    const h = Math.round((22 + Math.floor(hash(seed + 3) * 20)) * scale);
-    if (roll < 0.4) {
-      const cw = 26 + hash(seed + 4) * 22;
-      c.fillRect(Math.round(nx - 2), ground - h + 4, 5, h - 2);
-      c.fillRect(Math.round(nx - cw / 2), ground - h, cw, 9);
-      c.fillRect(Math.round(nx - cw * 0.3), ground - h - 6, cw * 0.6, 6);
+    const h = Math.round((22 + Math.floor(hash(seed + 3) * 18)) * scale);
+
+    if (roll < 0.25) {
+      // 1. Broad canopy rainforest banyan tree: compact tiered dome
+      const cw = 20 + hash(seed + 4) * 12;
+      c.fillRect(Math.round(nx - 3), ground - 3, 7, 3);
+      c.fillRect(Math.round(nx - 2), ground - h, 4, h + 2);
+      c.fillRect(Math.round(nx - cw / 2), ground - h - 3, Math.round(cw), 8);
+      c.fillRect(Math.round(nx - cw * 0.3), ground - h - 8, Math.round(cw * 0.6), 6);
+      c.fillRect(Math.round(nx - cw * 0.15), ground - h - 11, Math.round(cw * 0.3), 4);
+    } else if (roll < 0.5) {
+      // 2. Jungle palm: elegant compact fronds connected to crown hub
+      c.fillRect(Math.round(nx - 1), ground - h, 3, h + 2);
+      c.fillRect(Math.round(nx - 2), ground - h - 3, 5, 5);
+      // Left fronds
+      c.fillRect(Math.round(nx - 5), ground - h - 2, 4, 3);
+      c.fillRect(Math.round(nx - 11), ground - h, 8, 3);
+      c.fillRect(Math.round(nx - 13), ground - h + 2, 3, 2);
+      // Right fronds
+      c.fillRect(Math.round(nx + 2), ground - h - 3, 4, 3);
+      c.fillRect(Math.round(nx + 4), ground - h - 1, 9, 3);
+      c.fillRect(Math.round(nx + 12), ground - h + 2, 3, 2);
+      // Top fronds
+      c.fillRect(Math.round(nx - 6), ground - h - 6, 6, 3);
+      c.fillRect(Math.round(nx + 1), ground - h - 7, 6, 3);
+      c.fillRect(Math.round(nx - 1), ground - h - 9, 3, 5);
     } else if (roll < 0.7) {
-      c.fillRect(Math.round(nx), ground - h, 4, h);
-      c.fillRect(Math.round(nx - 13), ground - h - 2, 13, 3);
-      c.fillRect(Math.round(nx + 3), ground - h - 3, 14, 3);
-      c.fillRect(Math.round(nx - 7), ground - h - 6, 9, 3);
-      c.fillRect(Math.round(nx + 2), ground - h - 7, 7, 3);
+      // 3. Forked twin-trunk jungle tree
+      const splitH = Math.round(h * 0.4);
+      c.fillRect(Math.round(nx - 2), ground - splitH, 5, splitH + 2);
+      // Left branch
+      c.fillRect(Math.round(nx - 4), ground - Math.round(h * 0.5), 3, 4);
+      c.fillRect(Math.round(nx - 6), ground - h + 2, 3, Math.round(h * 0.6));
+      c.fillRect(Math.round(nx - 11), ground - h - 1, 10, 6);
+      c.fillRect(Math.round(nx - 9), ground - h - 5, 7, 4);
+      // Right branch
+      c.fillRect(Math.round(nx + 1), ground - Math.round(h * 0.5), 3, 4);
+      c.fillRect(Math.round(nx + 3), ground - h, 3, Math.round(h * 0.65));
+      c.fillRect(Math.round(nx + 1), ground - h - 4, 11, 6);
+      c.fillRect(Math.round(nx + 3), ground - h - 7, 7, 4);
+    } else if (roll < 0.85) {
+      // 4. Giant jungle spore mushroom
+      const capW = Math.round(18 * scale);
+      c.fillRect(Math.round(nx - 2), ground - h + 2, 4, h);
+      c.fillRect(Math.round(nx - capW / 2), ground - h - 2, capW, 5);
+      c.fillRect(Math.round(nx - capW * 0.32), ground - h - 6, Math.round(capW * 0.64), 5);
+      c.fillRect(Math.round(nx - capW * 0.16), ground - h - 8, Math.round(capW * 0.32), 3);
+      // Baby mushroom
+      c.fillRect(Math.round(nx + 4), ground - 6, 2, 6);
+      c.fillRect(Math.round(nx + 2), ground - 8, 5, 3);
     } else {
-      c.fillRect(Math.round(nx - 8), ground - h + 5, 4, h - 5);
-      c.fillRect(Math.round(nx + 4), ground - h - 2, 4, h);
-      c.fillRect(Math.round(nx - 14), ground - h + 1, 12, 6);
-      c.fillRect(Math.round(nx + 2), ground - h - 5, 12, 6);
+      // 5. Giant jungle fern tree with drooping vines
+      const fw = Math.round(20 * scale);
+      c.fillRect(Math.round(nx - 2), ground - h, 4, h + 2);
+      c.fillRect(Math.round(nx - fw / 2), ground - h - 3, fw, 5);
+      c.fillRect(Math.round(nx - fw * 0.35), ground - h - 7, Math.round(fw * 0.7), 5);
+      c.fillRect(Math.round(nx - fw * 0.18), ground - h - 10, Math.round(fw * 0.36), 4);
+      // Drooping hanging vine tendrils
+      c.fillRect(Math.round(nx - fw / 2 + 2), ground - h + 2, 2, 7);
+      c.fillRect(Math.round(nx + fw / 2 - 4), ground - h + 2, 2, 6);
+      c.fillRect(Math.round(nx - 5), ground - h + 2, 2, 4);
+      c.fillRect(Math.round(nx + 3), ground - h + 2, 2, 5);
     }
   }
 
   private drawDesertShape(roll: number, nx: number, ground: number, seed: number, scale: number, col: string) {
     const c = this.ctx;
     c.fillStyle = col;
-    // cactus family: saguaro / barrel / ocotillo
-    if (roll < 0.45) {
+
+    if (roll < 0.25) {
+      // 1. Multi-arm giant saguaro cactus
       const h = Math.round((16 + Math.floor(hash(seed + 3) * 16)) * scale);
-      c.fillRect(Math.round(nx), ground - h, 4, h);
+      c.fillRect(Math.round(nx), ground - h, 4, h + 2);
       c.fillRect(Math.round(nx - 5), ground - h + 7, 5, 3);
       c.fillRect(Math.round(nx - 5), ground - h + 3, 3, 6);
       c.fillRect(Math.round(nx + 4), ground - h + 10, 5, 3);
       c.fillRect(Math.round(nx + 6), ground - h + 5, 3, 7);
-    } else if (roll < 0.75) {
+    } else if (roll < 0.45) {
+      // 2. Barrel & prickly pear cactus cluster
       const h2 = Math.round((9 + Math.floor(hash(seed + 3) * 8)) * scale);
-      c.fillRect(Math.round(nx - 5), ground - h2, 11, h2);
-      c.fillRect(Math.round(nx - 3), ground - h2 - 3, 7, 3);
-    } else {
+      c.fillRect(Math.round(nx - 5), ground - h2, 11, h2 + 2);
+      c.fillRect(Math.round(nx - 3), ground - h2 - 3, 7, 4);
+      c.fillRect(Math.round(nx + 7), ground - 6, 6, 6);
+    } else if (roll < 0.65) {
+      // 3. Spiky ocotillo bush
       const h3 = Math.round((12 + Math.floor(hash(seed + 3) * 12)) * scale);
-      c.fillRect(Math.round(nx), ground - h3, 2, h3);
+      c.fillRect(Math.round(nx), ground - h3, 2, h3 + 2);
       c.fillRect(Math.round(nx - 6), ground - 9, 6, 3);
       c.fillRect(Math.round(nx + 2), ground - 11, 7, 3);
       c.fillRect(Math.round(nx - 4), ground - h3 + 3, 2, 8);
+      c.fillRect(Math.round(nx + 5), ground - h3 + 2, 2, 10);
+    } else if (roll < 0.85) {
+      // 4. Desert sandstone butte / mesa rock formation
+      const mw = Math.round((24 + Math.floor(hash(seed + 4) * 14)) * scale);
+      const mh = Math.round((14 + Math.floor(hash(seed + 3) * 12)) * scale);
+      c.fillRect(Math.round(nx - mw / 2), ground - mh, mw, mh + 2);
+      c.fillRect(Math.round(nx - mw * 0.4), ground - mh - 4, Math.round(mw * 0.8), 5);
+      c.fillRect(Math.round(nx - mw * 0.2), ground - mh - 7, Math.round(mw * 0.4), 4);
+    } else {
+      // 5. Ancient desert pyramid / obelisk
+      const pw = Math.round(22 * scale);
+      const ph = Math.round(18 * scale);
+      c.fillRect(Math.round(nx - pw / 2), ground - 6, pw, 8);
+      c.fillRect(Math.round(nx - pw * 0.35), ground - 11, Math.round(pw * 0.7), 6);
+      c.fillRect(Math.round(nx - pw * 0.2), ground - 15, Math.round(pw * 0.4), 5);
+      c.fillRect(Math.round(nx - 2), ground - ph, 4, 4);
     }
   }
 
-  private drawTundraShape(roll: number, nx: number, ground: number, seed: number, scale: number, col: string, tipCol: string) {
+  private drawTundraShape(
+    roll: number,
+    nx: number,
+    ground: number,
+    seed: number,
+    scale: number,
+    col: string,
+    tipCol: string,
+  ) {
     const c = this.ctx;
     c.fillStyle = col;
-    // pine forest (tundra firs) & snowy mountain shards (properly wide at base, narrow at top)
-    if (roll < 0.55) {
-      // snowy fir tree: trunk + 3 stacked triangles (widening towards the bottom)
+
+    if (roll < 0.28) {
+      // 1. Snowy evergreen fir tree
       const h = Math.round((24 + Math.floor(hash(seed + 3) * 16)) * scale);
       const top = ground - h;
-      // trunk
-      c.fillRect(Math.round(nx - 1), top, 3, h);
-      // top tier
+      c.fillRect(Math.round(nx - 1), top, 3, h + 2);
       c.fillRect(Math.round(nx - 4), top + 3, 9, 3);
       c.fillRect(Math.round(nx - 2), top, 5, 3);
-      // mid tier
       c.fillRect(Math.round(nx - 8), top + 9, 17, 4);
       c.fillRect(Math.round(nx - 5), top + 6, 11, 3);
-      // bottom tier
       c.fillRect(Math.round(nx - 12), top + 17, 25, 5);
       c.fillRect(Math.round(nx - 9), top + 13, 19, 4);
-      // snowy branch tips
+      // Snowy branch tips
       c.fillStyle = tipCol;
       c.fillRect(Math.round(nx - 1), top, 3, 1);
       c.fillRect(Math.round(nx - 3), top + 3, 2, 1);
@@ -611,11 +909,25 @@ export class Renderer {
       c.fillRect(Math.round(nx - 11), top + 17, 4, 1);
       c.fillRect(Math.round(nx + 7), top + 17, 4, 1);
       c.fillStyle = col;
-    } else {
-      // snowy glacial peak mountain shard (wide base, narrow peak)
+    } else if (roll < 0.5) {
+      // 2. Twin pine tree cluster (tall pine + smaller companion)
+      const h = Math.round(26 * scale);
+      const top = ground - h;
+      c.fillRect(Math.round(nx - 3), top, 3, h + 2);
+      c.fillRect(Math.round(nx - 7), top + 4, 9, 4);
+      c.fillRect(Math.round(nx - 10), top + 11, 15, 5);
+      const h2 = Math.round(14 * scale);
+      c.fillRect(Math.round(nx + 5), ground - h2, 2, h2 + 2);
+      c.fillRect(Math.round(nx + 2), ground - h2 + 2, 8, 4);
+      c.fillRect(Math.round(nx + 1), ground - h2 + 6, 10, 4);
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx - 4), top, 3, 1);
+      c.fillRect(Math.round(nx + 4), ground - h2, 3, 1);
+      c.fillStyle = col;
+    } else if (roll < 0.72) {
+      // 3. Snowy glacial peak mountain shard
       const h = Math.round((20 + Math.floor(hash(seed + 3) * 24)) * scale);
       const w = Math.round((28 + Math.floor(hash(seed + 4) * 20)) * scale);
-      // draw a pointed peak mountain using vertical rectangles
       const halfW = w / 2;
       for (let colOffset = -Math.floor(halfW); colOffset <= Math.floor(halfW); colOffset++) {
         const ratio = 1 - Math.abs(colOffset) / halfW;
@@ -624,48 +936,161 @@ export class Renderer {
           c.fillRect(Math.round(nx + colOffset), ground - colH, 1, colH + 2);
         }
       }
-      // snow cap peak
       c.fillStyle = tipCol;
       c.fillRect(Math.round(nx - 2), ground - h, 5, 2);
       c.fillRect(Math.round(nx - 4), ground - h + 2, 9, 2);
       c.fillStyle = col;
+    } else if (roll < 0.86) {
+      // 4. Steep arctic horn mountain peak
+      const h = Math.round((24 + Math.floor(hash(seed + 3) * 20)) * scale);
+      const w = Math.round(20 * scale);
+      const halfW = w / 2;
+      for (let colOffset = -Math.floor(halfW); colOffset <= Math.floor(halfW); colOffset++) {
+        const ratio = Math.pow(1 - Math.abs(colOffset) / halfW, 1.4);
+        const colH = Math.round(h * ratio);
+        if (colH > 0) {
+          c.fillRect(Math.round(nx + colOffset), ground - colH, 1, colH + 2);
+        }
+      }
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx - 1), ground - h, 3, 3);
+      c.fillRect(Math.round(nx - 3), ground - h + 3, 7, 2);
+      c.fillStyle = col;
+    } else {
+      // 5. Dense arctic pine grove trio
+      const h = Math.round(22 * scale);
+      // Center tree
+      c.fillRect(Math.round(nx - 1), ground - h, 3, h + 2);
+      c.fillRect(Math.round(nx - 5), ground - h + 4, 11, 4);
+      c.fillRect(Math.round(nx - 8), ground - h + 10, 17, 5);
+      // Left companion
+      c.fillRect(Math.round(nx - 8), ground - 12, 2, 14);
+      c.fillRect(Math.round(nx - 11), ground - 10, 7, 4);
+      // Right companion
+      c.fillRect(Math.round(nx + 7), ground - 15, 2, 17);
+      c.fillRect(Math.round(nx + 4), ground - 13, 8, 4);
+      // Snow tips
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx - 2), ground - h, 4, 1);
+      c.fillRect(Math.round(nx - 10), ground - 12, 4, 1);
+      c.fillRect(Math.round(nx + 5), ground - 15, 4, 1);
+      c.fillStyle = col;
     }
   }
 
-  private drawCityShape(roll: number, nx: number, ground: number, seed: number, scale: number, col: string, tipCol: string) {
+  private drawCityShape(
+    roll: number,
+    nx: number,
+    ground: number,
+    seed: number,
+    scale: number,
+    col: string,
+    tipCol: string,
+  ) {
     const c = this.ctx;
     c.fillStyle = col;
-    // city family: antenna slab / twin towers / stepped block
     const h = Math.round((24 + Math.floor(hash(seed + 3) * 34)) * scale);
     const bw = Math.round((16 + Math.floor(hash(seed + 4) * 20)) * scale);
     const top = ground - h;
-    if (roll < 0.35) {
-      c.fillRect(Math.round(nx), top, bw, h);
+
+    if (roll < 0.25) {
+      // 1. Antenna slab megatower with glowing beacon
+      c.fillRect(Math.round(nx), top, bw, h + 2);
       c.fillRect(Math.round(nx + bw * 0.45), top - 12, 3, 12);
       c.fillStyle = tipCol;
       c.fillRect(Math.round(nx + bw * 0.45) - 1, top - 15, 5, 3);
       c.fillStyle = col;
-    } else if (roll < 0.7) {
+    } else if (roll < 0.45) {
+      // 2. Cyber twin towers with skybridge
       const tw = Math.max(6, Math.floor(bw * 0.4));
       c.fillRect(Math.round(nx), top + 10, tw, h);
       c.fillRect(Math.round(nx + bw - tw), top, tw, h + 10);
       c.fillRect(Math.round(nx + tw), top + 22, bw - tw * 2, 5);
-    } else {
+    } else if (roll < 0.65) {
+      // 3. Stepped ziggurat cyber-pyramid tower
       c.fillRect(Math.round(nx), top + 14, bw, h);
       c.fillRect(Math.round(nx + 4), top + 7, bw - 8, 8);
       c.fillRect(Math.round(nx + 8), top, Math.max(6, bw - 16), 7);
+    } else if (roll < 0.85) {
+      // 4. Crowned skyscraper with observation deck and broadcast spire
+      c.fillRect(Math.round(nx), top, bw, h + 2);
+      c.fillRect(Math.round(nx - 2), top + 8, bw + 4, 3);
+      c.fillRect(Math.round(nx + 3), top - 6, bw - 6, 7);
+      c.fillRect(Math.round(nx + bw * 0.5 - 1), top - 14, 2, 9);
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx + bw * 0.5 - 1), top - 16, 2, 2);
+      c.fillStyle = col;
+    } else {
+      // 5. Angled high-tech skyscraper with helipad / spire
+      c.fillRect(Math.round(nx), top + 8, bw, h);
+      // Angled roofline
+      for (let i = 0; i < bw; i++) {
+        const stepH = Math.round(8 * (1 - i / bw));
+        c.fillRect(Math.round(nx + i), top + 8 - stepH, 1, stepH);
+      }
+      c.fillRect(Math.round(nx + 2), top - 6, 2, 14);
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx + 1), top - 8, 4, 3);
+      c.fillStyle = col;
     }
-    // windows drawn on THIS building's footprint, so they always line up.
-    // The layer alpha must survive this block: during a crossfade the whole
-    // incoming row is drawn at alpha t, and resetting to 1 here would pop the
-    // rest of the row (and the second landmark row) to full opacity.
+
+    // Windows drawn strictly INSIDE each building's solid wall footprint (zero floating disconnected lights)
     const layerAlpha = c.globalAlpha;
     c.fillStyle = tipCol;
-    for (let wy = top + 10; wy < ground - 4; wy += 9) {
-      for (let wx = 4; wx < bw - 4; wx += 7) {
-        if (hash(seed + wy * 0.7 + wx) > 0.55) {
-          c.globalAlpha = layerAlpha * (0.35 + hash(seed + wx + wy) * 0.35);
-          c.fillRect(Math.round(nx + wx), Math.round(wy), 2, 2);
+    if (roll < 0.25 || (roll >= 0.65 && roll < 0.85)) {
+      // 1 & 4. Standard building slab
+      for (let wy = top + 10; wy < ground - 4; wy += 9) {
+        for (let wx = 4; wx < bw - 4; wx += 7) {
+          if (hash(seed + wy * 0.7 + wx) > 0.55) {
+            c.globalAlpha = layerAlpha * (0.35 + hash(seed + wx + wy) * 0.35);
+            c.fillRect(Math.round(nx + wx), Math.round(wy), 2, 2);
+          }
+        }
+      }
+    } else if (roll < 0.45) {
+      // 2. Twin towers: windows strictly on left tower and right tower (never in middle gap)
+      const tw = Math.max(6, Math.floor(bw * 0.4));
+      for (let wy = top + 14; wy < ground - 4; wy += 9) {
+        for (let wx = 2; wx < tw - 2; wx += 5) {
+          if (hash(seed + wy * 0.7 + wx) > 0.55) {
+            c.globalAlpha = layerAlpha * (0.35 + hash(seed + wx + wy) * 0.35);
+            c.fillRect(Math.round(nx + wx), Math.round(wy), 2, 2);
+          }
+        }
+        for (let wx = bw - tw + 2; wx < bw - 2; wx += 5) {
+          if (hash(seed + wy * 0.7 + wx) > 0.55) {
+            c.globalAlpha = layerAlpha * (0.35 + hash(seed + wx + wy) * 0.35);
+            c.fillRect(Math.round(nx + wx), Math.round(wy), 2, 2);
+          }
+        }
+      }
+    } else if (roll < 0.65) {
+      // 3. Stepped ziggurat: windows strictly inside each tier
+      for (let wy = top + 6; wy < ground - 4; wy += 8) {
+        let leftX = 4;
+        let rightX = bw - 4;
+        if (wy < top + 7) {
+          leftX = 10;
+          rightX = Math.max(14, bw - 10);
+        } else if (wy < top + 14) {
+          leftX = 6;
+          rightX = bw - 6;
+        }
+        for (let wx = leftX; wx < rightX; wx += 6) {
+          if (hash(seed + wy * 0.7 + wx) > 0.55) {
+            c.globalAlpha = layerAlpha * (0.35 + hash(seed + wx + wy) * 0.35);
+            c.fillRect(Math.round(nx + wx), Math.round(wy), 2, 2);
+          }
+        }
+      }
+    } else {
+      // 5. Angled skyscraper: windows strictly below the roofline
+      for (let wy = top + 12; wy < ground - 4; wy += 9) {
+        for (let wx = 4; wx < bw - 4; wx += 7) {
+          if (hash(seed + wy * 0.7 + wx) > 0.55) {
+            c.globalAlpha = layerAlpha * (0.35 + hash(seed + wx + wy) * 0.35);
+            c.fillRect(Math.round(nx + wx), Math.round(wy), 2, 2);
+          }
         }
       }
     }
@@ -1052,35 +1477,28 @@ export class Renderer {
   private drawEnemy(e: Enemy, x: number, y: number, hurt: boolean, Z: Zone) {
     const c = this.ctx;
     if (e.kind === 'flyer') {
-        // biome flyer (wasp / vulture / ice drone / neon drone)
-        c.fillStyle = '#14101f';
-        c.fillRect(x + 1, y + 3, 18, 8);
-        c.fillStyle = hurt ? '#ffffff' : Z.flyerBody;
-        c.fillRect(x, y + 2, 20, 8);
-        // stripes
-        c.fillStyle = Z.slimeDark;
-        c.fillRect(x + 4, y + 2, 3, 8);
-        c.fillRect(x + 12, y + 2, 3, 8);
-        c.fillStyle = Z.flyerLight;
-        c.fillRect(x + 1, y + 3, 18, 2);
-        // blinking lens — on the side it is flying towards
-        const lens = e.vx < 0 ? x + 3 : x + 15;
-        c.fillStyle = Math.sin(e.t * 3.5) > 0 ? '#ff4d6d' : '#ffd166';
-        c.fillRect(lens, y + 5, 3, 3);
-        c.fillStyle = '#ffffff';
-        c.fillRect(lens + 1, y + 6, 1, 1);
-        // rotor
-        c.fillStyle = '#c8cbe8';
-        const rot = Math.sin(e.t * 8) * 8;
-        c.fillRect(Math.round(x + 10 - 9 + rot * 0.25), y, 18, 2);
-        c.fillStyle = '#8e91af';
-        c.fillRect(x + 9, y + 2, 2, 2);
-        // thrust
-        c.fillStyle = Z.accent;
-        c.globalAlpha = 0.5 + 0.4 * Math.sin(e.t * 5);
-        c.fillRect(x + 6, y + 10, 8, 2);
-        c.globalAlpha = 1;
-      } else if (e.kind === 'hopper') {
+      const dir = e.vx < 0 ? -1 : 1;
+      const wingUp = Math.sin(e.t * 8) > 0;
+      const wy = wingUp ? -2 : 2;
+
+      // 1. Main chunky body (no black outline)
+      c.fillStyle = hurt ? '#ffffff' : Z.flyerBody;
+      c.fillRect(x + 2, y + 3, 14, 6);
+
+      // 2. Highlight / belly strip
+      c.fillStyle = Z.flyerLight;
+      c.fillRect(x + 4, y + 5, 10, 2);
+
+      // 3. Simple chunky flapping wings
+      c.fillStyle = hurt ? '#ffffff' : Z.flyerLight;
+      c.fillRect(x + 5, y + 1 + wy, 8, 2);
+
+      // 4. Chunky pixel eye on front
+      c.fillStyle = Z.accent;
+      c.fillRect(x + (dir < 0 ? 3 : 13), y + 4, 2, 2);
+      c.fillStyle = '#ffffff';
+      c.fillRect(x + (dir < 0 ? 3 : 14), y + 4, 1, 1);
+    } else if (e.kind === 'hopper') {
         // jungle frog
         const air = e.vy < 0;
         const yy = air ? y - 2 : y;
@@ -1228,12 +1646,14 @@ export class Renderer {
     }
 
     /* ghosts */
-    for (const g of this.g.ghosts) {
-      c.globalAlpha = (g.life / 14) * 0.28;
-      c.fillStyle = '#7ef7ff';
-      c.fillRect(Math.round(g.x - cam), Math.round(g.y), PLAYER_W, PLAYER_H);
+    if (this.g.phase === 'playing' && this.g.countdown === 0) {
+      for (const g of this.g.ghosts) {
+        c.globalAlpha = (g.life / 14) * 0.28;
+        c.fillStyle = '#7ef7ff';
+        c.fillRect(Math.round(g.x - cam), Math.round(g.y), PLAYER_W, PLAYER_H);
+      }
+      c.globalAlpha = 1;
     }
-    c.globalAlpha = 1;
 
     /* player body */
     const cx = Math.round(this.g.px - cam + PLAYER_W / 2);

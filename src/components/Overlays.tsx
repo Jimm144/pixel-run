@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import type { Stats } from '../game/engine';
 import { DailyQuestPanel } from './QuestPanels';
 import { PauseIcon, PixelButton, Panel, Stat } from './ui';
@@ -201,20 +202,68 @@ export function StartScreen({
 /* -------------------------------------------------------------------- pause */
 function VolumeStepper({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   const pct = Math.round(value * 100);
+  const isMuted = pct === 0;
+  const prevVolRef = useRef(value > 0 ? value : 1.0);
+
+  if (value > 0) {
+    prevVolRef.current = value;
+  }
+
+  const toggleMute = () => {
+    if (value > 0) {
+      prevVolRef.current = value;
+      onChange(0);
+    } else {
+      onChange(prevVolRef.current > 0 ? prevVolRef.current : 1.0);
+    }
+  };
+
   const step = (dir: number) => onChange(Math.min(1, Math.max(0, pct + dir) / 100));
   return (
     <div className="flex items-center justify-between gap-2 border-2 border-[#2c1f4d] bg-[#0d0619] px-2 py-1.5">
-      <span className="font-pixel text-[7px] text-[#9d8fd6]">{label}</span>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          aria-label={isMuted ? `Unmute ${label}` : `Mute ${label}`}
+          onClick={toggleMute}
+          className={`flex items-center justify-center border-2 px-1.5 py-1 font-pixel text-[7px] transition-colors ${
+            isMuted
+              ? 'border-[#2c1f4d] bg-[#08040f] text-[#6f5fa8]/50 opacity-60 hover:border-[#6f5fa8]/60 hover:text-[#9d8fd6]'
+              : 'border-[#3ef2c8]/60 bg-[#3ef2c8]/10 text-[#3ef2c8] hover:bg-[#3ef2c8]/20 active:bg-[#3ef2c8]/30'
+          }`}
+          title={isMuted ? `Unmute ${label} (${Math.round(prevVolRef.current * 100)}%)` : `Mute ${label}`}
+        >
+          <svg viewBox="0 0 16 16" className="h-2.5 w-2.5" fill="currentColor">
+            <path d="M2 5h2l3-3v12l-3-3H2V5z" />
+            {isMuted ? (
+              <>
+                <line x1="10" y1="5.5" x2="14" y2="10.5" stroke="currentColor" strokeWidth="1.5" />
+                <line x1="14" y1="5.5" x2="10" y2="10.5" stroke="currentColor" strokeWidth="1.5" />
+              </>
+            ) : (
+              <path d="M10 5.5a2.5 2.5 0 0 1 0 5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+            )}
+          </svg>
+        </button>
+        <span className="font-pixel text-[7px] text-[#9d8fd6]">{label}</span>
+      </div>
       <div className="flex items-center gap-1.5">
         <button
           type="button"
           aria-label={`${label} down`}
+          disabled={isMuted}
           onClick={() => step(-10)}
-          className="border-2 border-[#3ef2c8]/50 bg-[#0d0619] px-2 py-1 font-pixel text-[8px] text-[#3ef2c8] transition-colors hover:bg-[#3ef2c8]/10 active:bg-[#3ef2c8]/20"
+          className={`border-2 px-2 py-1 font-pixel text-[8px] transition-colors ${
+            isMuted
+              ? 'border-[#2c1f4d] bg-[#08040f] text-[#6f5fa8]/40 opacity-40 cursor-not-allowed'
+              : 'border-[#3ef2c8]/50 bg-[#0d0619] text-[#3ef2c8] hover:bg-[#3ef2c8]/10 active:bg-[#3ef2c8]/20'
+          }`}
         >
           -
         </button>
-        <span className="w-11 text-center font-pixel text-[8px] text-[#e9e2ff]">{pct}%</span>
+        <span className={`w-11 text-center font-pixel text-[8px] ${isMuted ? 'text-[#6f5fa8]' : 'text-[#e9e2ff]'}`}>
+          {pct}%
+        </span>
         <button
           type="button"
           aria-label={`${label} up`}
@@ -282,6 +331,16 @@ export function PauseScreen({
   );
 }
 
+function ShareIcon({ className = 'h-[16px] w-[16px]' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="square">
+      <path d="M4 12v8h16v-8" />
+      <polyline points="16 6 12 2 8 6" />
+      <line x1="12" y1="2" x2="12" y2="15" />
+    </svg>
+  );
+}
+
 /* ---------------------------------------------------------------- game over */
 export function GameOverScreen({
   stats,
@@ -289,6 +348,7 @@ export function GameOverScreen({
   newBest,
   onRestart,
   onMenu,
+  onShare,
   touch,
 }: {
   stats: Stats;
@@ -296,6 +356,7 @@ export function GameOverScreen({
   newBest: boolean;
   onRestart: () => void;
   onMenu: () => void;
+  onShare?: () => void;
   touch: boolean;
 }) {
   return (
@@ -326,10 +387,28 @@ export function GameOverScreen({
           </div>
         </Panel>
         <div className="flex w-full max-w-[380px] flex-col items-center gap-2 tablet:max-w-[800px]">
-          <PixelButton onClick={onRestart} className="w-full tablet:py-4 tablet:text-[14px]">
-            <RetryIcon className="mr-2 inline-block h-[16px] w-[16px] align-[-3px] tablet:h-[24px] tablet:w-[24px]" />
-            {touch ? 'TAP TO RETRY' : 'RETRY'}
-          </PixelButton>
+          {newBest && onShare ? (
+            <div className="flex w-full gap-2">
+              <PixelButton onClick={onRestart} className="flex flex-[3] items-center justify-center py-2.5 tablet:py-3 tablet:text-[13px]">
+                <RetryIcon className="mr-1.5 inline-block h-[15px] w-[15px] align-[-2px] tablet:h-[18px] tablet:w-[18px]" />
+                RETRY
+              </PixelButton>
+              <PixelButton
+                variant="ghost"
+                onClick={onShare}
+                small
+                className="flex flex-1 items-center justify-center px-2 py-2.5 border-[#ffd166]/70 bg-[#ffd166]/10 text-[#ffd166] hover:bg-[#ffd166]/20 hover:text-[#fff4b8] hover:border-[#ffd166] tablet:py-3 tablet:text-[10px]"
+              >
+                <ShareIcon className="mr-1.5 inline-block h-[12px] w-[12px] align-[-2px] tablet:h-[15px] tablet:w-[15px]" />
+                SHARE
+              </PixelButton>
+            </div>
+          ) : (
+            <PixelButton onClick={onRestart} className="w-full flex items-center justify-center py-3 tablet:py-3.5 tablet:text-[13px]">
+              <RetryIcon className="mr-2 inline-block h-[16px] w-[16px] align-[-3px] tablet:h-[20px] tablet:w-[20px]" />
+              {touch ? 'TAP TO RETRY' : 'RETRY'}
+            </PixelButton>
+          )}
           <PixelButton variant="ghost" onClick={onMenu} small className="tablet:py-3 tablet:text-[10px]">
             MAIN MENU
           </PixelButton>

@@ -4,6 +4,7 @@ export interface Zone {
   name: string;
   bg: BgKind;
   sky: [string, string, string, string];
+  skyNight: [string, string, string, string];
   far: string;
   mid: string;
   decoFar: string;
@@ -34,6 +35,7 @@ export const ZONES: Zone[] = [
     name: 'NEON JUNGLE',
     bg: 'jungle',
     sky: ['#041810', '#0d3524', '#1d5c3c', '#3e8a5a'],
+    skyNight: ['#010906', '#03140c', '#062416', '#0d3a24'],
     far: '#0a2415',
     mid: '#04120a',
     decoFar: '#7ff08a',
@@ -62,6 +64,7 @@ export const ZONES: Zone[] = [
     name: 'SCORCHED DESERT',
     bg: 'desert',
     sky: ['#1d0d18', '#55301c', '#a85a2a', '#f0a85c'],
+    skyNight: ['#0a0512', '#140b20', '#241238', '#421f52'],
     far: '#4a1d16',
     mid: '#2b0f12',
     decoFar: '#98b564',
@@ -90,6 +93,7 @@ export const ZONES: Zone[] = [
     name: 'FROZEN TUNDRA',
     bg: 'tundra',
     sky: ['#0a1030', '#1b2a63', '#355c9e', '#7aa8e0'],
+    skyNight: ['#02040e', '#060c20', '#0f1c3d', '#1b325c'],
     far: '#152047',
     mid: '#0a1230',
     decoFar: '#c8eaff',
@@ -118,6 +122,7 @@ export const ZONES: Zone[] = [
     name: 'NEON CITY',
     bg: 'city',
     sky: ['#150c40', '#2d1c63', '#583a8f', '#a976c4'],
+    skyNight: ['#060312', '#0d0722', '#1a0d3a', '#30165c'],
     far: '#291149',
     mid: '#1a0a33',
     decoFar: '#7ef7ff',
@@ -144,12 +149,22 @@ export const ZONES: Zone[] = [
   },
 ];
 
+const HEX_CACHE = new Map<string, [number, number, number]>();
+
 function hex2rgb(h: string): [number, number, number] {
-  const n = parseInt(h.slice(1), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  let rgb = HEX_CACHE.get(h);
+  if (!rgb) {
+    const n = parseInt(h.slice(1), 16);
+    rgb = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    HEX_CACHE.set(h, rgb);
+  }
+  return rgb;
 }
 
 export function mix(a: string, end: string, t: number): string {
+  if (t <= 0) return a;
+  if (t >= 1) return end;
+  if (a === end) return a;
   const A = hex2rgb(a);
   const B = hex2rgb(end);
   const r = Math.round(A[0] + (B[0] - A[0]) * t);
@@ -168,7 +183,7 @@ export function sampleSky(stops: [string, string, string, string], t: number): s
   return mix(stops[i], stops[i + 1], p - i);
 }
 
-type ColorKey = Exclude<keyof Zone, 'name' | 'bg' | 'sky'>;
+type ColorKey = Exclude<keyof Zone, 'name' | 'bg' | 'sky' | 'skyNight'>;
 
 export function lerpZone(a: Zone, b: Zone, t: number): Zone {
   if (t <= 0) return a;
@@ -182,6 +197,12 @@ export function lerpZone(a: Zone, b: Zone, t: number): Zone {
       mix(a.sky[1], b.sky[1], t),
       mix(a.sky[2], b.sky[2], t),
       mix(a.sky[3], b.sky[3], t),
+    ],
+    skyNight: [
+      mix(a.skyNight[0], b.skyNight[0], t),
+      mix(a.skyNight[1], b.skyNight[1], t),
+      mix(a.skyNight[2], b.skyNight[2], t),
+      mix(a.skyNight[3], b.skyNight[3], t),
     ],
     far: mixAll('far'),
     mid: mixAll('mid'),

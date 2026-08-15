@@ -1,0 +1,20 @@
+{
+  "name": "PIXEL RUN",
+  "short_name": "Pixel Run",
+  "description": "A browser-based 2D infinite pixel runner and platformer game.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#08040f",
+  "theme_color": "#08040f",
+  "categories": ["games", "entertainment", "arcade"],
+  "icons": [
+    {
+      "src": "./preview.png",
+      "sizes": "1200x630",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

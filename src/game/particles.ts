@@ -93,15 +93,25 @@ export class ParticleSystem {
 
   draw(c: CanvasRenderingContext2D, camX: number) {
     const cam = Math.round(camX);
+    let lastCol = '';
+    let lastAlpha = -1;
+
     // Viewport cull: skip particles outside the frame (plus a small margin).
     for (const p of this.alive) {
       if (p.x < cam - 8 || p.x > cam + VW + 8) continue;
       const a = p.life / p.max;
-      c.globalAlpha = a > 0.55 ? 1 : a / 0.55;
-      c.fillStyle = p.col;
+      const alpha = a > 0.55 ? 1 : Math.round((a / 0.55) * 100) / 100;
+      if (alpha !== lastAlpha) {
+        c.globalAlpha = alpha;
+        lastAlpha = alpha;
+      }
+      if (p.col !== lastCol) {
+        c.fillStyle = p.col;
+        lastCol = p.col;
+      }
       const s = a < 0.35 ? 1 : p.size;
       c.fillRect(Math.round(p.x - cam), Math.round(p.y), s, s);
     }
-    c.globalAlpha = 1;
+    if (lastAlpha !== 1) c.globalAlpha = 1;
   }
 }

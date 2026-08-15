@@ -66,14 +66,14 @@ function formatHms(ms: number): string {
 function QuestCard({ quest, record, run, compact }: { quest: QuestDefinition; record: QuestRecord; run: QuestRunStats; compact: boolean }) {
   const progress = getQuestProgress(quest, record, run);
   const color = QUEST_DIFFICULTY_COLORS[quest.difficulty];
-  const textColor = quest.difficulty === 'impossible' ? '#f3f4f6' : color;
+  const textColor = quest.difficulty === 'impossible' ? '#ff6b8b' : color;
   const width = `${Math.round((progress.value / progress.target) * 100)}%`;
   return (
     <div
       className={`min-w-0 border-2 ${compact ? 'p-2' : 'p-2.5'} ${progress.done ? 'shadow-[0_0_0_2px_rgba(255,255,255,0.18)]' : ''}`}
       style={{
-        borderColor: quest.difficulty === 'impossible' ? '#4b5563' : `${color}99`,
-        backgroundColor: progress.done ? `${color}22` : quest.difficulty === 'impossible' ? '#020204' : '#0d0619',
+        borderColor: `${color}99`,
+        backgroundColor: progress.done ? `${color}22` : '#0d0619',
       }}
     >
       <div className="flex items-center justify-between gap-2 font-pixel text-[6px] leading-none">
@@ -83,7 +83,7 @@ function QuestCard({ quest, record, run, compact }: { quest: QuestDefinition; re
       <p className={`${compact ? 'mt-1 line-clamp-2 text-[7px]' : 'mt-2 min-h-[33px] text-[7px]'} font-pixel leading-[1.55] text-[#e9e2ff] ${progress.done ? 'text-white' : ''}`}>
         {getQuestLabel(quest)}
       </p>
-      <div className={`${compact ? 'mt-1 h-1' : 'mt-2 h-2'} border border-[#2c1f4d] ${quest.difficulty === 'impossible' ? 'bg-[#374151]' : 'bg-[#08040f]'}`}>
+      <div className={`${compact ? 'mt-1 h-1' : 'mt-2 h-2'} border border-[#2c1f4d] bg-[#08040f]`}>
         <div className="h-full" style={{ width, backgroundColor: progress.done ? '#ffffff' : color }} />
       </div>
       <div className={`${compact ? 'mt-0.5' : 'mt-1'} flex justify-between font-pixel text-[6px] text-[#6f5fa8]`}>

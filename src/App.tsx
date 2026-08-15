@@ -22,8 +22,6 @@ import {
   type QuestRunStats,
 } from './game/quests';
 
-const MUSIC_KEY = 'pixeldash.music';
-const SFX_KEY = 'pixeldash.sfx';
 const QUEST_SHARE_WIDTH = 1200;
 const QUEST_SHARE_HEIGHT = 500;
 
@@ -97,7 +95,62 @@ function createQuestShareCard(record: QuestRecord, best: number): Promise<Blob |
     });
   }
 
-  drawTextCentered(context, 'https://jimm144.github.io/pixel-run/', QUEST_SHARE_WIDTH / 2, 420, 4, '#6f5fa8', undefined, false);
+  drawTextCentered(context, 'jimm144.github.io/pixel-run', QUEST_SHARE_WIDTH / 2, 416, 3, '#9d8fd6', '#08040f', false);
+
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), 'image/png');
+  });
+}
+
+function createScoreShareCard(stats: Stats, isNewBest: boolean): Promise<Blob | null> {
+  if (typeof document === 'undefined') return Promise.resolve(null);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = QUEST_SHARE_WIDTH;
+  canvas.height = QUEST_SHARE_HEIGHT;
+  const context = canvas.getContext('2d');
+  if (!context || typeof canvas.toBlob !== 'function') return Promise.resolve(null);
+
+  context.imageSmoothingEnabled = false;
+
+  context.fillStyle = '#08040f';
+  context.fillRect(0, 0, QUEST_SHARE_WIDTH, QUEST_SHARE_HEIGHT);
+  context.fillStyle = '#140a26';
+  context.fillRect(24, 24, QUEST_SHARE_WIDTH - 48, QUEST_SHARE_HEIGHT - 48);
+  context.strokeStyle = isNewBest ? '#ffd166' : '#3ef2c8';
+  context.lineWidth = 8;
+  context.strokeRect(20, 20, QUEST_SHARE_WIDTH - 40, QUEST_SHARE_HEIGHT - 40);
+  context.strokeStyle = '#2c1f4d';
+  context.lineWidth = 4;
+  context.strokeRect(42, 42, QUEST_SHARE_WIDTH - 84, QUEST_SHARE_HEIGHT - 84);
+
+  const title = isNewBest ? 'NEW PERSONAL BEST!' : 'FINAL RUN SCORE';
+  const titleColor = isNewBest ? '#ffd166' : '#3ef2c8';
+  drawTextCentered(context, title, QUEST_SHARE_WIDTH / 2, 68, 7, titleColor, '#08040f');
+
+  const scoreText = stats.score.toLocaleString('en-US');
+  drawTextCentered(context, scoreText, QUEST_SHARE_WIDTH / 2, 140, 9, '#ffffff', '#08040f');
+
+  const boxW = 232;
+  const boxH = 110;
+  const boxY = 254;
+
+  const drawMetric = (x: number, label: string, value: string, color: string) => {
+    context.fillStyle = '#0d0619';
+    context.fillRect(x, boxY, boxW, boxH);
+    context.strokeStyle = color;
+    context.lineWidth = 4;
+    context.strokeRect(x, boxY, boxW, boxH);
+    drawText(context, label, x + 16, boxY + 22, 3, color);
+    drawText(context, value, x + 16, boxY + 59, 5, '#f3f4f6', '#08040f');
+  };
+
+  drawMetric(88, 'DISTANCE', `${stats.meters}M`, '#3ef2c8');
+  drawMetric(352, 'COINS', String(stats.coins), '#ffd166');
+  drawMetric(616, 'KILLS', String(stats.kills), '#ff4d6d');
+  drawMetric(880, 'MAX COMBO', `X${stats.combo}`, '#c98cff');
+
+  drawTextCentered(context, 'jimm144.github.io/pixel-run', QUEST_SHARE_WIDTH / 2, 416, 3, '#9d8fd6', '#08040f', false);
 
   return new Promise((resolve) => {
     canvas.toBlob((blob) => resolve(blob), 'image/png');
@@ -116,23 +169,37 @@ export function App() {
   const [best, setBest] = useState(() => bestScore());
   const [lastRun, setLastRun] = useState(() => loadLastRun());
   const [newBest, setNewBest] = useState(false);
-  const [musicOn, setMusicOn] = useState(() => {
-    try {
-      return localStorage.getItem(MUSIC_KEY) !== '0';
-    } catch {
-      return true;
-    }
-  });
-  const [sfxOn, setSfxOn] = useState(() => {
-    try {
-      return localStorage.getItem(SFX_KEY) !== '0';
-    } catch {
-      return true;
-    }
-  });
+  const [volumes, setVolumes] = useState(() => loadVolumes());
+  const prevMusicVolRef = useRef(volumes.music > 0 ? volumes.music : 1.0);
+  const prevSfxVolRef = useRef(volumes.sfx > 0 ? volumes.sfx : 1.0);
+
+  const musicOn = volumes.music > 0;
+  const sfxOn = volumes.sfx > 0;
+
+  const toggleMusic = useCallback(() => {
+    sfx.play('ui');
+    setVolumes((prev) => {
+      if (prev.music > 0) {
+        prevMusicVolRef.current = prev.music;
+        return { ...prev, music: 0 };
+      }
+      return { ...prev, music: prevMusicVolRef.current > 0 ? prevMusicVolRef.current : 1.0 };
+    });
+  }, []);
+
+  const toggleSfx = useCallback(() => {
+    sfx.play('ui');
+    setVolumes((prev) => {
+      if (prev.sfx > 0) {
+        prevSfxVolRef.current = prev.sfx;
+        return { ...prev, sfx: 0 };
+      }
+      return { ...prev, sfx: prevSfxVolRef.current > 0 ? prevSfxVolRef.current : 1.0 };
+    });
+  }, []);
+
   const [touch, setTouch] = useState(false);
   const [live, setLive] = useState<Stats>({ score: 0, meters: 0, coins: 0, kills: 0, combo: 0 });
-  const [volumes, setVolumes] = useState(() => loadVolumes());
   const [questRecord, setQuestRecord] = useState(() => loadQuestRecord());
   const [questRun, setQuestRun] = useState<QuestRunStats>(() => emptyQuestRunStats());
   const [questAnnouncement, setQuestAnnouncement] = useState(0);
@@ -158,6 +225,38 @@ export function App() {
     return record;
   };
 
+  const [swUpdate, setSwUpdate] = useState<ServiceWorkerRegistration | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+    const registerSW = async () => {
+      try {
+        const reg = await navigator.serviceWorker.register('./sw.js');
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              setSwUpdate(reg);
+            }
+          });
+        });
+        if (reg.waiting && navigator.serviceWorker.controller) {
+          setSwUpdate(reg);
+        }
+      } catch {}
+    };
+    window.addEventListener('load', registerSW);
+    return () => window.removeEventListener('load', registerSW);
+  }, []);
+
+  const handleApplyUpdate = useCallback(() => {
+    if (swUpdate?.waiting) {
+      swUpdate.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }
+    window.location.reload();
+  }, [swUpdate]);
+
   useEffect(() => {
     // Listen for pointer-capability changes (hybrid devices) instead of
     // sampling once at mount.
@@ -169,28 +268,16 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    sfx.setMusicMuted(!musicOn);
-    try {
-      localStorage.setItem(MUSIC_KEY, musicOn ? '1' : '0');
-    } catch {}
-  }, [musicOn]);
-
-  useEffect(() => {
-    sfx.setSfxMuted(!sfxOn);
-    try {
-      localStorage.setItem(SFX_KEY, sfxOn ? '1' : '0');
-    } catch {}
-  }, [sfxOn]);
-
-  useEffect(() => {
     setMusicVolume(volumes.music);
     setSfxVolume(volumes.sfx);
+    sfx.setMusicMuted(volumes.music === 0);
+    sfx.setSfxMuted(volumes.sfx === 0);
     saveVolumes(volumes);
   }, [volumes]);
 
-  // Main-menu SFX (button clicks, toggles) sound muffled — like the music.
+  // Main-menu & Pause-menu sounds and music sound muffled.
   useEffect(() => {
-    sfx.setMuffled(ui === 'start');
+    sfx.setMuffled(ui === 'start' || ui === 'paused');
   }, [ui]);
 
   useEffect(() => {
@@ -293,6 +380,29 @@ export function App() {
       questShareBusyRef.current = false;
     }
   }, [best]);
+
+  const scoreShareBusyRef = useRef(false);
+  const handleShareScore = useCallback(async () => {
+    if (scoreShareBusyRef.current) return;
+    scoreShareBusyRef.current = true;
+    try {
+      if (typeof navigator.clipboard?.write !== 'function' || typeof ClipboardItem === 'undefined') {
+        setQuestToast(['IMAGE COPY UNAVAILABLE']);
+        return;
+      }
+      const blob = await createScoreShareCard(stats, newBest);
+      if (!blob) {
+        setQuestToast(['IMAGE COPY FAILED']);
+        return;
+      }
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      setQuestToast(['SCORE IMAGE COPIED']);
+    } catch {
+      setQuestToast(['IMAGE COPY FAILED']);
+    } finally {
+      scoreShareBusyRef.current = false;
+    }
+  }, [stats, best, newBest]);
 
   const start = useCallback(() => {
     commitQuestRun();
@@ -400,9 +510,16 @@ export function App() {
           onResume={resume}
           onStart={start}
           onToggleMute={() => {
-            const bothOff = !musicOn && !sfxOn;
-            setMusicOn(bothOff ? true : !musicOn);
-            setSfxOn(bothOff ? true : !sfxOn);
+            if (musicOn || sfxOn) {
+              if (musicOn) prevMusicVolRef.current = volumes.music;
+              if (sfxOn) prevSfxVolRef.current = volumes.sfx;
+              setVolumes({ music: 0, sfx: 0 });
+            } else {
+              setVolumes({
+                music: prevMusicVolRef.current > 0 ? prevMusicVolRef.current : 1.0,
+                sfx: prevSfxVolRef.current > 0 ? prevSfxVolRef.current : 1.0,
+              });
+            }
           }}
           onRestartHint={showRestartHint}
           onQuestProgress={handleQuestProgress}
@@ -424,8 +541,8 @@ export function App() {
             touch={touch}
             musicOn={musicOn}
             sfxOn={sfxOn}
-            onToggleMusic={() => setMusicOn((v) => !v)}
-            onToggleSfx={() => setSfxOn((v) => !v)}
+            onToggleMusic={toggleMusic}
+            onToggleSfx={toggleSfx}
             quests={quests}
             questRecord={questRecord}
             questRun={questRun}
@@ -441,8 +558,14 @@ export function App() {
             stats={live}
             musicVol={volumes.music}
             sfxVol={volumes.sfx}
-            onMusicVol={(v) => setVolumes((prev) => ({ ...prev, music: v }))}
-            onSfxVol={(v) => setVolumes((prev) => ({ ...prev, sfx: v }))}
+            onMusicVol={(v) => {
+              if (v > 0) prevMusicVolRef.current = v;
+              setVolumes((prev) => ({ ...prev, music: v }));
+            }}
+            onSfxVol={(v) => {
+              if (v > 0) prevSfxVolRef.current = v;
+              setVolumes((prev) => ({ ...prev, sfx: v }));
+            }}
           />
         )}
         {ui === 'over' && (
@@ -452,6 +575,7 @@ export function App() {
             newBest={newBest}
             onRestart={start}
             onMenu={toMenu}
+            onShare={handleShareScore}
             touch={touch}
           />
         )}
@@ -459,6 +583,18 @@ export function App() {
           <DailyQuestAnnouncement quests={quests} record={questRecord} run={questRun} onDayRollover={handleQuestRollover} onShare={handleShareQuests} />
         )}
         {questToast.length > 0 && <QuestCompletionToast quests={quests} completed={questToast} touch={touch} />}
+        {swUpdate && ui !== 'playing' && (
+          <div className="fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 border-2 border-[#ffd166] bg-[#140a26]/95 px-3 py-1.5 font-pixel text-[#ffd166] shadow-[3px_3px_0_#08040f]">
+            <span className="text-[7px] tablet:text-[9px]">⚡ UPDATE READY</span>
+            <button
+              type="button"
+              onClick={handleApplyUpdate}
+              className="border border-[#ffd166] bg-[#ffd166]/20 px-2 py-0.5 text-[7px] text-[#ffffff] transition-colors hover:bg-[#ffd166]/40 tablet:text-[9px]"
+            >
+              RELOAD
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

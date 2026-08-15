@@ -182,6 +182,7 @@ export class Game implements GenHost, RenderHost {
   questCleanScore!: number;
   questBiomeEffects!: BgKind[];
   questTwoPowerups!: boolean;
+  questMaxMoonPhase!: number;
   eventTimer!: number;
   eventMax!: number;
   eventSeed!: number;
@@ -280,6 +281,7 @@ export class Game implements GenHost, RenderHost {
       questCleanScore: 0,
       questBiomeEffects: [],
       questTwoPowerups: false,
+      questMaxMoonPhase: 0,
       eventTimer: 0,
       eventMax: 0,
       eventSeed: 0,
@@ -352,7 +354,8 @@ export class Game implements GenHost, RenderHost {
     this.jumpBuf = 0;
     this.diveHeld = false;
     this.moveDir = 0;
-    sfx.pauseMusic();
+    this.ghosts.length = 0;
+    sfx.setMuffled(true);
   }
   resume() {
     if (this.phase === 'paused') {
@@ -369,7 +372,7 @@ export class Game implements GenHost, RenderHost {
         this.countdown = 180; // 3s of "3-2-1-GO" before control resumes
         this.countdownTicks = false; // silent countdown after unpause
       }
-      sfx.resumeMusic();
+      sfx.setMuffled(false);
     }
   }
   toReady() {
@@ -397,11 +400,12 @@ export class Game implements GenHost, RenderHost {
       powerups: this.questPowerups,
       jumps: this.questJumps,
       maxCombo: this.bestCombo,
-      cleanMeters: this.questCleanRun ? this.questCleanMeters : 0,
-      cleanScore: this.questCleanRun ? this.questCleanScore : 0,
+      cleanMeters: this.questCleanMeters,
+      cleanScore: this.questCleanScore,
       cleanRun: this.questCleanRun,
       biomeEffects: [...this.questBiomeEffects],
       twoPowerups: this.questTwoPowerups,
+      maxMoonPhase: this.questMaxMoonPhase,
     };
   }
 
@@ -466,6 +470,17 @@ export class Game implements GenHost, RenderHost {
       this.questCleanMeters = Math.floor(this.distance / 10);
       this.questCleanScore = this.score;
     }
+    const period = VW + 140;
+    const progress = 300 - this.camX * 0.12;
+    const cycle = Math.floor(progress / period);
+    const isMoon = (((cycle % 2) + 2) % 2) === 1;
+    if (isMoon) {
+      const nightIndex = Math.max(0, Math.floor((-cycle - 1) / 2));
+      const phase = Math.min(4, nightIndex);
+      if (phase > this.questMaxMoonPhase) {
+        this.questMaxMoonPhase = phase;
+      }
+    }
   }
 
   private addShake(v: number) {
@@ -494,7 +509,14 @@ export class Game implements GenHost, RenderHost {
   }
 
   private cullArr<T>(arr: T[], gone: (v: T) => boolean) {
-    for (let i = arr.length - 1; i >= 0; i--) if (gone(arr[i])) arr.splice(i, 1);
+    let w = 0;
+    for (let r = 0; r < arr.length; r++) {
+      if (!gone(arr[r])) {
+        if (w !== r) arr[w] = arr[r];
+        w++;
+      }
+    }
+    arr.length = w;
   }
 
   private cull() {
@@ -537,7 +559,6 @@ export class Game implements GenHost, RenderHost {
 
   /* ------------------------------------------------------------ simulation */
   step() {
-    this.frame++;
     if (this.phase === 'paused') return;
 
     // decaying juice always runs
@@ -566,9 +587,9 @@ export class Game implements GenHost, RenderHost {
       } else if (this.countdownTicks && this.countdown % 60 === 0) {
         sfx.play('ui'); // 2, 1 ticks
       }
-      this.particles.update(1);
       return;
     }
+    this.frame++;
     if (this.goTimer > 0) this.goTimer--;
 
     // death slow-mo
@@ -595,7 +616,9 @@ export class Game implements GenHost, RenderHost {
     if (this.phase === 'ready') this.attractAI();
     if (this.phase === 'playing') {
       this.updateBiomeEvent();
-      sfx.setMusic(this.zone.bg, this.diff());
+      const currentSpeed = Math.abs(this.vx) || this.runSpeed();
+      const speedScale = currentSpeed / 2.1;
+      sfx.setMusic(this.zone.bg, this.diff(), speedScale);
       this.updatePowerUpTimers();
     }
 
@@ -977,8 +1000,7 @@ export class Game implements GenHost, RenderHost {
         if (e.x < e.minX) {
           e.x = e.minX;
           e.vx *= -1;
-        }
-        if (e.x > e.maxX) {
+        } else if (e.x > e.maxX) {
           e.x = e.maxX;
           e.vx *= -1;
         }
@@ -999,8 +1021,7 @@ export class Game implements GenHost, RenderHost {
         if (e.x < e.minX) {
           e.x = e.minX;
           e.vx *= -1;
-        }
-        if (e.x > e.maxX) {
+        } else if (e.x > e.maxX) {
           e.x = e.maxX;
           e.vx *= -1;
         }
@@ -1349,24 +1370,93 @@ export class Game implements GenHost, RenderHost {
 
   private attractAI() {
     const feet = this.py + PLAYER_H;
+    const center = this.px + PLAYER_W / 2;
     const ahead = this.px + PLAYER_W + 8;
     let needJump = false;
+    let wantDoubleJump = false;
+    let wantDive = false;
+
+    // 1. Pit and hazard safety
     if (this.onGround && !this.hasGroundNear(ahead, feet)) needJump = true;
-    if (this.onGround) {
-      for (const e of this.enemies) {
-        if (e.kind === 'flyer' || e.dead) continue;
-        if (e.x > this.px + 6 && e.x < this.px + 40 && Math.abs(e.y - this.py) < 20)
-          needJump = true;
-      }
-      for (const s of this.spikes) {
-        if (s.x > this.px + 4 && s.x < this.px + 44 && Math.abs(s.y - this.py) < 20)
-          needJump = true;
+    for (const s of this.spikes) {
+      if (s.x > this.px + 2 && s.x < this.px + 48 && Math.abs(s.y - feet) < 24) {
+        needJump = true;
       }
     }
+
+    // 2. Enemy combat & aggressive stomping / slamming
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const exCenter = e.x + e.w / 2;
+      const distX = exCenter - center;
+      const distY = e.y - feet;
+
+      // Ground approach: Jump early to get height advantage above the enemy
+      if (this.onGround && distX > 8 && distX < 65 && Math.abs(distY) < 36) {
+        needJump = true;
+      }
+
+      // Air combat: Stomp & dive directly down onto the enemy
+      if (!this.onGround) {
+        // Horizontally aligned directly above enemy
+        if (Math.abs(distX) < 14 && distY > 2 && distY < 48) {
+          // Check we are not stomping directly into spikes
+          const hasSpikeBelow = this.spikes.some((s) => Math.abs(s.x - e.x) < 16 && Math.abs(s.y - e.y) < 16);
+          if (!hasSpikeBelow) {
+            wantDive = true;
+          }
+        }
+        // Approaching enemy in mid-air: adjust jump arc
+        else if (distX > 16 && distX < 55 && distY < 12 && this.vy > 0 && this.jumps < 2) {
+          wantDoubleJump = true;
+        }
+      }
+    }
+
+    // 3. Coin collection (sweeps high and low coin trails)
+    for (const k of this.pickups) {
+      if (k.dead) continue;
+      const kx = k.x - center;
+      const ky = k.y - this.py;
+      if (kx > 6 && kx < 55) {
+        // Coin is elevated above normal ground level
+        if (this.onGround && ky < -14) {
+          needJump = true;
+        }
+        // Coin is high in the air
+        else if (!this.onGround && ky < -18 && this.vy > -2 && this.jumps < 2) {
+          wantDoubleJump = true;
+        }
+      }
+      // If we just jumped over a coin trail and are now falling through lower coins, dive to collect
+      if (!this.onGround && Math.abs(kx) < 10 && ky > 12 && ky < 40 && this.hasGroundNear(center, feet + 40)) {
+        wantDive = true;
+      }
+    }
+
+    // 4. Powerup collection
+    for (const u of this.powerups) {
+      if (u.dead) continue;
+      const ux = u.x - center;
+      const uy = u.y - this.py;
+      if (ux > 8 && ux < 60) {
+        if (this.onGround && uy < -8) needJump = true;
+        else if (!this.onGround && uy < -16 && this.jumps < 2) wantDoubleJump = true;
+      }
+    }
+
+    // 5. Airborne pit recovery
+    if (!this.onGround && this.vy > 0.5 && !this.hasGroundNear(this.px + 16, feet + 10) && this.jumps < 2) {
+      wantDoubleJump = true;
+    }
+
+    // Execute decisions
     if (needJump && this.jumpBuf === 0 && this.onGround) this.pressJump();
     if (this.vy > 1.5) this.releaseJump();
-    if (!this.onGround && this.vy > 0 && !this.hasGroundNear(this.px + 14, feet) && this.jumps < 2)
-      this.pressJump();
+    if (wantDoubleJump && !this.onGround && this.jumps < 2) this.pressJump();
+    if (wantDive && !this.onGround && !this.diving && this.vy > -2) {
+      this.pressDive();
+    }
   }
 
   /* ------------------------------------------------------------- rendering */
