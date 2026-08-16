@@ -9,8 +9,6 @@ import {
   PAD_V,
   PAT,
   PLAYER_H,
-  rnd,
-  ri,
   VH,
   type BiomeEventTrigger,
   type EnemyKind,
@@ -38,8 +36,8 @@ const TRAJECTORY_FRAMES = 150;
 
 /**
  * Procedural world builder: emits platforms, pickups, power-ups, enemies,
- * spikes and springs into the host's arrays. Owns its generation cursor
- * (genX/genCount/…) and the biome-event trigger list it plants.
+ * spikes and springs into the host's arrays. Uses GenHost's seeded PRNG
+ * for 100% deterministic layout generation across multiplayer peers.
  */
 export class WorldGen {
   private genX!: number;
@@ -74,12 +72,24 @@ export class WorldGen {
     };
   }
 
+  private rnd(a: number, b: number): number {
+    return this.h.rng ? this.h.rng.rnd(a, b) : a + Math.random() * (b - a);
+  }
+
+  private ri(a: number, b: number): number {
+    return this.h.rng ? this.h.rng.ri(a, b) : Math.floor(this.rnd(a, b + 1));
+  }
+
+  private rand(): number {
+    return this.h.rng ? this.h.rng.next() : Math.random();
+  }
+
   // Follows the true jump/fall arc so coins always sit exactly where you travel.
   private addCoinArc(x0: number, x1: number, topY: number, arcH = 26, n = 4) {
     for (let i = 0; i < n; i++) {
       const t = (i + 0.5) / n;
       const y = topY - Math.sin(t * Math.PI) * arcH;
-      this.h.pickups.push({ x: x0 + (x1 - x0) * t, y, t: rnd(0, 6), gem: false, dead: false });
+      this.h.pickups.push({ x: x0 + (x1 - x0) * t, y, t: this.rnd(0, 6), gem: false, dead: false });
     }
   }
 
@@ -160,8 +170,8 @@ export class WorldGen {
 
   private pickPowerUp(): PowerUpKind {
     const kinds: PowerUpKind[] = ['shield', 'shoes', 'triple', 'propeller'];
-    let kind = kinds[ri(0, kinds.length - 1)];
-    if (kind === this.lastPowerUpKind) kind = kinds[(kinds.indexOf(kind) + ri(1, kinds.length - 1)) % kinds.length];
+    let kind = kinds[this.ri(0, kinds.length - 1)];
+    if (kind === this.lastPowerUpKind) kind = kinds[(kinds.indexOf(kind) + this.ri(1, kinds.length - 1)) % kinds.length];
     this.lastPowerUpKind = kind;
     return kind;
   }
@@ -171,11 +181,11 @@ export class WorldGen {
     this.h.powerups.push({
       x: p.x + p.w * 0.52,
       y: p.y - 18,
-      t: rnd(0, 6),
+      t: this.rnd(0, 6),
       kind,
       dead: false,
     });
-    this.nextPowerUpX = p.x + rnd(720, 980);
+    this.nextPowerUpX = p.x + this.rnd(720, 980);
   }
 
   private biomeIndexAtX(x: number) {
@@ -213,7 +223,7 @@ export class WorldGen {
 
     // Exactly ONE coin placement per encounter: the gap arc only appears on rest
     // beats, so it never overlaps with a pattern's own coins.
-    if (!intro && pattern === PAT.REST && gap > 34 && Math.random() < 0.6) {
+    if (!intro && pattern === PAT.REST && gap > 34 && this.rand() < 0.6) {
       this.addCoinArc(gapStart + 6, gapEnd - 6, Math.min(prevY, p.y) - 15, 24, gap > 66 ? 4 : 3);
     }
 
@@ -226,7 +236,7 @@ export class WorldGen {
       const biomeIndex = this.biomeIndexAtX(p.x);
       if (!this.eventBiomeRolls.has(biomeIndex)) {
         this.eventBiomeRolls.add(biomeIndex);
-        if (Math.random() < 0.2)
+        if (this.rand() < 0.2)
           this.eventTriggers.push({ x: p.x + 8, kind: bg, used: false });
       }
     }
@@ -252,35 +262,28 @@ export class WorldGen {
 
     switch (pattern) {
       case PAT.REST:
-        // no gap arc here (gap too small) — maybe a tiny sparse line instead
-        if (gap <= 34 && Math.random() < 0.5) this.addCoinLine(center - 26, center + 26, p.y - 16, 3);
+        if (gap <= 34 && this.rand() < 0.5) this.addCoinLine(center - 26, center + 26, p.y - 16, 3);
         break;
 
       case PAT.STOMP: {
         this.addBlob(p, center);
         this.addCoinArc(center - 22, center + 24, p.y - 25, 24, 3);
-        // sometimes a second foe on a wide platform
-        if (p.w > (d > 0.7 ? 130 : 165) && Math.random() < (d > 0.7 ? 0.7 : 0.4))
+        if (p.w > (d > 0.7 ? 130 : 165) && this.rand() < (d > 0.7 ? 0.7 : 0.4))
           this.addBlob(p, p.x + p.w * 0.28);
         break;
       }
 
       case PAT.SPIKES: {
-        // variable spike fields: singles, short rows, or spaced clusters
-        const roll = Math.random();
+        const roll = this.rand();
         const maxN = d > 0.7 ? 7 : d > 0.6 ? 5 : d > 0.3 ? 4 : 3;
-        if (bg === 'desert' && Math.random() < 0.5) {
-          // cactus spikers you must slam through — keep them far enough apart
-          // that there's a real landing spot in between (spiker is 12 wide).
+        if (bg === 'desert' && this.rand() < 0.5) {
           this.addSpiker(p, center - 20);
-          if (p.w > 185 && Math.random() < 0.5) this.addSpiker(p, center + 40);
+          if (p.w > 185 && this.rand() < 0.5) this.addSpiker(p, center + 40);
         } else if (roll < 0.4 && p.w >= 165) {
-          // Two clusters = two distinct hops. Anchor one near each end so the
-          // space between them is always a usable landing zone.
           const leftPad = 34;
           const rightPad = 26;
-          const a = ri(2, Math.min(3, maxN));
-          const b = ri(1, Math.min(3, maxN));
+          const a = this.ri(2, Math.min(3, maxN));
+          const b = this.ri(1, Math.min(3, maxN));
           const ax = p.x + leftPad;
           const bx = p.x + p.w - rightPad - b * 8;
           this.h.spikes.push({ x: ax, y: p.y - 10, n: a });
@@ -288,7 +291,7 @@ export class WorldGen {
           const mid = (ax + a * 8 + bx) / 2;
           this.addCoinArc(mid - 14, mid + 14, p.y - 27, 22, 2);
         } else {
-          const count = ri(2, maxN);
+          const count = this.ri(2, maxN);
           const spikeX = center - count * 4;
           this.h.spikes.push({ x: spikeX, y: p.y - 10, n: count });
           this.addCoinArc(spikeX - 14, spikeX + count * 8 + 14, p.y - 26, 24, 3);
@@ -297,7 +300,6 @@ export class WorldGen {
       }
 
       case PAT.LAUNCH: {
-        // The departure pad and its coins are created with this exact pit in generate().
         break;
       }
 
@@ -307,28 +309,24 @@ export class WorldGen {
 
       case PAT.UPPER: {
         const fw = clamp(p.w - 40, 30, 64);
-        const fx = p.x + (p.w - fw) * rnd(0.35, 0.6);
-        // Rise is capped at 55px — under the 64px hold-jump ceiling — so the
-        // float is always reachable even on the shortest viewports where the
-        // old VH-66 headroom clamp shoved it out of jump range. When the
-        // headroom and the rise conflict, reachability wins.
+        const fx = p.x + (p.w - fw) * this.rnd(0.35, 0.6);
         const fy = clamp(
-          p.y - ri(40, 52),
+          p.y - this.ri(40, 52),
           Math.max(72, p.y - 55),
           Math.max(VH - 66, p.y - 40),
         );
-        this.h.platforms.push({ x: fx, y: fy, w: fw, float: true, seed: Math.random() * 999 });
+        this.h.platforms.push({ x: fx, y: fy, w: fw, float: true, seed: this.rand() * 999 });
         this.addCoinLine(fx + 8, fx + fw - 8, fy - 14, 3);
-        if (Math.random() < 0.35)
+        if (this.rand() < 0.35)
           this.h.pickups.push({ x: fx + fw / 2, y: fy - 30, t: 0, gem: true, dead: false });
         break;
       }
 
       case PAT.FLYER:
       default: {
-        const droneY = clamp(Math.min(prevY, p.y) - ri(30, 46), 66, VH - 54);
-        this.addFlyer(center, droneY, ri(28, 40));
-        if (Math.random() < 0.4) this.addCoinLine(center - 22, center + 22, p.y - 16, 3);
+        const droneY = clamp(Math.min(prevY, p.y) - this.ri(30, 46), 66, VH - 54);
+        this.addFlyer(center, droneY, this.ri(28, 40));
+        if (this.rand() < 0.4) this.addCoinLine(center - 22, center + 22, p.y - 16, 3);
         break;
       }
     }
@@ -347,7 +345,6 @@ export class WorldGen {
     return dx;
   }
 
-  // Uses the exact pad start, locked horizontal speed, and pad gravity from step().
   private addPadArc(
     sx: number,
     startY: number,
@@ -380,7 +377,7 @@ export class WorldGen {
     }
   }
 
-  // Weighted, non-repeating pattern picker -> a fresh sequence every run.
+  // Weighted, non-repeating pattern picker -> a fresh deterministic sequence every run.
   private pickPattern(): number {
     const d = this.diffAtX(this.genX);
     const weights = [
@@ -396,11 +393,10 @@ export class WorldGen {
       weights[PAT.SPIKES] = 0;
       weights[PAT.FLYER] = 0;
     }
-    // avoid the same pattern 3x, and never chain two launch pads
     for (let attempt = 0; attempt < 8; attempt++) {
       let total = 0;
       for (const w of weights) total += w;
-      let r = Math.random() * total;
+      let r = this.rand() * total;
       let pick = 0;
       for (let i = 0; i < weights.length; i++) {
         r -= weights[i];
@@ -438,16 +434,13 @@ export class WorldGen {
       let y = prevY;
       if (!intro) {
         if (pattern === PAT.LAUNCH) {
-          // launch pad: the next platform drops away into a real pit
-          y = clamp(prevY + rnd(26, 50), 112, MAX_PLATFORM_Y);
+          y = clamp(prevY + this.rnd(26, 50), 112, MAX_PLATFORM_Y);
         } else if (pattern === PAT.MEGA) {
-          // super pad: deeper drop and a much wider canyon
-          y = clamp(prevY + rnd(34, 58), 112, MAX_PLATFORM_Y);
+          y = clamp(prevY + this.rnd(34, 58), 112, MAX_PLATFORM_Y);
         } else if (pattern === PAT.UPPER) {
-          // upper route: gentle change, wide but reachable gap
-          y = clamp(prevY + rnd(-10, 18), 98, MAX_PLATFORM_Y);
+          y = clamp(prevY + this.rnd(-10, 18), 98, MAX_PLATFORM_Y);
         } else {
-          const dy = rnd(-46, 58) * (0.45 + 0.55 * d);
+          const dy = this.rnd(-46, 58) * (0.45 + 0.55 * d);
           y = clamp(prevY + dy, 98, MAX_PLATFORM_Y);
           if (y < prevY - 40) y = prevY - 40;
         }
@@ -460,18 +453,17 @@ export class WorldGen {
       else if (pattern === PAT.LAUNCH) {
         const vx = this.h.runSpeed();
         const reach = this.padReach(prevY, y, PAD_V, vx);
-        gap = clamp(reach * rnd(0.72, 0.8) - 23, 44, 70);
+        gap = clamp(reach * this.rnd(0.72, 0.8) - 23, 44, 70);
         launchLandingWidth = reach - gap + 12;
       } else if (pattern === PAT.MEGA) {
         const vx = this.h.runSpeed();
         const reach = this.padReach(prevY, y, MEGA_PAD_V, vx);
-        gap = clamp(reach * rnd(0.74, 0.82) - 23, 74, 108);
+        gap = clamp(reach * this.rnd(0.74, 0.82) - 23, 74, 108);
         launchLandingWidth = reach - gap + 14;
       } else if (pattern === PAT.UPPER) {
-        gap = rnd(44, 58);
+        gap = this.rnd(44, 58);
       } else {
-        gap = rnd(26 + 10 * d, 42 + 24 * d);
-        // climbing costs air time: shorten the gap, drops can be longer
+        gap = this.rnd(26 + 10 * d, 42 + 24 * d);
         const rise = prevY - y;
         if (rise > 0) gap *= 1 - 0.55 * (rise / 40);
         else gap *= 1 + 0.2 * (-rise / 58);
@@ -480,27 +472,22 @@ export class WorldGen {
       }
 
       const x = prevEnd + gap;
-      // platform width varies with pattern for readable, non-random terrain
       let w: number;
       if (intro) w = this.genCount === 0 ? 380 : 200;
-      else if (pattern === PAT.LAUNCH || pattern === PAT.MEGA) w = rnd(90, 130);
-      else if (pattern === PAT.SPIKES) w = rnd(120, 200);
-      else if (pattern === PAT.REST) w = rnd(80, 130);
-      else w = rnd(100, 190 - 40 * d);
+      else if (pattern === PAT.LAUNCH || pattern === PAT.MEGA) w = this.rnd(90, 130);
+      else if (pattern === PAT.SPIKES) w = this.rnd(120, 200);
+      else if (pattern === PAT.REST) w = this.rnd(80, 130);
+      else w = this.rnd(100, 190 - 40 * d);
       if (launchLandingWidth > 0) w = Math.max(w, clamp(launchLandingWidth, 96, 148));
-      const p: Platform = { x, y, w, float: false, seed: Math.random() * 999 };
+      const p: Platform = { x, y, w, float: false, seed: this.rand() * 999 };
       this.h.platforms.push(p);
 
-      // A launch encounter belongs to the gap just generated. Put the pad on
-      // the departure edge and build its coin path to this exact landing.
       if (!intro && (pattern === PAT.LAUNCH || pattern === PAT.MEGA)) {
         const mega = pattern === PAT.MEGA;
         const sx = prevEnd - (mega ? 30 : 28);
         const v = mega ? MEGA_PAD_V : PAD_V;
         const launchVx = this.h.runSpeed();
 
-        // The launch is the only pickup read in this space. Remove a previous
-        // pattern's nearby coins/hazards so the departure edge stays legible.
         const clearFrom = prevEnd - 118;
         for (let i = this.h.pickups.length - 1; i >= 0; i--) {
           const k = this.h.pickups[i];

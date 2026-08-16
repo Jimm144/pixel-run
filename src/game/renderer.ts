@@ -88,6 +88,11 @@ export class Renderer {
   private hudComboKey = '';
   private hudComboStr = '';
 
+  // Ghost interpolation state for silky smooth 60fps multiplayer rendering
+  private oppGhostX = 0;
+  private oppGhostY = 0;
+  private oppGhostInit = false;
+
   constructor(
     private g: RenderHost,
     private particles: ParticleSystem,
@@ -110,6 +115,7 @@ export class Renderer {
     this.platI = 0;
     this.platNI = 1;
     this.platformCaches.clear();
+    this.oppGhostInit = false;
   }
 
   /** Called when the canvas size changes — drops the size-dependent art
@@ -437,6 +443,7 @@ export class Renderer {
     this.drawWorld();
     this.particles.draw(c, this.g.camX);
     if (this.g.phase !== 'dead') this.drawPlayer();
+    this.drawOpponentGhost();
     this.drawDeathShockwave();
     this.texts.draw(c, this.g.camX);
 
@@ -1739,6 +1746,73 @@ export class Renderer {
     }
   }
 
+  private drawOpponentGhost() {
+    const opp = this.g.opponentState;
+    if (!opp || this.g.phase === 'ready' || opp.dead) {
+      this.oppGhostInit = false;
+      return;
+    }
+
+    if (!this.oppGhostInit) {
+      this.oppGhostX = opp.x;
+      this.oppGhostY = opp.y;
+      this.oppGhostInit = true;
+    } else {
+      // Smooth 60fps exponential lerp towards target snapshot with velocity extrapolation
+      this.oppGhostX += (opp.x - this.oppGhostX) * 0.38;
+      this.oppGhostY += (opp.y - this.oppGhostY) * 0.45;
+    }
+
+    const c = this.ctx;
+    const cam = this.g.camX;
+    const ox = Math.round(this.oppGhostX - cam + PLAYER_W / 2);
+    const oy = Math.round(this.oppGhostY + PLAYER_H / 2);
+
+    // Is opponent visible inside or near camera?
+    if (ox >= -40 && ox <= VW + 40) {
+      c.save();
+      c.translate(ox, oy);
+      c.globalAlpha = 0.68;
+
+      drawPlayerSprite(c, 0, 0, {
+        skinId: opp.skinId || 'bob',
+        frame: opp.tick || this.g.frame,
+        run: opp.run,
+        onGround: !opp.air,
+        diving: opp.diving,
+        vx: 2.1,
+      });
+
+      // Holographic glow outline around opponent
+      c.strokeStyle = '#7ef7ff';
+      c.lineWidth = 1;
+      c.strokeRect(Math.round(-PLAYER_W / 2 - 1), Math.round(-PLAYER_H / 2 - 1), PLAYER_W + 2, PLAYER_H + 2);
+
+      // Opponent floating nametag & distance tag
+      c.globalAlpha = 0.88;
+      const tag = `${opp.meters}M`;
+      drawTextCentered(c, tag, 0, -PLAYER_H / 2 - 8, 1, '#7ef7ff', '#08121e');
+      c.restore();
+    } else {
+      // Off-screen indicator
+      c.save();
+      const isAhead = ox > VW;
+      const ptrX = isAhead ? VW - 20 : 20;
+      const ptrY = clamp(oy, 30, VH - 40);
+      const diffM = opp.meters - Math.floor(this.g.distance / 10);
+      const sign = diffM >= 0 ? '+' : '';
+      const label = `P2 ${sign}${diffM}M`;
+
+      c.fillStyle = '#100722';
+      c.fillRect(ptrX - 18, ptrY - 6, 36, 12);
+      c.strokeStyle = '#7ef7ff';
+      c.lineWidth = 1;
+      c.strokeRect(ptrX - 18, ptrY - 6, 36, 12);
+      drawTextCentered(c, label, ptrX, ptrY - 2, 1, '#7ef7ff', '#08121e');
+      c.restore();
+    }
+  }
+
   private drawBiomeEvent() {
     if (this.g.phase !== 'playing' || this.g.eventTimer <= 0 || this.g.eventMax <= 0) return;
     const c = this.ctx;
@@ -1955,6 +2029,32 @@ export class Renderer {
       this.drawCombo(Math.round(W / 2), 44);
     } else {
       this.drawCombo(Math.round(W / 2), 8);
+    }
+
+    // 5. MULTIPLAYER BATTLE STATUS
+    if (this.g.isMultiplayer && this.g.opponentState) {
+      const opp = this.g.opponentState;
+      const midX = Math.round(W / 2);
+      const vsY = (mobile || isNarrow) ? 58 : 26;
+      const p1Score = this.g.score;
+      const p2Score = opp.score;
+      const p1Ahead = p1Score >= p2Score;
+
+      const p1Col = p1Ahead ? '#3ef2c8' : '#ffd166';
+      const p2Col = !p1Ahead ? '#3ef2c8' : '#ff70a6';
+
+      const p1Txt = `YOU:${p1Score}`;
+      const vsTxt = ` ⚔️ `;
+      const p2Txt = `P2:${p2Score}`;
+
+      const totalW = textWidth(p1Txt, 1) + textWidth(vsTxt, 1) + textWidth(p2Txt, 1);
+      const startX = midX - Math.floor(totalW / 2);
+
+      drawText(c, p1Txt, startX, vsY, 1, p1Col, '#150a24');
+      const vsX = startX + textWidth(p1Txt, 1);
+      drawText(c, vsTxt, vsX, vsY, 1, '#ffffff', '#150a24');
+      const p2X = vsX + textWidth(vsTxt, 1);
+      drawText(c, p2Txt, p2X, vsY, 1, p2Col, '#150a24');
     }
   }
 

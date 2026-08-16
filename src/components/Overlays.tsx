@@ -133,6 +133,7 @@ export function StartScreen({
   questRun,
   questOnDayRollover,
   questOnShare,
+  onOpenBattles,
   onOpenSkins,
   onExportSave,
   onImportSave,
@@ -151,6 +152,7 @@ export function StartScreen({
   questRun: QuestRunStats;
   questOnDayRollover?: () => void;
   questOnShare?: () => void;
+  onOpenBattles?: () => void;
   onOpenSkins?: () => void;
   onExportSave?: () => void;
   onImportSave?: () => void;
@@ -253,21 +255,41 @@ export function StartScreen({
           </button>
         </div>
         <div className="flex w-full max-w-[420px] items-stretch gap-2 tablet:max-w-[500px]">
+          {onOpenBattles && (
+            <button
+              type="button"
+              onClick={onOpenBattles}
+              aria-label="1v1 Multiplayer Battles"
+              title="1v1 Multiplayer Battles"
+              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[#ff4d6d] bg-[#1a0614] text-[#ff4d6d] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
+            >
+              <span className="text-[18px] sm:text-[20px] leading-none">⚔️</span>
+            </button>
+          )}
           <PixelButton
             onClick={onStart}
-            className="flex flex-[3] items-center justify-center gap-3 py-3.5 text-[11px] tablet:py-4 tablet:text-[14px]"
+            className="flex flex-1 items-center justify-center gap-3 py-3.5 text-[11px] tablet:py-4 tablet:text-[14px]"
           >
             <PlayIcon />
             <span>START RUN</span>
           </PixelButton>
           {onOpenSkins && (
-            <PixelButton
-              variant="ghost"
+            <button
+              type="button"
               onClick={onOpenSkins}
-              className="flex flex-1 items-center justify-center py-3.5 text-[11px] tablet:py-4 tablet:text-[13px]"
+              aria-label="Character Locker"
+              title="Character Locker"
+              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[#3ef2c8] bg-[#071a17] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
             >
-              SKINS
-            </PixelButton>
+              <svg viewBox="0 0 16 16" className="h-5 w-5 sm:h-6 sm:w-6" fill="currentColor">
+                <rect x="5" y="2" width="6" height="4" fill="#ffcf9e" />
+                <rect x="9" y="3" width="1" height="2" fill="#20122e" />
+                <rect x="4" y="6" width="8" height="2" fill="#3ef2c8" />
+                <rect x="3" y="8" width="10" height="5" fill="#ff4d6d" />
+                <rect x="4" y="13" width="3" height="2" fill="#20122e" />
+                <rect x="9" y="13" width="3" height="2" fill="#20122e" />
+              </svg>
+            </button>
           )}
         </div>
         <div className="flex items-center gap-3">

@@ -200,6 +200,25 @@ export interface Ghost {
 export const P_CAP = 320;
 export const T_CAP = 18;
 
+export class Mulberry32 {
+  public s: number;
+  constructor(seed: number = 12345) {
+    this.s = (seed >>> 0) || 12345;
+  }
+  next(): number {
+    let t = (this.s += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  rnd(a: number, b: number): number {
+    return a + this.next() * (b - a);
+  }
+  ri(a: number, b: number): number {
+    return Math.floor(this.rnd(a, b + 1));
+  }
+}
+
 export const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
 export const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 export const ri = (a: number, b: number) => Math.floor(rnd(a, b + 1));
@@ -225,6 +244,7 @@ export function hash(n: number) {
  * generator never needs to import it (no circular imports).
  */
 export interface GenHost {
+  rng: Mulberry32;
   platforms: Platform[];
   pickups: Pickup[];
   powerups: PowerUp[];
@@ -261,36 +281,39 @@ export interface RenderHost {
   flashCol: string;
   countdown: number;
   goTimer: number;
-  vx: number;
   px: number;
   py: number;
-  sx: number;
-  sy: number;
-  spin: number;
+  vx: number;
+  vy: number;
   onGround: boolean;
-  animT: number;
-  invuln: number;
   diving: boolean;
+  shielded: boolean;
+  shieldTimer: number;
   jumpShoes: number;
   tripleJump: number;
   propellerHat: number;
   propellerFlashing: boolean;
   propellerFlashTimer: number;
-  shielded: boolean;
-  shieldTimer: number;
-  ghosts: Ghost[];
+  invuln: number;
+  animT: number;
+  sx: number;
+  sy: number;
+  spin: number;
   platforms: Platform[];
-  springs: Spring[];
-  spikes: Spike[];
   pickups: Pickup[];
   powerups: PowerUp[];
   enemies: Enemy[];
-  zone: Zone;
-  zoneOrder: number[];
+  spikes: Spike[];
+  springs: Spring[];
+  ghosts: Ghost[];
+  activeSkin: SkinId;
   eventTimer: number;
   eventMax: number;
-  eventKind: BgKind;
   eventSeed: number;
-  activeSkin: SkinId;
+  eventKind: BgKind;
+  zone: Zone;
+  zoneOrder: number[];
   moonPhase: number;
+  isMultiplayer: boolean;
+  opponentState: any;
 }
