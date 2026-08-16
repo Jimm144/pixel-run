@@ -17,18 +17,18 @@ export const MAX_PLAYERS = 5;
 
 const PLAYER_COLORS = ['#7ef7ff', '#ff70a6', '#ffd166', '#a78bfa'];
 
-const RELAYS = [
-  'wss://relay.damus.io',
-  'wss://nos.lol',
-  'wss://relay.nostr.band',
-  'wss://purplerelay.com',
-  'wss://eden.nostr.land',
+const TRACKERS = [
+  'wss://tracker.openwebtorrent.com',
+  'wss://tracker.webtorrent.dev',
+  'wss://tracker.btorrent.xyz',
+  'wss://tracker.files.fm:7073/announce',
+  'wss://open.ftorrent.com',
 ];
 
 const ROOM_CONFIG = {
   appId: APP_ID,
   relayConfig: {
-    urls: RELAYS,
+    urls: TRACKERS,
   },
 };
 
@@ -192,7 +192,7 @@ export class P2PManager {
     this.localFinalStats = null;
 
     try {
-      const { joinRoom, selfId } = await import('trystero/nostr');
+      const { joinRoom, selfId } = await import('@trystero-p2p/torrent');
       this.localPeerId = selfId;
 
       this.room = joinRoom(ROOM_CONFIG as any, this.roomId);
@@ -267,7 +267,7 @@ export class P2PManager {
   public async startBrowsingPublicLobbies() {
     this.stopBrowsingPublicLobbies();
     try {
-      const { joinRoom } = await import('trystero/nostr');
+      const { joinRoom } = await import('@trystero-p2p/torrent');
       this.discoveryRoom = joinRoom(ROOM_CONFIG as any, DISCOVERY_ROOM);
 
       const sendRequest = registerMessageAction<{ ts: number }>(this.discoveryRoom, 'req_lobbies');
@@ -311,7 +311,7 @@ export class P2PManager {
   private async startPublicAnnounce() {
     this.stopPublicAnnounce();
     try {
-      const { joinRoom } = await import('trystero/nostr');
+      const { joinRoom } = await import('@trystero-p2p/torrent');
       this.discoveryRoom = joinRoom(ROOM_CONFIG as any, DISCOVERY_ROOM);
 
       const sendLobby = registerMessageAction<PublicLobbyInfo>(this.discoveryRoom, 'public_lobby');
