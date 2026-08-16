@@ -29,6 +29,44 @@ const RELAYS = [
   'wss://relay.primal.net',
 ];
 
+function registerMessageAction<T>(
+  room: any,
+  namespace: string,
+  onMessage?: (data: T, peerId: string) => void
+): (data: T, targetPeerId?: string) => Promise<void> {
+  const action = room.makeAction(namespace);
+  if (Array.isArray(action)) {
+    const [send, get] = action;
+    if (onMessage) get((data: T, peerId: string) => onMessage(data, peerId));
+    return async (data: T, targetPeerId?: string) => {
+      send(data, targetPeerId);
+    };
+  }
+  if (onMessage) {
+    action.onMessage = (data: T, context: any) => {
+      const peerId = typeof context === 'string' ? context : (context?.peerId || '');
+      onMessage(data, peerId);
+    };
+  }
+  return async (data: T, targetPeerId?: string) => {
+    try {
+      if (targetPeerId) {
+        await action.send(data, { target: targetPeerId });
+      } else {
+        await action.send(data);
+      }
+    } catch {}
+  };
+}
+
+function bindPeerEvent(room: any, eventName: 'onPeerJoin' | 'onPeerLeave', handler: (peerId: string) => void) {
+  if (typeof room[eventName] === 'function') {
+    room[eventName](handler);
+  } else {
+    room[eventName] = handler;
+  }
+}
+
 export class P2PManager {
   public role: MatchRole = 'host';
   public roomId: string = '';
@@ -163,20 +201,16 @@ export class P2PManager {
       );
 
       // 1. Unreliable coordinates channel
-      const [sendTick, getTick] = this.room.makeAction('tick');
-      this.sendTickAction = sendTick;
-      getTick((data: any, peerId: string) => {
-        this.handleIncomingTick(data as PlayerTickPayload, peerId);
+      this.sendTickAction = registerMessageAction<PlayerTickPayload>(this.room, 'tick', (data, peerId) => {
+        this.handleIncomingTick(data, peerId);
       });
 
       // 2. Reliable guaranteed events channel
-      const [sendEvent, getEvent] = this.room.makeAction('event');
-      this.sendEventAction = sendEvent;
-      getEvent((data: any, peerId: string) => {
-        this.handleIncomingEvent(data as NetEventPacket, peerId);
+      this.sendEventAction = registerMessageAction<NetEventPacket>(this.room, 'event', (data, peerId) => {
+        this.handleIncomingEvent(data, peerId);
       });
 
-      this.room.onPeerJoin((peerId: string) => {
+      bindPeerEvent(this.room, 'onPeerJoin', (peerId: string) => {
         if (this.opponents.size >= MAX_PLAYERS - 1) {
           if (this.sendEventAction) {
             this.sendEventAction({ type: 'ROOM_FULL' }, peerId);
@@ -190,11 +224,11 @@ export class P2PManager {
             name: this.localName,
             skinId: this.localSkin,
             protocolVersion: PROTOCOL_VERSION,
-          });
+          }, peerId);
         }
       });
 
-      this.room.onPeerLeave((peerId: string) => {
+      bindPeerEvent(this.room, 'onPeerLeave', (peerId: string) => {
         if (this.opponents.has(peerId)) {
           this.opponents.delete(peerId);
           this.opponentTicks.delete(peerId);
@@ -241,10 +275,8 @@ export class P2PManager {
         DISCOVERY_ROOM,
       );
 
-      const [sendRequest, getRequest] = this.discoveryRoom.makeAction('req_lobbies');
-      const [, getLobby] = this.discoveryRoom.makeAction('public_lobby');
-
-      getLobby((data: PublicLobbyInfo) => {
+      const sendRequest = registerMessageAction<{ ts: number }>(this.discoveryRoom, 'req_lobbies');
+      registerMessageAction<PublicLobbyInfo>(this.discoveryRoom, 'public_lobby', (data) => {
         if (data && data.roomId && Date.now() - data.ts < 20000) {
           this.publicLobbies.set(data.roomId, data);
           this.prunePublicLobbies();
@@ -255,7 +287,7 @@ export class P2PManager {
       });
 
       // Request immediate announcements from existing hosts
-      this.discoveryRoom.onPeerJoin(() => {
+      bindPeerEvent(this.discoveryRoom, 'onPeerJoin', () => {
         sendRequest({ ts: Date.now() });
       });
       sendRequest({ ts: Date.now() });
@@ -293,12 +325,11 @@ export class P2PManager {
         DISCOVERY_ROOM,
       );
 
-      const [sendLobby] = this.discoveryRoom.makeAction('public_lobby');
-      const [, getRequest] = this.discoveryRoom.makeAction('req_lobbies');
+      const sendLobby = registerMessageAction<PublicLobbyInfo>(this.discoveryRoom, 'public_lobby');
 
       const broadcast = (targetPeerId?: string) => {
         if (!this.isPublic || this.state === 'playing' || !this.roomId) return;
-        const payload = {
+        const payload: PublicLobbyInfo = {
           roomId: this.roomId,
           hostName: this.localName,
           hostSkin: this.localSkin,
@@ -310,10 +341,10 @@ export class P2PManager {
       };
 
       // Respond immediately when a browser joins discovery or requests lobbies
-      getRequest((_, peerId: string) => {
+      registerMessageAction<{ ts: number }>(this.discoveryRoom, 'req_lobbies', (_, peerId) => {
         broadcast(peerId);
       });
-      this.discoveryRoom.onPeerJoin((peerId: string) => {
+      bindPeerEvent(this.discoveryRoom, 'onPeerJoin', (peerId: string) => {
         broadcast(peerId);
       });
 
