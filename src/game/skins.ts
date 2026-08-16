@@ -32,13 +32,58 @@ export type SkinId =
   | 'zeus'
   | 'leskos'
   | 'mr_soup'
-  | 'demon';
+  | 'demon'
+  | 'santa'
+  | 'easter_bunny';
 
 export interface SkinUnlockInfo {
-  type: 'free' | 'gems' | 'coins' | 'distance' | 'score' | 'quests' | 'moon' | 'konami' | 'save';
+  type: 'free' | 'gems' | 'coins' | 'distance' | 'score' | 'quests' | 'moon' | 'konami' | 'save' | 'holiday';
   cost?: number;
   threshold?: number;
   desc: string;
+  /** ISO date windows for 'holiday' skins: [[mmdd_start, mmdd_end], ...] (wraps Dec->Jan) */
+  holidayWindows?: [string, string][];
+}
+
+/** Returns true if a holiday skin is currently in-season */
+export function isHolidayActive(unlock: SkinUnlockInfo): boolean {
+  if (unlock.type !== 'holiday' || !unlock.holidayWindows) return false;
+  const now = new Date();
+  const mmdd = String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+  return unlock.holidayWindows.some(([start, end]) => {
+    if (start <= end) return mmdd >= start && mmdd <= end;
+    // Wraps year boundary (e.g. Dec -> Jan)
+    return mmdd >= start || mmdd <= end;
+  });
+}
+
+/** Compute Easter Sunday for a given year (Butcher's algorithm) */
+export function easterDate(year: number): Date {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month - 1, day);
+}
+
+/** Returns true if today is within `daysBefore`..`daysAfter` days of Easter */
+export function isEasterSeason(daysBefore = 7, daysAfter = 7): boolean {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const easter = easterDate(today.getFullYear());
+  easter.setHours(0, 0, 0, 0);
+  const diff = Math.round((today.getTime() - easter.getTime()) / 86400000);
+  return diff >= -daysBefore && diff <= daysAfter;
 }
 
 export interface SkinDef {
@@ -306,6 +351,38 @@ export const SKINS: Record<SkinId, SkinDef> = {
     scarf: '#ff7a45',
     ghostTrail: '#ff2e63',
     unlock: { type: 'moon', desc: 'REACH THE BLOOD MOON' },
+  },
+  santa: {
+    id: 'santa',
+    name: 'SANTA',
+    tier: 'legendary',
+    suit: '#c0392b',
+    suitDark: '#7b241c',
+    skin: '#ffcf9e',
+    boot: '#1a0a0a',
+    scarf: '#ffffff',
+    ghostTrail: '#ffffff',
+    unlock: {
+      type: 'holiday',
+      desc: 'LIMITED TIME — DEC 1 TO JAN 6',
+      holidayWindows: [['1201', '0106']],
+    },
+  },
+  easter_bunny: {
+    id: 'easter_bunny',
+    name: 'E. BUNNY',
+    tier: 'legendary',
+    suit: '#d4f1c7',
+    suitDark: '#91c882',
+    skin: '#f8d7da',
+    boot: '#8bc34a',
+    scarf: '#ff80ab',
+    ghostTrail: '#c8e6c9',
+    unlock: {
+      type: 'holiday',
+      desc: 'LIMITED TIME — EASTER WEEK',
+      holidayWindows: [], // computed dynamically via isEasterSeason()
+    },
   },
 };
 

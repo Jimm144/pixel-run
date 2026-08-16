@@ -649,6 +649,42 @@ export function drawPlayerSprite(
       f(5, 2, 4, 4, SKIN);
       f(2, 0, 8, 2, SUIT_D);
       f(7, 3, 1, 2, '#20122e');        // classic eye
+    } else if (skinId === 'santa') {
+      // Iconic red hat with white pompom
+      f(1, -5, 9, 2, tint('#c0392b'));
+      f(2, -7, 6, 3, tint('#c0392b'));
+      f(0, -3, 11, 2, tint('#ffffff'));
+      f(6, -9, 2, 2, tint('#eeeeee')); // pompom
+      // Jolly rosy face
+      f(2, 0, 7, 6, tint('#ffcf9e'));
+      f(2, 0, 8, 2, tint('#e8a070'));
+      // Bushy white beard covering lower face
+      f(2, 3, 7, 4, tint('#ffffff'));
+      f(3, 5, 5, 3, tint('#eeeeee'));
+      // Twinkling eye
+      f(7, 1, 1, 2, '#20122e');
+      f(8, 1, 1, 1, '#ffffff');
+    } else if (skinId === 'easter_bunny') {
+      // Big floppy ears
+      f(1, -8, 3, 8, tint('#d4f1c7'));
+      f(2, -7, 1, 6, tint('#ffb3c1'));
+      f(7, -8, 3, 8, tint('#d4f1c7'));
+      f(8, -7, 1, 6, tint('#ffb3c1'));
+      // Fluffy bunny head
+      f(2, 0, 7, 6, tint('#f8d7da'));
+      f(2, 0, 8, 2, tint('#e8b8c0'));
+      // Pink eyes with gleam
+      f(3, 1, 2, 2, '#ff80ab');
+      f(4, 1, 1, 1, '#ffffff');
+      f(7, 1, 2, 2, '#ff80ab');
+      f(8, 1, 1, 1, '#ffffff');
+      // Nose
+      f(5, 4, 2, 1, '#ff80ab');
+      // Swinging easter egg basket
+      const eggSwing = air ? 1 : Math.round(Math.sin(frame * 0.15) * 1.5);
+      f(-2, 3 + eggSwing, 3, 5, '#ffd166');
+      f(-2, 4 + eggSwing, 3, 1, '#ff80ab');
+      f(-2, 6 + eggSwing, 3, 1, '#3ef2c8');
     } else {
       // Classic Bob / Bobette / Cob / Mob
       f(2, 0, 7, 6, SUIT);
@@ -657,8 +693,8 @@ export function drawPlayerSprite(
       f(7, 3, 1, 2, '#20122e');
     }
 
-    // --- SCARF / COLLAR (Rendered on front collar, does NOT overlap hair behind) ---
-    if (skinId !== 'panda' && skinId !== 'pig' && skinId !== 'mr_soup' && skinId !== 'angel') {
+    // --- SCARF / COLLAR ---
+    if (skinId !== 'panda' && skinId !== 'pig' && skinId !== 'mr_soup' && skinId !== 'angel' && skinId !== 'santa' && skinId !== 'easter_bunny') {
       f(1, 5, 3, 2, SCARF);
     }
   }

@@ -42,11 +42,25 @@ function bufferToBase64(buf: Uint8Array): string {
   for (let i = 0; i < len; i++) {
     binary += String.fromCharCode(buf[i]);
   }
-  return btoa(binary);
+  // URL-safe base64: replace + with - and / with _ and remove padding =
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
 function base64ToBuffer(b64: string): Uint8Array {
-  const binary = atob(b64);
+  // Accept both standard and URL-safe base64; strip iOS smart chars
+  let clean = b64
+    .replace(/[\u2018\u2019]/g, "'")    // iOS smart single quotes
+    .replace(/[\u201c\u201d]/g, '"')    // iOS smart double quotes
+    .replace(/[\u2013\u2014]/g, '-')    // iOS en/em dashes -> hyphens
+    .replace(/\s/g, '');               // any whitespace
+
+  // Normalize URL-safe -> standard base64
+  clean = clean.replace(/-/g, '+').replace(/_/g, '/');
+
+  // Add padding
+  while (clean.length % 4 !== 0) clean += '=';
+
+  const binary = atob(clean);
   const len = binary.length;
   const bytes = new Uint8Array(len);
   for (let i = 0; i < len; i++) {

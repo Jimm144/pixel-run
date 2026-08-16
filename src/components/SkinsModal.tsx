@@ -11,6 +11,8 @@ import {
   saveUnlockedSkins,
   saveLifetimeStats,
   loadLifetimeStats,
+  isHolidayActive,
+  isEasterSeason,
 } from '../game/skins';
 import { drawPlayerSprite } from '../game/playerSprite';
 import { inputManager, type GamepadAction } from '../game/input';
@@ -335,7 +337,7 @@ export function SkinsModal({
     };
   }, [focusSection, focusedIndex, filteredSkins, cols, unlockedSkins, handleEquip, handleBuy, onClose]);
 
-  // Live Canvas Sprite Animation (Unified Single Source of Truth via drawPlayerSprite)
+  // Live Canvas Sprite Animation — fps-independent at 60fps target
   useEffect(() => {
     const cv = previewCanvasRef.current;
     if (!cv) return;
@@ -343,23 +345,29 @@ export function SkinsModal({
     if (!ctx) return;
 
     let frame = 0;
-    const render = () => {
-      frame++;
-      ctx.clearRect(0, 0, cv.width, cv.height);
-      ctx.imageSmoothingEnabled = false;
-      const W = cv.width;
-      const H = cv.height;
-      const cx = Math.floor(W / 2);
-      const cy = Math.floor(H / 2);
+    let lastTime = 0;
+    const FPS = 60;
+    const FRAME_MS = 1000 / FPS;
 
-      drawPlayerSprite(ctx, cx, cy, {
-        skinId: selectedSkin.id,
-        frame,
-        scale: 4.2,
-        onGround: true,
-        run: Math.floor(frame / 6) % 4,
-      });
-
+    const render = (now: number) => {
+      const delta = now - lastTime;
+      if (delta >= FRAME_MS) {
+        lastTime = now - (delta % FRAME_MS);
+        frame++;
+        ctx.clearRect(0, 0, cv.width, cv.height);
+        ctx.imageSmoothingEnabled = false;
+        const W = cv.width;
+        const H = cv.height;
+        const cx = Math.floor(W / 2);
+        const cy = Math.floor(H / 2);
+        drawPlayerSprite(ctx, cx, cy, {
+          skinId: selectedSkin.id,
+          frame,
+          scale: 4.2,
+          onGround: true,
+          run: Math.floor(frame / 6) % 4,
+        });
+      }
       animFrameRef.current = requestAnimationFrame(render);
     };
 
@@ -451,6 +459,18 @@ export function SkinsModal({
       return (
         <div className="flex h-[20px] sm:h-[22px] w-full items-center justify-center border border-[#ffd166]/40 bg-[#2b2005] px-1 text-center font-pixel text-[6px] text-[#ffd166]">
           {skin.unlock.desc}
+        </div>
+      );
+    }
+    if (skin.unlock.type === 'holiday') {
+      const active = skin.id === 'easter_bunny' ? isEasterSeason() : isHolidayActive(skin.unlock);
+      return (
+        <div className={`flex h-[20px] sm:h-[22px] w-full items-center justify-center border px-1 text-center font-pixel text-[6px] ${
+          active
+            ? 'border-[#ff80ab]/60 bg-[#2b0a1a] text-[#ff80ab]'
+            : 'border-[#453c60] bg-[#1c162e] text-[#6f5fa8]'
+        }`}>
+          {active ? '🎉 AVAILABLE NOW!' : skin.unlock.desc}
         </div>
       );
     }
