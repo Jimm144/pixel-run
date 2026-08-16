@@ -17,9 +17,12 @@ export interface OpponentInfo {
   skinId: SkinId;
   pingMs: number;
   ready: boolean;
+  color: string;
+  playerIndex: number; // 2..5
 }
 
 export interface PlayerTickPayload {
+  peerId?: string;
   seq: number;
   tick: number;
   x: number;
@@ -55,13 +58,12 @@ export type NetEventPacket =
       receivedAt: number;
     }
   | {
-      type: 'READY_CHECK';
-      ready: boolean;
+      type: 'ROOM_FULL';
     }
   | {
       type: 'MATCH_START';
       seed: number;
-      targetStartTime: number; // physical timestamp when countdown finishes
+      targetStartTime: number;
       startDelayMs: number;
     }
   | {
@@ -75,21 +77,35 @@ export type NetEventPacket =
       type: 'REMATCH_REQUEST';
     }
   | {
-      type: 'REMATCH_ACCEPT';
-      seed: number;
-    }
-  | {
       type: 'FORFEIT';
       reason: string;
     };
 
+export interface PublicLobbyInfo {
+  roomId: string;
+  hostName: string;
+  hostSkin: SkinId;
+  playerCount: number;
+  maxPlayers: number;
+  ts: number;
+}
+
+export interface LeaderboardEntry {
+  peerId: string;
+  name: string;
+  skinId: SkinId;
+  score: number;
+  meters: number;
+  kills: number;
+  dead: boolean;
+  rank: number;
+  isLocal: boolean;
+  color: string;
+}
+
 export interface MatchResult {
-  winner: 'local' | 'opponent' | 'draw';
-  reason: 'score' | 'death' | 'forfeit';
-  localScore: number;
-  localMeters: number;
-  opponentScore: number;
-  opponentMeters: number;
-  opponentName: string;
-  opponentSkin: SkinId;
+  rankings: LeaderboardEntry[];
+  localRank: number;
+  totalPlayers: number;
+  reason: 'death' | 'forfeit';
 }

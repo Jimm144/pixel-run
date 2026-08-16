@@ -94,19 +94,19 @@ export function SkinUnlockModal({ skinId, onEquip, onClose }: SkinUnlockModalPro
       role="dialog"
       aria-modal="true"
       aria-labelledby="skin-unlock-title"
-      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#08040f]/90 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#08040f]/90 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
       onClick={(e) => {
         if (e.target === e.currentTarget) handleClose();
       }}
     >
       <div
-        className="relative flex w-full max-w-[340px] flex-col items-center border-4 bg-[#0d0619] p-5 text-center font-pixel text-white shadow-[0_0_0_4px_#08040f,0_0_35px_rgba(62,242,200,0.25)]"
+        className="relative flex w-full max-w-[340px] flex-col items-center border-2 bg-[#0d0619] p-5 text-center font-pixel text-white shadow-[4px_4px_0_#08040f]"
         style={{ borderColor: tierTheme.border }}
       >
         {/* Header Title */}
         <h3
           id="skin-unlock-title"
-          className="mb-3 text-[10px] tracking-wider uppercase drop-shadow-[0_2px_0_#08040f] sm:text-[11px]"
+          className="mb-3 text-[10px] tracking-wider uppercase sm:text-[11px]"
           style={{ color: tierTheme.text }}
         >
           NEW SKIN UNLOCKED

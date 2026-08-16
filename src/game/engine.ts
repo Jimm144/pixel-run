@@ -89,7 +89,7 @@ type GameState = {
     | 'rng'
     | 'isMultiplayer'
     | 'matchSeed'
-    | 'opponentState'
+    | 'opponentStates'
   >]: Game[K];
 };
 
@@ -208,7 +208,7 @@ export class Game implements GenHost, RenderHost {
   rng: Mulberry32 = new Mulberry32();
   isMultiplayer = false;
   matchSeed = 0;
-  opponentState: PlayerTickPayload | null = null;
+  opponentStates: PlayerTickPayload[] = [];
 
   /* ---- subsystems */
   private renderer!: Renderer;
@@ -356,8 +356,8 @@ export class Game implements GenHost, RenderHost {
     sfx.startMusic(this.zone.bg, 0);
   }
 
-  setOpponentState(state: PlayerTickPayload | null) {
-    this.opponentState = state;
+  setOpponentStates(states: PlayerTickPayload[]) {
+    this.opponentStates = states || [];
   }
 
   /** Called when the canvas size changes — drops size-dependent art caches. */

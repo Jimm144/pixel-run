@@ -1,4 +1,3 @@
-import { joinRoom } from 'trystero/nostr';
 import type { SkinId } from '../skins';
 import type {
   MatchRole,
@@ -7,12 +6,17 @@ import type {
   PlayerTickPayload,
   NetEventPacket,
   MatchResult,
+  LeaderboardEntry,
+  PublicLobbyInfo,
 } from './types';
 
 const APP_ID = 'pixel-run-pvp-v1';
+const DISCOVERY_ROOM = 'pixel-run-discovery-v1';
 const PROTOCOL_VERSION = 1;
+export const MAX_PLAYERS = 5;
 
-// Fast decentralized Nostr relays for zero-latency WebRTC pairing
+const PLAYER_COLORS = ['#7ef7ff', '#ff70a6', '#ffd166', '#a78bfa'];
+
 const RELAYS = [
   'wss://relay.damus.io',
   'wss://nos.lol',
@@ -23,42 +27,44 @@ const RELAYS = [
 export class P2PManager {
   public role: MatchRole = 'host';
   public roomId: string = '';
+  public isPublic: boolean = false; // Private by default as requested
   public state: MatchState = 'idle';
-  public opponent: OpponentInfo | null = null;
+  public opponents: Map<string, OpponentInfo> = new Map();
   public localName: string = 'PLAYER 1';
   public localSkin: SkinId = 'bob';
   public matchSeed: number = 0;
   public rttMs: number = 0;
+  public localPeerId: string = '';
 
   public localFinalStats: { score: number; meters: number; kills: number } | null = null;
-  public opponentFinalStats: { score: number; meters: number; kills: number } | null = null;
+  public opponentDeaths: Map<string, { score: number; meters: number; kills: number }> = new Map();
+  public opponentTicks: Map<string, PlayerTickPayload> = new Map();
 
-  private room: ReturnType<typeof joinRoom> | null = null;
+  // Discovery state
+  private discoveryRoom: any = null;
+  private discoveryAnnounceTimer: number | null = null;
+  public publicLobbies: Map<string, PublicLobbyInfo> = new Map();
+
+  private room: any = null;
   private sendTickAction: ((data: PlayerTickPayload, targetPeerId?: string) => void) | null = null;
   private sendEventAction: ((data: NetEventPacket, targetPeerId?: string) => void) | null = null;
 
-  // Ping calibration state
-  private pingCount = 0;
-  private pingTimes: number[] = [];
-  private pingTimer: number | null = null;
-
   // Stream state & packet ordering
   private localOutgoingSeq = 0;
-  private lastReceivedSeq = -1;
-  public latestOpponentTick: PlayerTickPayload | null = null;
+  private peerSeqs: Map<string, number> = new Map();
   private wakeLock: any = null;
 
   // Event callbacks
   public onStateChange: ((state: MatchState) => void) | null = null;
-  public onOpponentUpdate: ((opp: OpponentInfo | null) => void) | null = null;
+  public onOpponentsUpdate: ((opps: OpponentInfo[]) => void) | null = null;
   public onCountdown: ((seconds: number) => void) | null = null;
   public onMatchStart: ((seed: number) => void) | null = null;
-  public onOpponentTick: ((tick: PlayerTickPayload) => void) | null = null;
-  public onOpponentDeath: ((data: { finalScore: number; finalMeters: number; kills: number }) => void) | null = null;
+  public onOpponentTicks: ((ticks: PlayerTickPayload[]) => void) | null = null;
+  public onOpponentDeath: ((data: { peerId: string; name: string; finalScore: number }) => void) | null = null;
   public onMatchResult: ((result: MatchResult) => void) | null = null;
+  public onPublicLobbiesUpdate: ((lobbies: PublicLobbyInfo[]) => void) | null = null;
   public onError: ((err: string) => void) | null = null;
 
-  // Visibility listener for anti-desync forfeit
   private visibilityTimeout: number | null = null;
 
   constructor() {
@@ -95,17 +101,27 @@ export class P2PManager {
     return { valid: true, code: clean };
   }
 
-  public host(name: string, skinId: SkinId): string {
+  public async host(name: string, skinId: SkinId, isPublic: boolean = false): Promise<string> {
     this.leave();
     this.role = 'host';
     this.localName = name || 'PLAYER 1';
     this.localSkin = skinId;
+    this.isPublic = isPublic;
     this.roomId = this.generateRoomCode();
-    this.initRoom();
+    await this.initRoom();
     return this.roomId;
   }
 
-  public join(roomCode: string, name: string, skinId: SkinId): boolean {
+  public setRoomVisibility(isPublic: boolean) {
+    this.isPublic = isPublic;
+    if (isPublic && this.state !== 'idle' && this.role === 'host') {
+      this.startPublicAnnounce();
+    } else {
+      this.stopPublicAnnounce();
+    }
+  }
+
+  public async join(roomCode: string, name: string, skinId: SkinId): Promise<boolean> {
     const parsed = this.parseRoomCode(roomCode);
     if (!parsed.valid) {
       if (this.onError) this.onError(parsed.error || 'INVALID ROOM CODE');
@@ -116,18 +132,23 @@ export class P2PManager {
     this.localName = name || 'PLAYER 2';
     this.localSkin = skinId;
     this.roomId = parsed.code;
-    this.initRoom();
+    await this.initRoom();
     return true;
   }
 
-  private initRoom() {
+  private async initRoom() {
     this.setState('connecting');
     this.localOutgoingSeq = 0;
-    this.lastReceivedSeq = -1;
+    this.peerSeqs.clear();
+    this.opponents.clear();
+    this.opponentTicks.clear();
+    this.opponentDeaths.clear();
     this.localFinalStats = null;
-    this.opponentFinalStats = null;
 
     try {
+      const { joinRoom, selfId } = await import('trystero/nostr');
+      this.localPeerId = selfId;
+
       this.room = joinRoom(
         {
           appId: APP_ID,
@@ -136,23 +157,28 @@ export class P2PManager {
         this.roomId,
       );
 
-      // Split Channels:
-      // 1. Fast, unreliable coordinate streaming ('tick')
+      // 1. Unreliable coordinates channel
       const [sendTick, getTick] = this.room.makeAction('tick');
       this.sendTickAction = sendTick;
       getTick((data: any, peerId: string) => {
         this.handleIncomingTick(data as PlayerTickPayload, peerId);
       });
 
-      // 2. Reliable guaranteed events ('event')
+      // 2. Reliable guaranteed events channel
       const [sendEvent, getEvent] = this.room.makeAction('event');
       this.sendEventAction = sendEvent;
       getEvent((data: any, peerId: string) => {
         this.handleIncomingEvent(data as NetEventPacket, peerId);
       });
 
-      // Connection Lifecycle: onPeerJoin
       this.room.onPeerJoin((peerId: string) => {
+        if (this.opponents.size >= MAX_PLAYERS - 1) {
+          if (this.sendEventAction) {
+            this.sendEventAction({ type: 'ROOM_FULL' }, peerId);
+          }
+          return;
+        }
+
         if (this.sendEventAction) {
           this.sendEventAction({
             type: 'HANDSHAKE',
@@ -163,31 +189,124 @@ export class P2PManager {
         }
       });
 
-      // Connection Lifecycle: onPeerLeave
       this.room.onPeerLeave((peerId: string) => {
-        if (this.opponent && this.opponent.peerId === peerId) {
+        if (this.opponents.has(peerId)) {
+          this.opponents.delete(peerId);
+          this.opponentTicks.delete(peerId);
+          if (this.onOpponentsUpdate) {
+            this.onOpponentsUpdate(Array.from(this.opponents.values()));
+          }
+
           if (this.state === 'playing') {
-            this.handleForfeitWin('OPPONENT DISCONNECTED');
-          } else {
-            this.opponent = null;
-            if (this.onOpponentUpdate) this.onOpponentUpdate(null);
+            this.checkAllPlayersFinished();
+          } else if (this.opponents.size === 0) {
             this.setState('lobby');
           }
         }
       });
 
-      // 8-second handshake timeout with alert
+      if (this.role === 'host' && this.isPublic) {
+        this.startPublicAnnounce();
+      }
+
       setTimeout(() => {
-        if (this.state === 'connecting' && !this.opponent) {
+        if (this.state === 'connecting' && this.opponents.size === 0) {
           if (this.onError) {
-            this.onError('WAITING FOR PEER... SHARE ROOM LINK!');
+            this.onError('WAITING FOR PLAYERS... SHARE ROOM CODE');
           }
         }
-      }, 8000);
+      }, 6000);
 
     } catch (err: any) {
       if (this.onError) this.onError(err?.message || 'CONNECTION FAILED');
       this.setState('idle');
+    }
+  }
+
+  // Public Lobby Discovery Subsystem
+  public async startBrowsingPublicLobbies() {
+    this.stopBrowsingPublicLobbies();
+    try {
+      const { joinRoom } = await import('trystero/nostr');
+      this.discoveryRoom = joinRoom(
+        {
+          appId: APP_ID,
+          relayUrls: RELAYS,
+        } as any,
+        DISCOVERY_ROOM,
+      );
+
+      const [, getLobby] = this.discoveryRoom.makeAction('public_lobby');
+      getLobby((data: PublicLobbyInfo) => {
+        if (data && data.roomId && Date.now() - data.ts < 15000) {
+          this.publicLobbies.set(data.roomId, data);
+          this.prunePublicLobbies();
+          if (this.onPublicLobbiesUpdate) {
+            this.onPublicLobbiesUpdate(Array.from(this.publicLobbies.values()));
+          }
+        }
+      });
+    } catch {}
+  }
+
+  public stopBrowsingPublicLobbies() {
+    if (this.discoveryRoom) {
+      try {
+        this.discoveryRoom.leave();
+      } catch {}
+      this.discoveryRoom = null;
+    }
+    this.publicLobbies.clear();
+  }
+
+  private prunePublicLobbies() {
+    const now = Date.now();
+    for (const [roomId, info] of this.publicLobbies.entries()) {
+      if (now - info.ts > 16000) {
+        this.publicLobbies.delete(roomId);
+      }
+    }
+  }
+
+  private async startPublicAnnounce() {
+    this.stopPublicAnnounce();
+    try {
+      const { joinRoom } = await import('trystero/nostr');
+      this.discoveryRoom = joinRoom(
+        {
+          appId: APP_ID,
+          relayUrls: RELAYS,
+        } as any,
+        DISCOVERY_ROOM,
+      );
+
+      const [sendLobby] = this.discoveryRoom.makeAction('public_lobby');
+      const announce = () => {
+        if (!this.isPublic || this.state === 'playing' || !this.roomId) return;
+        sendLobby({
+          roomId: this.roomId,
+          hostName: this.localName,
+          hostSkin: this.localSkin,
+          playerCount: this.opponents.size + 1,
+          maxPlayers: MAX_PLAYERS,
+          ts: Date.now(),
+        });
+      };
+      announce();
+      this.discoveryAnnounceTimer = window.setInterval(announce, 4500);
+    } catch {}
+  }
+
+  private stopPublicAnnounce() {
+    if (this.discoveryAnnounceTimer) {
+      clearInterval(this.discoveryAnnounceTimer);
+      this.discoveryAnnounceTimer = null;
+    }
+    if (this.discoveryRoom) {
+      try {
+        this.discoveryRoom.leave();
+      } catch {}
+      this.discoveryRoom = null;
     }
   }
 
@@ -196,27 +315,46 @@ export class P2PManager {
 
     switch (packet.type) {
       case 'HANDSHAKE': {
-        this.opponent = {
+        if (this.opponents.size >= MAX_PLAYERS - 1 && !this.opponents.has(peerId)) {
+          return;
+        }
+
+        const playerIdx = this.opponents.size + 2;
+        const color = PLAYER_COLORS[(playerIdx - 2) % PLAYER_COLORS.length];
+
+        const oppInfo: OpponentInfo = {
           peerId,
-          name: packet.name || 'OPPONENT',
+          name: packet.name || `PLAYER ${playerIdx}`,
           skinId: packet.skinId || 'bob',
           pingMs: 0,
           ready: true,
+          color,
+          playerIndex: playerIdx,
         };
-        if (this.onOpponentUpdate) this.onOpponentUpdate(this.opponent);
+
+        this.opponents.set(peerId, oppInfo);
+        if (this.onOpponentsUpdate) {
+          this.onOpponentsUpdate(Array.from(this.opponents.values()));
+        }
         this.setState('lobby');
 
-        if (this.role === 'host') {
-          this.startPingCalibration();
-        } else {
+        if (this.role !== 'host') {
           if (this.sendEventAction) {
             this.sendEventAction({
               type: 'HANDSHAKE',
               name: this.localName,
               skinId: this.localSkin,
               protocolVersion: PROTOCOL_VERSION,
-            });
+            }, peerId);
           }
+        }
+
+        if (this.sendEventAction) {
+          this.sendEventAction({
+            type: 'PING',
+            id: 1,
+            sentAt: performance.now(),
+          }, peerId);
         }
         break;
       }
@@ -236,50 +374,58 @@ export class P2PManager {
       case 'PONG': {
         const now = performance.now();
         const rtt = Math.max(1, Math.round(now - packet.sentAt));
-        this.pingTimes.push(rtt);
-        if (this.pingTimes.length >= 3) {
-          const sum = this.pingTimes.reduce((a, b) => a + b, 0);
-          this.rttMs = Math.round(sum / this.pingTimes.length);
-          if (this.opponent) {
-            this.opponent.pingMs = this.rttMs;
-            if (this.onOpponentUpdate) this.onOpponentUpdate({ ...this.opponent });
+        this.rttMs = rtt;
+        const opp = this.opponents.get(peerId);
+        if (opp) {
+          opp.pingMs = rtt;
+          if (this.onOpponentsUpdate) {
+            this.onOpponentsUpdate(Array.from(this.opponents.values()));
           }
         }
+        break;
+      }
+
+      case 'ROOM_FULL': {
+        if (this.onError) this.onError('ROOM IS FULL (MAX 5 PLAYERS)');
+        this.leave();
         break;
       }
 
       case 'MATCH_START': {
         this.matchSeed = packet.seed;
         this.localFinalStats = null;
-        this.opponentFinalStats = null;
+        this.opponentDeaths.clear();
+        this.opponentTicks.clear();
         this.localOutgoingSeq = 0;
-        this.lastReceivedSeq = -1;
+        this.peerSeqs.clear();
+        this.stopPublicAnnounce();
         this.startSynchronizedCountdown(packet.targetStartTime);
         break;
       }
 
       case 'PLAYER_DEATH': {
-        this.opponentFinalStats = {
+        this.opponentDeaths.set(peerId, {
           score: packet.finalScore,
           meters: packet.finalMeters,
           kills: packet.kills,
-        };
+        });
+
+        const opp = this.opponents.get(peerId);
         if (this.onOpponentDeath) {
           this.onOpponentDeath({
+            peerId,
+            name: opp?.name || 'OPPONENT',
             finalScore: packet.finalScore,
-            finalMeters: packet.finalMeters,
-            kills: packet.kills,
           });
         }
-        // If local is also dead, resolve match result!
-        if (this.localFinalStats) {
-          this.resolveMatchResult();
-        }
+
+        this.checkAllPlayersFinished();
         break;
       }
 
       case 'FORFEIT': {
-        this.handleForfeitWin(packet.reason || 'OPPONENT FORFEITED');
+        this.opponentDeaths.set(peerId, { score: 0, meters: 0, kills: 0 });
+        this.checkAllPlayersFinished();
         break;
       }
 
@@ -292,42 +438,37 @@ export class P2PManager {
     }
   }
 
+  private peerLastTickTs: Map<string, number> = new Map();
+  private matchWatchdogInterval: number | null = null;
+
   private handleIncomingTick(data: PlayerTickPayload, peerId: string) {
     if (!data || typeof data.seq !== 'number') return;
-    // Packet ordering: discard stale or out-of-order ticks
-    if (data.seq <= this.lastReceivedSeq) return;
-    this.lastReceivedSeq = data.seq;
+    const lastSeq = this.peerSeqs.get(peerId) ?? -1;
+    if (data.seq <= lastSeq) return;
+    this.peerSeqs.set(peerId, data.seq);
+    this.peerLastTickTs.set(peerId, performance.now());
 
-    this.latestOpponentTick = data;
+    const payload: PlayerTickPayload = {
+      ...data,
+      peerId,
+    };
+    this.opponentTicks.set(peerId, payload);
 
-    if (this.onOpponentTick) {
-      this.onOpponentTick(data);
+    if (this.onOpponentTicks) {
+      this.onOpponentTicks(Array.from(this.opponentTicks.values()));
     }
   }
 
-  private startPingCalibration() {
-    this.pingTimes = [];
-    this.pingCount = 0;
-    const sendNext = () => {
-      if (this.pingCount >= 3 || !this.sendEventAction || !this.opponent) return;
-      this.pingCount++;
-      this.sendEventAction({
-        type: 'PING',
-        id: this.pingCount,
-        sentAt: performance.now(),
-      }, this.opponent.peerId);
-      this.pingTimer = window.setTimeout(sendNext, 120);
-    };
-    sendNext();
-  }
-
   public startMatch(): boolean {
-    if (this.role !== 'host' || !this.opponent || !this.sendEventAction) return false;
+    if (this.role !== 'host' || this.opponents.size === 0 || !this.sendEventAction) return false;
     this.matchSeed = (Math.random() * 0x7fffffff) >>> 0;
     this.localFinalStats = null;
-    this.opponentFinalStats = null;
+    this.opponentDeaths.clear();
+    this.opponentTicks.clear();
+    this.peerLastTickTs.clear();
     this.localOutgoingSeq = 0;
-    this.lastReceivedSeq = -1;
+    this.peerSeqs.clear();
+    this.stopPublicAnnounce();
 
     const targetStartTime = performance.now() + 3000;
 
@@ -345,6 +486,7 @@ export class P2PManager {
   private startSynchronizedCountdown(targetStartTime: number) {
     this.setState('countdown');
     this.acquireWakeLock();
+    this.startMatchWatchdog();
 
     const checkCountdown = () => {
       const now = performance.now();
@@ -363,11 +505,42 @@ export class P2PManager {
     requestAnimationFrame(checkCountdown);
   }
 
+  private startMatchWatchdog() {
+    this.stopMatchWatchdog();
+    this.matchWatchdogInterval = window.setInterval(() => {
+      if (this.state !== 'playing') return;
+      const now = performance.now();
+      for (const [peerId] of this.opponents.entries()) {
+        if (!this.opponentDeaths.has(peerId)) {
+          const lastTs = this.peerLastTickTs.get(peerId);
+          if (lastTs && now - lastTs > 7000) {
+            // Peer disconnected / tab closed mid-game
+            const lastTick = this.opponentTicks.get(peerId);
+            this.opponentDeaths.set(peerId, {
+              score: lastTick?.score ?? 0,
+              meters: lastTick?.meters ?? 0,
+              kills: lastTick?.kills ?? 0,
+            });
+            this.checkAllPlayersFinished();
+          }
+        }
+      }
+    }, 2000);
+  }
+
+  private stopMatchWatchdog() {
+    if (this.matchWatchdogInterval) {
+      clearInterval(this.matchWatchdogInterval);
+      this.matchWatchdogInterval = null;
+    }
+  }
+
   public sendTick(tickPayload: Omit<PlayerTickPayload, 'seq'>) {
     if (!this.sendTickAction || this.state !== 'playing') return;
     this.localOutgoingSeq++;
     const payload: PlayerTickPayload = {
       ...tickPayload,
+      peerId: this.localPeerId,
       seq: this.localOutgoingSeq,
     };
     this.sendTickAction(payload);
@@ -386,30 +559,67 @@ export class P2PManager {
       });
     }
 
-    // If opponent is already dead, resolve match result now!
-    if (this.opponentFinalStats) {
-      this.resolveMatchResult();
+    this.checkAllPlayersFinished();
+  }
+
+  private checkAllPlayersFinished() {
+    if (!this.localFinalStats) return;
+
+    const allDone = Array.from(this.opponents.keys()).every((peerId) =>
+      this.opponentDeaths.has(peerId),
+    );
+
+    if (allDone || this.opponents.size === 0) {
+      this.resolveMultiplayerLeaderboard();
     }
   }
 
-  private resolveMatchResult() {
-    if (!this.localFinalStats || !this.opponentFinalStats) return;
+  private resolveMultiplayerLeaderboard() {
+    const entries: LeaderboardEntry[] = [];
 
-    const l = this.localFinalStats;
-    const o = this.opponentFinalStats;
+    entries.push({
+      peerId: 'local',
+      name: `YOU (${this.localName})`,
+      skinId: this.localSkin,
+      score: this.localFinalStats?.score ?? 0,
+      meters: this.localFinalStats?.meters ?? 0,
+      kills: this.localFinalStats?.kills ?? 0,
+      dead: true,
+      rank: 1,
+      isLocal: true,
+      color: '#3ef2c8',
+    });
 
-    const won = l.score > o.score || (l.score === o.score && l.meters > o.meters);
-    const isDraw = l.score === o.score && l.meters === o.meters;
+    this.opponents.forEach((opp, peerId) => {
+      const death = this.opponentDeaths.get(peerId);
+      entries.push({
+        peerId,
+        name: opp.name,
+        skinId: opp.skinId,
+        score: death?.score ?? 0,
+        meters: death?.meters ?? 0,
+        kills: death?.kills ?? 0,
+        dead: true,
+        rank: 1,
+        isLocal: false,
+        color: opp.color,
+      });
+    });
+
+    entries.sort((a, b) => b.score - a.score || b.meters - a.meters);
+
+    entries.forEach((e, idx) => {
+      e.rank = idx + 1;
+    });
+
+    const localEntry = entries.find((e) => e.isLocal);
+    const localRank = localEntry ? localEntry.rank : 1;
 
     const result: MatchResult = {
-      winner: isDraw ? 'draw' : won ? 'local' : 'opponent',
+      rankings: entries,
+      localRank,
+      totalPlayers: entries.length,
       reason: 'death',
-      localScore: l.score,
-      localMeters: l.meters,
-      opponentScore: o.score,
-      opponentMeters: o.meters,
-      opponentName: this.opponent?.name || 'OPPONENT',
-      opponentSkin: this.opponent?.skinId || 'bob',
     };
 
     if (this.onMatchResult) {
@@ -426,23 +636,6 @@ export class P2PManager {
     }
   }
 
-  private handleForfeitWin(reason: string) {
-    if (this.state !== 'playing') return;
-    if (this.onMatchResult) {
-      this.onMatchResult({
-        winner: 'local',
-        reason: 'forfeit',
-        localScore: this.localFinalStats?.score ?? 0,
-        localMeters: this.localFinalStats?.meters ?? 0,
-        opponentScore: this.opponentFinalStats?.score ?? 0,
-        opponentMeters: this.opponentFinalStats?.meters ?? 0,
-        opponentName: this.opponent?.name || 'OPPONENT',
-        opponentSkin: this.opponent?.skinId || 'bob',
-      });
-    }
-    this.setState('ended');
-  }
-
   private handleVisibilityChange() {
     if (document.hidden && this.state === 'playing') {
       this.visibilityTimeout = window.setTimeout(() => {
@@ -450,21 +643,10 @@ export class P2PManager {
           if (this.sendEventAction) {
             this.sendEventAction({ type: 'FORFEIT', reason: 'PLAYER TABBED OUT' });
           }
-          if (this.onMatchResult) {
-            this.onMatchResult({
-              winner: 'opponent',
-              reason: 'forfeit',
-              localScore: this.localFinalStats?.score ?? 0,
-              localMeters: this.localFinalStats?.meters ?? 0,
-              opponentScore: this.opponentFinalStats?.score ?? 0,
-              opponentMeters: this.opponentFinalStats?.meters ?? 0,
-              opponentName: this.opponent?.name || 'OPPONENT',
-              opponentSkin: this.opponent?.skinId || 'bob',
-            });
-          }
-          this.setState('ended');
+          this.localFinalStats = { score: 0, meters: 0, kills: 0 };
+          this.resolveMultiplayerLeaderboard();
         }
-      }, 3000);
+      }, 4000);
     } else if (!document.hidden && this.visibilityTimeout) {
       clearTimeout(this.visibilityTimeout);
       this.visibilityTimeout = null;
@@ -495,7 +677,9 @@ export class P2PManager {
 
   public leave() {
     this.releaseWakeLock();
-    if (this.pingTimer) clearTimeout(this.pingTimer);
+    this.stopMatchWatchdog();
+    this.stopPublicAnnounce();
+    this.stopBrowsingPublicLobbies();
     if (this.visibilityTimeout) clearTimeout(this.visibilityTimeout);
 
     if (this.room) {
@@ -504,14 +688,14 @@ export class P2PManager {
       } catch {}
       this.room = null;
     }
-    this.opponent = null;
+    this.opponents.clear();
+    this.opponentTicks.clear();
+    this.opponentDeaths.clear();
+    this.peerSeqs.clear();
+    this.localFinalStats = null;
+    this.localOutgoingSeq = 0;
     this.sendTickAction = null;
     this.sendEventAction = null;
-    this.latestOpponentTick = null;
-    this.localFinalStats = null;
-    this.opponentFinalStats = null;
-    this.localOutgoingSeq = 0;
-    this.lastReceivedSeq = -1;
     this.setState('idle');
   }
 

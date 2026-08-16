@@ -95,6 +95,56 @@ function PlayIcon({ className = 'h-[16px] w-[16px]' }: { className?: string }) {
   );
 }
 
+function PixelSwordsIcon({ className = 'h-5 w-5 sm:h-6 sm:w-6' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} fill="currentColor" shapeRendering="crispEdges" aria-hidden="true">
+      {/* Blade 1 (top-left to bottom-right) */}
+      <rect x="2" y="1" width="2" height="2" />
+      <rect x="3" y="3" width="2" height="2" />
+      <rect x="5" y="5" width="2" height="2" />
+      <rect x="7" y="7" width="2" height="2" />
+      <rect x="9" y="9" width="2" height="2" />
+      {/* Crossguard 1 */}
+      <rect x="11" y="7" width="2" height="2" />
+      <rect x="7" y="11" width="2" height="2" />
+      {/* Hilt & Pommel 1 */}
+      <rect x="11" y="11" width="2" height="2" />
+      <rect x="13" y="13" width="2" height="2" />
+
+      {/* Blade 2 (top-right to bottom-left) */}
+      <rect x="12" y="1" width="2" height="2" />
+      <rect x="11" y="3" width="2" height="2" />
+      <rect x="9" y="5" width="2" height="2" />
+      <rect x="5" y="9" width="2" height="2" />
+      {/* Crossguard 2 */}
+      <rect x="3" y="7" width="2" height="2" />
+      <rect x="7" y="11" width="2" height="2" />
+      {/* Hilt & Pommel 2 */}
+      <rect x="3" y="11" width="2" height="2" />
+      <rect x="1" y="13" width="2" height="2" />
+    </svg>
+  );
+}
+
+function PixelShirtIcon({ className = 'h-5 w-5 sm:h-6 sm:w-6' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} fill="currentColor" shapeRendering="crispEdges" aria-hidden="true">
+      {/* Collar cutout */}
+      <rect x="6" y="2" width="4" height="1" />
+      {/* Shoulders */}
+      <rect x="4" y="3" width="2" height="2" />
+      <rect x="10" y="3" width="2" height="2" />
+      {/* Sleeves */}
+      <rect x="2" y="4" width="2" height="4" />
+      <rect x="12" y="4" width="2" height="4" />
+      {/* Torso / Body */}
+      <rect x="4" y="4" width="8" height="9" />
+      {/* Bottom Hem */}
+      <rect x="3" y="12" width="10" height="2" />
+    </svg>
+  );
+}
+
 function RetryIcon({ className = 'h-[16px] w-[16px]' }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="currentColor">
@@ -259,11 +309,11 @@ export function StartScreen({
             <button
               type="button"
               onClick={onOpenBattles}
-              aria-label="1v1 Multiplayer Battles"
-              title="1v1 Multiplayer Battles"
-              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[#ff4d6d] bg-[#1a0614] text-[#ff4d6d] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
+              aria-label="Multiplayer Battles"
+              title="Multiplayer Battles"
+              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[#ff4d6d]/60 bg-[#160614] text-[#ff4d6d] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
             >
-              <span className="text-[18px] sm:text-[20px] leading-none">⚔️</span>
+              <PixelSwordsIcon className="h-5 w-5 sm:h-6 sm:w-6" />
             </button>
           )}
           <PixelButton
@@ -279,16 +329,9 @@ export function StartScreen({
               onClick={onOpenSkins}
               aria-label="Character Locker"
               title="Character Locker"
-              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[#3ef2c8] bg-[#071a17] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
+              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[#3ef2c8]/60 bg-[#061815] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
             >
-              <svg viewBox="0 0 16 16" className="h-5 w-5 sm:h-6 sm:w-6" fill="currentColor">
-                <rect x="5" y="2" width="6" height="4" fill="#ffcf9e" />
-                <rect x="9" y="3" width="1" height="2" fill="#20122e" />
-                <rect x="4" y="6" width="8" height="2" fill="#3ef2c8" />
-                <rect x="3" y="8" width="10" height="5" fill="#ff4d6d" />
-                <rect x="4" y="13" width="3" height="2" fill="#20122e" />
-                <rect x="9" y="13" width="3" height="2" fill="#20122e" />
-              </svg>
+              <PixelShirtIcon className="h-5 w-5 sm:h-6 sm:w-6" />
             </button>
           )}
         </div>

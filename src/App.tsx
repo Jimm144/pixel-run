@@ -637,18 +637,23 @@ export function App() {
   }, [commitQuestRun, musicOn, sfxOn, volumes.music, volumes.sfx]);
 
   useEffect(() => {
-    p2p.onOpponentTick = (tick) => {
-      gameRef.current?.setOpponentState(tick);
+    // Check if URL hash has #battle=... to auto open BattleModal
+    if (typeof window !== 'undefined' && window.location.hash.startsWith('#battle=')) {
+      setBattleModalOpen(true);
+    }
+
+    p2p.onOpponentTicks = (ticks) => {
+      gameRef.current?.setOpponentStates(ticks);
     };
     p2p.onOpponentDeath = (death) => {
-      setQuestToast([`OPPONENT ELIMINATED! (${death.finalScore} PTS)`]);
+      setQuestToast([`${death.name} ELIMINATED! (${death.finalScore} PTS)`]);
     };
     p2p.onMatchResult = (result) => {
       setMatchResult(result);
       setBattleModalOpen(true);
     };
     return () => {
-      p2p.onOpponentTick = null;
+      p2p.onOpponentTicks = null;
       p2p.onOpponentDeath = null;
       p2p.onMatchResult = null;
     };
@@ -704,25 +709,9 @@ export function App() {
     if (beatBest) setBest(saveHighScore(entry, previous)?.score ?? s.score);
     setNewBest(beatBest);
 
-    // If active multiplayer battle, compute match results
+    // If active multiplayer battle, broadcast death to party and wait for final rankings
     if (gameRef.current?.isMultiplayer && p2p.state === 'playing') {
-      const opp = p2p.opponent;
-      const oppTick = gameRef.current.opponentState;
-      const oppScore = oppTick?.score ?? 0;
-      const oppMeters = oppTick?.meters ?? 0;
-      const won = s.score > oppScore || (s.score === oppScore && s.meters > oppMeters);
-      const isDraw = s.score === oppScore && s.meters === oppMeters;
-      setMatchResult({
-        winner: isDraw ? 'draw' : won ? 'local' : 'opponent',
-        reason: 'death',
-        localScore: s.score,
-        localMeters: s.meters,
-        opponentScore: oppScore,
-        opponentMeters: oppMeters,
-        opponentName: opp?.name || 'OPPONENT',
-        opponentSkin: opp?.skinId || 'bob',
-      });
-      setBattleModalOpen(true);
+      p2p.sendDeath(gameRef.current.frame, s.score, s.meters, s.kills);
       return;
     }
 
@@ -927,7 +916,7 @@ export function App() {
         )}
         {swUpdate && ui !== 'playing' && (
           <div className="fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 border-2 border-[#ffd166] bg-[#140a26]/95 px-3 py-1.5 font-pixel text-[#ffd166] shadow-[3px_3px_0_#08040f]">
-            <span className="text-[7px] tablet:text-[9px]">⚡ UPDATE READY</span>
+            <span className="text-[7px] tablet:text-[9px]">UPDATE READY</span>
             <button
               type="button"
               onClick={handleApplyUpdate}

@@ -160,7 +160,7 @@ export function QuestCompletionToast({ quests, completed, touch }: { quests: Que
       aria-live="polite"
       className={`animate-quest-announcement pointer-events-none absolute z-30 w-[min(88vw,360px)] -translate-x-1/2 opacity-90 ${touch ? 'top-14 left-1/2' : 'top-14 left-1/2'}`}
     >
-      <Panel decorated={false} className="border-2 bg-[#140a26]/90 p-3 shadow-[0_0_24px_rgba(62,242,200,0.16)]">
+      <Panel decorated={false} className="border-2 bg-[#140a26] p-3 shadow-[3px_3px_0_#08040f]">
         <p className="font-pixel text-[9px] text-[#ffd166]">{labels.length > 0 ? 'QUEST COMPLETE' : 'SHARE'}</p>
         <div className="mt-2 space-y-1">
           {labels.map((quest) => (

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { p2p } from '../game/multiplayer/p2pManager';
-import type { MatchResult, OpponentInfo } from '../game/multiplayer/types';
-import { SKINS, type SkinId } from '../game/skins';
+import { p2p, MAX_PLAYERS } from '../game/multiplayer/p2pManager';
+import type { MatchResult, OpponentInfo, PublicLobbyInfo } from '../game/multiplayer/types';
+import { type SkinId } from '../game/skins';
 import { drawPlayerSprite } from '../game/playerSprite';
-import { PixelButton, Panel } from './ui';
+import { PixelButton } from './ui';
 import { sfx } from '../game/audio';
 
 interface BattleModalProps {
@@ -26,35 +26,53 @@ export function BattleModal({
   touch = false,
 }: BattleModalProps) {
   const [tab, setTab] = useState<'host' | 'join'>('host');
+  const [joinSubTab, setJoinSubTab] = useState<'code' | 'public'>('code');
   const [roomCode, setRoomCode] = useState<string>('');
   const [inputCode, setInputCode] = useState<string>('');
-  const [opponent, setOpponent] = useState<OpponentInfo | null>(p2p.opponent);
-  const [statusMsg, setStatusMsg] = useState<string>('SELECT HOST OR JOIN');
+  const [isPublicRoom, setIsPublicRoom] = useState<boolean>(false);
+  const [opponents, setOpponents] = useState<OpponentInfo[]>(() => Array.from(p2p.opponents.values()));
+  const [publicLobbies, setPublicLobbies] = useState<PublicLobbyInfo[]>([]);
+  const [statusMsg, setStatusMsg] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
 
   const localCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const oppCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const oppCanvasesRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
 
-  // Initialize Host Room
-  const initHost = useCallback(() => {
-    const code = p2p.host(localName, localSkin);
+  // Initialize Host Room (Private by default)
+  const initHost = useCallback(async (isPub = false) => {
+    const code = await p2p.host(localName, localSkin, isPub);
     setRoomCode(code);
-    setStatusMsg('WAITING FOR OPPONENT TO JOIN...');
+    setStatusMsg(`ROOM ${code} READY`);
   }, [localName, localSkin]);
 
   useEffect(() => {
     if (!matchResult && tab === 'host' && !roomCode) {
-      initHost();
+      initHost(isPublicRoom);
     }
-  }, [tab, roomCode, matchResult, initHost]);
+  }, [tab, roomCode, matchResult, initHost, isPublicRoom]);
 
-  // Check URL hash for auto-join (#battle=CODE)
+  // Browse public lobbies when in public tab
+  useEffect(() => {
+    if (tab === 'join' && joinSubTab === 'public') {
+      p2p.startBrowsingPublicLobbies();
+      p2p.onPublicLobbiesUpdate = (lobbies) => {
+        setPublicLobbies([...lobbies]);
+      };
+      return () => {
+        p2p.stopBrowsingPublicLobbies();
+        p2p.onPublicLobbiesUpdate = null;
+      };
+    }
+  }, [tab, joinSubTab]);
+
+  // Auto-join from URL hash (#battle=CODE)
   useEffect(() => {
     if (typeof window !== 'undefined' && window.location.hash.startsWith('#battle=')) {
       const codeFromUrl = window.location.hash.replace('#battle=', '').trim();
       if (codeFromUrl) {
         setTab('join');
+        setJoinSubTab('code');
         setInputCode(codeFromUrl);
         handleJoinCode(codeFromUrl);
       }
@@ -63,13 +81,13 @@ export function BattleModal({
 
   // Listen to P2P manager events
   useEffect(() => {
-    p2p.onOpponentUpdate = (opp) => {
-      setOpponent(opp);
-      if (opp) {
+    p2p.onOpponentsUpdate = (opps) => {
+      setOpponents([...opps]);
+      if (opps.length > 0) {
         sfx.play('gem');
-        setStatusMsg(`OPPONENT CONNECTED: ${opp.name}`);
+        setStatusMsg(`${opps.length + 1}/${MAX_PLAYERS} PLAYERS IN LOBBY`);
       } else {
-        setStatusMsg('OPPONENT DISCONNECTED');
+        setStatusMsg('WAITING FOR PLAYERS...');
       }
     };
 
@@ -89,7 +107,7 @@ export function BattleModal({
     };
 
     return () => {
-      p2p.onOpponentUpdate = null;
+      p2p.onOpponentsUpdate = null;
       p2p.onCountdown = null;
       p2p.onMatchStart = null;
       p2p.onError = null;
@@ -102,257 +120,198 @@ export function BattleModal({
     let frame = 0;
     const render = () => {
       frame++;
-      // 1. Local Player Sprite
       if (localCanvasRef.current) {
         const ctx = localCanvasRef.current.getContext('2d');
         if (ctx) {
-          ctx.clearRect(0, 0, 80, 80);
+          ctx.clearRect(0, 0, 60, 60);
           ctx.imageSmoothingEnabled = false;
-          drawPlayerSprite(ctx, 40, 40, {
+          drawPlayerSprite(ctx, 30, 30, {
             skinId: localSkin,
             frame,
-            scale: 3,
+            scale: 2.2,
             onGround: true,
             run: Math.floor(frame / 6) % 4,
           });
         }
       }
-      // 2. Opponent Sprite
-      if (oppCanvasRef.current && opponent) {
-        const ctx = oppCanvasRef.current.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, 80, 80);
-          ctx.imageSmoothingEnabled = false;
-          drawPlayerSprite(ctx, 40, 40, {
-            skinId: opponent.skinId,
-            frame,
-            scale: 3,
-            onGround: true,
-            run: Math.floor(frame / 6) % 4,
-          });
+      opponents.forEach((opp) => {
+        const cv = oppCanvasesRef.current.get(opp.peerId);
+        if (cv) {
+          const ctx = cv.getContext('2d');
+          if (ctx) {
+            ctx.clearRect(0, 0, 60, 60);
+            ctx.imageSmoothingEnabled = false;
+            drawPlayerSprite(ctx, 30, 30, {
+              skinId: opp.skinId,
+              frame,
+              scale: 2.2,
+              onGround: true,
+              run: Math.floor(frame / 6) % 4,
+            });
+          }
         }
-      }
+      });
       animId = requestAnimationFrame(render);
     };
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [localSkin, opponent]);
+  }, [localSkin, opponents]);
 
-  const handleJoinCode = (codeToJoin?: string) => {
+  const handleTogglePrivacy = () => {
+    const next = !isPublicRoom;
+    setIsPublicRoom(next);
+    p2p.setRoomVisibility(next);
+  };
+
+  const handleJoinCode = async (codeToJoin?: string) => {
     const code = codeToJoin || inputCode;
     if (!code) {
-      setStatusMsg('ENTER A VALID 4-CHARACTER CODE');
+      setStatusMsg('ENTER ROOM CODE');
       return;
     }
-    const ok = p2p.join(code, localName, localSkin);
+    setStatusMsg(`CONNECTING TO ${code.toUpperCase()}...`);
+    const ok = await p2p.join(code, localName, localSkin);
     if (ok) {
-      setStatusMsg('CONNECTING TO PEER...');
-      sfx.play('ui');
+      setRoomCode(code.toUpperCase());
     }
   };
 
-  const getInviteUrl = () => {
-    if (typeof window === 'undefined') return '';
+  const handleCopyLink = async () => {
+    const code = roomCode || p2p.roomId;
+    if (!code) return;
     const base = window.location.origin + window.location.pathname;
-    return `${base}#battle=${roomCode}`;
-  };
-
-  const handleCopyInvite = async () => {
-    const url = getInviteUrl();
+    const url = `${base}#battle=${code}`;
     try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
+      if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(url);
-        setCopied(true);
-        sfx.play('ui');
-        setTimeout(() => setCopied(false), 2500);
-        return;
       }
+      setCopied(true);
+      sfx.play('ui');
+      setTimeout(() => setCopied(false), 2200);
     } catch {}
-    // Share API fallback
-    if (typeof navigator !== 'undefined' && 'share' in navigator) {
-      try {
-        await navigator.share({
-          title: 'Battle me in Pixel Run!',
-          text: `Join my Pixel Run battle with room code: ${roomCode}`,
-          url,
-        });
-        return;
-      } catch {}
+  };
+
+  const handleStartRun = () => {
+    if (opponents.length === 0) {
+      setStatusMsg('AT LEAST 2 PLAYERS REQUIRED');
+      sfx.play('death');
+      return;
     }
-  };
-
-  const handlePasteFromClipboard = async () => {
-    try {
-      if (navigator.clipboard && navigator.clipboard.readText) {
-        const text = await navigator.clipboard.readText();
-        if (text) {
-          const clean = text.includes('#battle=') ? text.split('#battle=')[1] : text;
-          setInputCode(clean.trim().toUpperCase());
-          sfx.play('ui');
-        }
-      }
-    } catch {}
-  };
-
-  const handleStartMatch = () => {
-    sfx.play('ui');
+    sfx.play('start');
     p2p.startMatch();
   };
 
   const handleRematch = () => {
-    sfx.play('ui');
     onClearMatchResult();
     p2p.requestRematch();
   };
 
   const handleExit = () => {
-    sfx.play('ui');
     p2p.leave();
     onClearMatchResult();
     onClose();
   };
 
+  const totalPlayers = opponents.length + 1;
+
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#08040f]/90 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] backdrop-blur-sm"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) handleExit();
-      }}
-    >
-      <div className="relative flex w-full max-w-[440px] flex-col items-center border-4 border-[#ff4d6d] bg-[#0d0619] p-4 text-center font-pixel text-white shadow-[0_0_0_4px_#08040f,0_0_35px_rgba(255,77,109,0.25)] sm:p-5">
-        {/* Header */}
-        <div className="mb-3 flex w-full items-center justify-between border-b-2 border-[#251842] pb-2">
-          <div className="flex items-center gap-2">
-            <span className="text-[13px] text-[#ff4d6d]">⚔️</span>
-            <h2 className="text-[11px] uppercase tracking-wider text-[#ff4d6d] sm:text-[13px]">
-              1V1 MULTIPLAYER BATTLES
-            </h2>
-          </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#000000]/80 p-3 font-pixel">
+      <div className="relative flex max-h-[92vh] w-full max-w-lg flex-col items-center border-2 border-[#ff4d6d]/70 bg-[#0e061a] p-4 text-[#ffffff] shadow-[4px_4px_0_#06020c]">
+        {/* Top Header */}
+        <div className="flex w-full items-center justify-between border-b border-[#ff4d6d]/30 pb-2.5">
+          <h2 className="text-xs font-bold tracking-wider text-[#ff4d6d] tablet:text-sm">
+            PARTY BATTLES (2-5 PLAYERS)
+          </h2>
           <button
             type="button"
             onClick={handleExit}
-            className="flex h-7 w-7 items-center justify-center border border-[#ff4d6d] bg-[#ff4d6d]/20 text-[10px] text-[#ff4d6d] hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px]"
+            aria-label="Close Battles"
+            className="flex h-6 w-6 items-center justify-center border border-[#ff4d6d]/40 bg-[#ff4d6d]/10 text-[9px] text-[#ff4d6d] transition-colors hover:bg-[#ff4d6d]/30"
           >
             ✕
           </button>
         </div>
 
-        {/* Match Result Overlay View */}
+        {/* 1. MATCH RESULTS OVERLAY */}
         {matchResult ? (
-          <div className="flex w-full flex-col items-center gap-3">
-            <div
-              className={`w-full border-2 p-3 text-center ${
-                matchResult.winner === 'local'
-                  ? 'border-[#ffd166] bg-[#ffd166]/15 text-[#ffd166]'
-                  : matchResult.winner === 'opponent'
-                  ? 'border-[#ff4d6d] bg-[#ff4d6d]/15 text-[#ff4d6d]'
-                  : 'border-[#3ef2c8] bg-[#3ef2c8]/15 text-[#3ef2c8]'
+          <div className="flex w-full flex-col items-center py-4 text-center">
+            <h3
+              className={`text-sm font-bold tablet:text-base ${
+                matchResult.localRank === 1 ? 'text-[#ffd166]' : 'text-[#ff4d6d]'
               }`}
             >
-              <h3 className="text-[14px] sm:text-[18px]">
-                {matchResult.winner === 'local'
-                  ? '👑 VICTORY!'
-                  : matchResult.winner === 'opponent'
-                  ? '💀 DEFEAT'
-                  : '🤝 DRAW'}
-              </h3>
-              <p className="mt-1 text-[7px] text-[#c4b8e8] sm:text-[8px]">
-                {matchResult.reason === 'forfeit'
-                  ? 'OPPONENT FORFEITED'
-                  : matchResult.winner === 'local'
-                  ? 'YOU OUTSURVIVED YOUR OPPONENT!'
-                  : 'OPPONENT SET A HIGHER RUN!'}
-              </p>
+              {matchResult.localRank === 1 ? 'VICTORY - 1ST PLACE' : `${matchResult.localRank}TH PLACE`}
+            </h3>
+            <p className="mt-1 text-[8px] text-[#a090c0]">
+              {matchResult.reason === 'forfeit' ? 'OPPONENT FORFEITED' : 'RUN COMPLETE'}
+            </p>
+
+            {/* Leaderboard Table */}
+            <div className="my-3 flex w-full max-w-sm flex-col gap-1 border border-[#ff4d6d]/30 bg-[#080312] p-2">
+              <div className="grid grid-cols-5 text-[7px] text-[#a090c0] pb-1 border-b border-[#ff4d6d]/20">
+                <span>RANK</span>
+                <span className="col-span-2 text-left">PLAYER</span>
+                <span>SCORE</span>
+                <span>METERS</span>
+              </div>
+              {matchResult.rankings.map((entry) => (
+                <div
+                  key={entry.peerId}
+                  className={`grid grid-cols-5 items-center py-1 text-[8px] ${
+                    entry.isLocal
+                      ? 'bg-[#3ef2c8]/10 border border-[#3ef2c8]/40 font-bold text-[#3ef2c8]'
+                      : 'text-[#ffffff]'
+                  }`}
+                >
+                  <span className="font-bold">
+                    {entry.rank === 1 ? '1ST' : entry.rank === 2 ? '2ND' : entry.rank === 3 ? '3RD' : `#${entry.rank}`}
+                  </span>
+                  <span className="col-span-2 truncate text-left">{entry.name}</span>
+                  <span className="text-[#ffd166]">{entry.score}</span>
+                  <span>{entry.meters}M</span>
+                </div>
+              ))}
             </div>
 
-            {/* Scoreboard Comparison */}
-            <div className="grid w-full grid-cols-2 gap-2 border-2 border-[#251842] bg-[#120722] p-3 text-left">
-              <div>
-                <span className="text-[7.5px] text-[#3ef2c8]">YOU ({localName})</span>
-                <p className="mt-1 text-[9px] text-white">SCORE: {matchResult.localScore}</p>
-                <p className="text-[7.5px] text-[#9d8fd6]">DISTANCE: {matchResult.localMeters}M</p>
-              </div>
-              <div className="border-l-2 border-[#251842] pl-3">
-                <span className="text-[7.5px] text-[#ff70a6]">{matchResult.opponentName}</span>
-                <p className="mt-1 text-[9px] text-white">SCORE: {matchResult.opponentScore}</p>
-                <p className="text-[7.5px] text-[#9d8fd6]">DISTANCE: {matchResult.opponentMeters}M</p>
-              </div>
-            </div>
-
-            <div className="mt-2 flex w-full gap-2">
-              <PixelButton onClick={handleRematch} className="flex-1 py-3 text-[10px]">
-                REMATCH ⚔️
+            <div className="mt-2 flex w-full max-w-xs gap-3">
+              <PixelButton
+                variant="primary"
+                onClick={handleRematch}
+                className="flex-1 !bg-[#ff4d6d] !text-[#100424] hover:!bg-[#ff708a]"
+              >
+                REMATCH
               </PixelButton>
-              <PixelButton variant="ghost" onClick={handleExit} className="flex-1 py-3 text-[10px]">
-                LEAVE
+              <PixelButton variant="secondary" onClick={handleExit} className="flex-1">
+                MENU
               </PixelButton>
             </div>
           </div>
         ) : countdown !== null ? (
-          /* Active Countdown Sync View */
-          <div className="flex w-full flex-col items-center justify-center py-8">
-            <span className="font-pixel text-[36px] text-[#ffd166] drop-shadow-[0_4px_0_#08040f]">
-              {countdown > 0 ? countdown : 'GO!'}
+          /* 2. SYNCHRONIZED COUNTDOWN OVERLAY */
+          <div className="flex flex-col items-center justify-center py-10">
+            <span className="text-[9px] text-[#7ef7ff] tracking-widest uppercase">
+              STARTING IN
             </span>
-            <p className="mt-2 font-pixel text-[8px] text-[#3ef2c8]">
-              SYNCHRONIZING START CLOCKS...
-            </p>
-          </div>
-        ) : opponent ? (
-          /* 2-Player Lobby View */
-          <div className="flex w-full flex-col items-center gap-3">
-            <div className="flex w-full items-center justify-between border-2 border-[#251842] bg-[#120722] p-3">
-              {/* Local Player Card */}
-              <div className="flex flex-1 flex-col items-center text-center">
-                <div className="border-2 border-[#3ef2c8] bg-[#1a0e2e] p-1">
-                  <canvas ref={localCanvasRef} width={80} height={80} style={{ imageRendering: 'pixelated' }} className="h-16 w-16" />
-                </div>
-                <span className="mt-1 text-[8px] text-[#3ef2c8]">{localName}</span>
-                <span className="text-[6.5px] text-[#6f5fa8]">{SKINS[localSkin]?.name}</span>
-              </div>
-
-              {/* VS Center Badge */}
-              <div className="flex flex-col items-center px-2">
-                <span className="font-pixel text-[14px] text-[#ffd166]">VS</span>
-                {opponent.pingMs > 0 && (
-                  <span className="mt-1 font-pixel text-[6.5px] text-[#3ef2c8]">
-                    ⚡ {opponent.pingMs}ms
-                  </span>
-                )}
-              </div>
-
-              {/* Opponent Card */}
-              <div className="flex flex-1 flex-col items-center text-center">
-                <div className="border-2 border-[#ff70a6] bg-[#1a0e2e] p-1">
-                  <canvas ref={oppCanvasRef} width={80} height={80} style={{ imageRendering: 'pixelated' }} className="h-16 w-16" />
-                </div>
-                <span className="mt-1 text-[8px] text-[#ff70a6]">{opponent.name}</span>
-                <span className="text-[6.5px] text-[#6f5fa8]">{SKINS[opponent.skinId]?.name}</span>
-              </div>
+            <div className="my-3 text-5xl font-black text-[#ffd166]">
+              {countdown === 0 ? 'GO' : countdown}
             </div>
-
-            {p2p.role === 'host' ? (
-              <PixelButton onClick={handleStartMatch} className="w-full py-3.5 text-[11px]">
-                START BATTLE ⚔️
-              </PixelButton>
-            ) : (
-              <div className="w-full border-2 border-[#ffd166] bg-[#ffd166]/10 py-3 text-center text-[8.5px] text-[#ffd166]">
-                WAITING FOR HOST TO START...
-              </div>
-            )}
+            <span className="text-[7px] text-[#a090c0]">PREPARE TO RUN</span>
           </div>
         ) : (
-          /* Host / Join Tabs View */
-          <div className="flex w-full flex-col gap-3">
-            {/* Tab Selector */}
-            <div className="flex w-full border-2 border-[#251842]">
+          /* 3. LOBBY & HOST/JOIN TABS */
+          <div className="flex w-full flex-col items-center overflow-y-auto py-2.5">
+            {/* Primary Mode Tabs */}
+            <div className="mb-3 flex w-full max-w-xs border border-[#ff4d6d]/40 bg-[#080312]">
               <button
                 type="button"
-                onClick={() => { setTab('host'); initHost(); }}
-                className={`flex-1 py-2 font-pixel text-[8.5px] transition-colors ${
-                  tab === 'host' ? 'bg-[#ff4d6d] text-[#08040f]' : 'bg-[#120722] text-[#9d8fd6]'
+                onClick={() => {
+                  setTab('host');
+                  if (!roomCode) initHost(isPublicRoom);
+                }}
+                className={`flex-1 py-1.5 text-[8px] transition-colors ${
+                  tab === 'host'
+                    ? 'bg-[#ff4d6d] text-[#100424] font-bold'
+                    : 'text-[#a090c0] hover:text-[#ffffff]'
                 }`}
               >
                 HOST ROOM
@@ -360,73 +319,209 @@ export function BattleModal({
               <button
                 type="button"
                 onClick={() => setTab('join')}
-                className={`flex-1 py-2 font-pixel text-[8.5px] transition-colors ${
-                  tab === 'join' ? 'bg-[#3ef2c8] text-[#08040f]' : 'bg-[#120722] text-[#9d8fd6]'
+                className={`flex-1 py-1.5 text-[8px] transition-colors ${
+                  tab === 'join'
+                    ? 'bg-[#ff4d6d] text-[#100424] font-bold'
+                    : 'text-[#a090c0] hover:text-[#ffffff]'
                 }`}
               >
                 JOIN ROOM
               </button>
             </div>
 
+            {/* Host Section */}
             {tab === 'host' ? (
-              <div className="flex flex-col gap-3">
-                <p className="text-[7.5px] text-[#9d8fd6] sm:text-[8.5px]">
-                  Share this 4-character Room Code or Invite Link with your friend:
-                </p>
-
-                <div className="flex items-center justify-center border-2 border-[#ff4d6d] bg-[#1a081a] py-3 text-center">
-                  <span className="font-mono text-[18px] tracking-[0.2em] text-[#ffd166]">
-                    {roomCode || 'GENERATING...'}
-                  </span>
-                </div>
-
-                <PixelButton
-                  onClick={handleCopyInvite}
-                  className="w-full py-3 text-[9.5px] sm:text-[11px]"
-                >
-                  {copied ? '✓ INVITE LINK COPIED!' : 'COPY / SHARE INVITE LINK'}
-                </PixelButton>
-
-                <span className="text-[7px] text-[#6f5fa8] animate-pulse">
-                  {statusMsg}
-                </span>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                <p className="text-[7.5px] text-[#9d8fd6] sm:text-[8.5px]">
-                  Enter your friend's Room Code or paste their invite link:
-                </p>
-
-                <div className="flex gap-1.5">
-                  <input
-                    type="text"
-                    value={inputCode}
-                    onChange={(e) => setInputCode(e.target.value.toUpperCase())}
-                    placeholder="ENTER CODE (E.G. A4B9)"
-                    maxLength={16}
-                    className="flex-1 border-2 border-[#251842] bg-[#120722] p-2.5 font-mono text-[9px] text-[#ffd166] placeholder-[#6f5fa8] focus:border-[#3ef2c8] focus:outline-none"
-                  />
+              <div className="flex flex-col items-center gap-2 mb-3 w-full">
+                <div className="flex items-center gap-2">
+                  <span className="text-[7px] text-[#a090c0]">ROOM CODE:</span>
+                  <div className="border border-[#ffd166] bg-[#160a2c] px-3 py-1 text-sm font-bold tracking-widest text-[#ffd166]">
+                    {roomCode || 'CREATING...'}
+                  </div>
                   <button
                     type="button"
-                    onClick={handlePasteFromClipboard}
-                    className="border border-[#3ef2c8]/40 bg-[#092922] px-2 text-[7px] text-[#3ef2c8] hover:bg-[#0d3b2d]"
+                    onClick={handleCopyLink}
+                    className="border border-[#3ef2c8] bg-[#3ef2c8]/10 px-2 py-1 text-[7px] text-[#3ef2c8] hover:bg-[#3ef2c8]/30 active:scale-95"
                   >
-                    PASTE
+                    {copied ? 'COPIED' : 'COPY LINK'}
                   </button>
                 </div>
 
-                <PixelButton
-                  onClick={() => handleJoinCode()}
-                  className="w-full py-3 text-[9.5px] sm:text-[11px]"
+                {/* Privacy Mode Selector (Private default) */}
+                <button
+                  type="button"
+                  onClick={handleTogglePrivacy}
+                  className={`border px-2.5 py-0.5 text-[7px] transition-colors ${
+                    isPublicRoom
+                      ? 'border-[#ffd166] bg-[#ffd166]/10 text-[#ffd166]'
+                      : 'border-[#3ef2c8]/60 bg-[#3ef2c8]/10 text-[#3ef2c8]'
+                  }`}
                 >
-                  CONNECT TO ROOM ⚔️
-                </PixelButton>
+                  {isPublicRoom ? 'PUBLIC ROOM (DISCOVERABLE)' : 'PRIVATE ROOM (CODE ONLY)'}
+                </button>
+              </div>
+            ) : (
+              /* Join Section */
+              <div className="flex flex-col items-center gap-2 mb-3 w-full max-w-xs">
+                {/* Join Sub-tabs */}
+                <div className="flex w-full border border-[#ff4d6d]/30 bg-[#080312]">
+                  <button
+                    type="button"
+                    onClick={() => setJoinSubTab('code')}
+                    className={`flex-1 py-1 text-[7px] ${
+                      joinSubTab === 'code' ? 'bg-[#ff4d6d]/30 text-[#ff4d6d] font-bold' : 'text-[#a090c0]'
+                    }`}
+                  >
+                    ENTER CODE
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setJoinSubTab('public')}
+                    className={`flex-1 py-1 text-[7px] ${
+                      joinSubTab === 'public' ? 'bg-[#ff4d6d]/30 text-[#ff4d6d] font-bold' : 'text-[#a090c0]'
+                    }`}
+                  >
+                    PUBLIC ROOMS ({publicLobbies.length})
+                  </button>
+                </div>
 
-                <span className="text-[7px] text-[#6f5fa8]">
-                  {statusMsg}
-                </span>
+                {joinSubTab === 'code' ? (
+                  <div className="flex w-full gap-2">
+                    <input
+                      type="text"
+                      value={inputCode}
+                      onChange={(e) => setInputCode(e.target.value.toUpperCase())}
+                      placeholder="CODE (E.G. R9K2)"
+                      maxLength={8}
+                      className="flex-1 border border-[#ff4d6d]/60 bg-[#080312] px-2.5 py-1 text-center font-pixel text-[10px] text-[#ffffff] uppercase focus:border-[#3ef2c8] focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleJoinCode()}
+                      className="border border-[#3ef2c8] bg-[#3ef2c8] px-3 py-1 text-[8px] font-bold text-[#08040f] hover:bg-[#6ef5d6]"
+                    >
+                      JOIN
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col w-full max-h-28 overflow-y-auto gap-1 border border-[#ff4d6d]/20 bg-[#080312] p-1">
+                    {publicLobbies.length === 0 ? (
+                      <div className="py-3 text-center text-[7px] text-[#6b5880]">
+                        NO PUBLIC ROOMS ACTIVE
+                      </div>
+                    ) : (
+                      publicLobbies.map((lobby) => (
+                        <div
+                          key={lobby.roomId}
+                          className="flex items-center justify-between border border-[#3ef2c8]/30 bg-[#0c1824] px-2 py-1"
+                        >
+                          <div className="flex flex-col text-left">
+                            <span className="text-[7px] font-bold text-[#3ef2c8]">{lobby.hostName}</span>
+                            <span className="text-[6px] text-[#ffd166]">
+                              CODE: {lobby.roomId} ({lobby.playerCount}/{lobby.maxPlayers})
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleJoinCode(lobby.roomId)}
+                            className="border border-[#3ef2c8] bg-[#3ef2c8]/20 px-2 py-0.5 text-[7px] text-[#3ef2c8] hover:bg-[#3ef2c8]/40"
+                          >
+                            JOIN
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
             )}
+
+            {/* Status Line */}
+            {statusMsg && (
+              <div className="mb-2 text-center text-[7px] text-[#ffd166]">
+                {statusMsg}
+              </div>
+            )}
+
+            {/* Compact 5-Player Party Strip */}
+            <div className="w-full max-w-md border border-[#2c1f4d] bg-[#080312] p-2 mb-3">
+              <div className="text-[7px] text-[#a090c0] mb-1.5 text-center">
+                ROSTER ({totalPlayers}/{MAX_PLAYERS})
+              </div>
+              <div className="flex items-center justify-center gap-2">
+                {/* Slot 1: You */}
+                <div className="flex flex-col items-center border border-[#3ef2c8] bg-[#0c1824] p-1 w-16 h-20 justify-between">
+                  <canvas ref={localCanvasRef} width={60} height={60} className="w-9 h-9 pixelated" />
+                  <span className="truncate text-[6px] font-bold text-[#3ef2c8] max-w-[58px]">
+                    YOU
+                  </span>
+                  <span className="border border-[#3ef2c8] bg-[#3ef2c8]/20 px-1 text-[5px] text-[#3ef2c8]">
+                    {p2p.role === 'host' ? 'HOST' : 'READY'}
+                  </span>
+                </div>
+
+                {/* Connected Opponents */}
+                {opponents.map((opp, i) => (
+                  <div
+                    key={opp.peerId}
+                    className="flex flex-col items-center border p-1 w-16 h-20 justify-between"
+                    style={{ borderColor: opp.color, backgroundColor: '#0d061e' }}
+                  >
+                    <canvas
+                      ref={(el) => {
+                        if (el) oppCanvasesRef.current.set(opp.peerId, el);
+                        else oppCanvasesRef.current.delete(opp.peerId);
+                      }}
+                      width={60}
+                      height={60}
+                      className="w-9 h-9 pixelated"
+                    />
+                    <span
+                      className="truncate text-[6px] font-bold max-w-[58px]"
+                      style={{ color: opp.color }}
+                    >
+                      {opp.name}
+                    </span>
+                    <span
+                      className="border px-1 text-[5px]"
+                      style={{ borderColor: opp.color, color: opp.color }}
+                    >
+                      P{i + 2} {opp.pingMs > 0 ? `${opp.pingMs}MS` : ''}
+                    </span>
+                  </div>
+                ))}
+
+                {/* Empty Waiting Slots */}
+                {Array.from({ length: Math.max(0, MAX_PLAYERS - totalPlayers) }).map((_, i) => (
+                  <div
+                    key={`empty-${i}`}
+                    className="flex flex-col items-center justify-center border border-dashed border-[#ff4d6d]/20 bg-[#080312]/40 w-16 h-20"
+                  >
+                    <span className="text-[6px] text-[#4a3b5c]">SLOT {totalPlayers + i + 1}</span>
+                    <span className="text-[5px] text-[#4a3b5c]">EMPTY</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Launch / Status Button */}
+            <div className="flex w-full max-w-xs justify-center">
+              {p2p.role === 'host' ? (
+                <button
+                  type="button"
+                  onClick={handleStartRun}
+                  disabled={opponents.length === 0}
+                  className="w-full border-2 border-[#ffd166] bg-[#ffd166] py-2 text-[9px] font-bold text-[#120726] transition-colors hover:bg-[#ffe082] disabled:opacity-40 disabled:hover:bg-[#ffd166]"
+                >
+                  {opponents.length === 0
+                    ? 'WAITING FOR PLAYERS...'
+                    : `START BATTLE (${totalPlayers} PLAYERS)`}
+                </button>
+              ) : (
+                <div className="w-full border border-[#3ef2c8]/50 bg-[#0a1820] py-2 text-center text-[7px] text-[#3ef2c8]">
+                  CONNECTED - WAITING FOR HOST TO START
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
