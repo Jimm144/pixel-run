@@ -118,7 +118,8 @@ export function SkinUnlockModal({ skinId, onEquip, onClose }: SkinUnlockModalPro
             ref={canvasRef}
             width={112}
             height={112}
-            className="relative z-10 [image-rendering:pixelated]"
+            style={{ imageRendering: 'pixelated' }}
+            className="relative z-10 block [image-rendering:pixelated]"
           />
         </div>
 

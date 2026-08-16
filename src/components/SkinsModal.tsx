@@ -362,7 +362,7 @@ export function SkinsModal({
         drawPlayerSprite(ctx, cx, cy, {
           skinId: selectedSkin.id,
           frame,
-          scale: 4.2,
+          scale: 4,
           onGround: true,
           run: Math.floor(frame / 6) % 4,
         });
@@ -492,7 +492,7 @@ export function SkinsModal({
         }
       >
         {/* Header */}
-        <div className="flex items-center justify-between gap-2 border-b-2 border-[#251842] pb-2 sm:pb-2.5">
+        <div className="flex items-start justify-between gap-2 border-b-2 border-[#251842] pb-2 sm:pb-2.5">
           <div className="flex min-w-0 flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-3">
             <h2 className="font-pixel text-[12px] text-[#3ef2c8] whitespace-nowrap sm:text-[14px] md:text-[16px]">
               CHARACTER LOCKER
@@ -510,13 +510,9 @@ export function SkinsModal({
           <button
             type="button"
             onClick={onClose}
-            className={
-              touch
-                  ? 'flex h-10 w-10 shrink-0 items-center justify-center border border-[#ff4d6d] bg-[#ff4d6d]/20 px-0 py-0 font-pixel text-[14px] text-[#ff4d6d] shadow-[1px_1px_0_#08040f] whitespace-nowrap hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px] tablet:h-12 tablet:w-12 tablet:border-2 tablet:text-[16px]'
-                 : 'flex h-7 min-w-[64px] shrink-0 items-center justify-center border-2 border-[#ff4d6d] bg-[#ff4d6d]/20 px-2 py-0.5 font-pixel text-[9px] text-[#ff4d6d] shadow-[2px_2px_0_#08040f] whitespace-nowrap hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px] sm:min-w-[70px] sm:text-[10px]'
-            }
+            className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center border border-[#ff4d6d] bg-[#ff4d6d]/20 font-pixel text-[10px] sm:text-[11px] text-[#ff4d6d] shadow-[1px_1px_0_#08040f] hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px]"
           >
-            <span className={touch ? 'relative -top-px' : undefined}>{touch ? '✕' : '[ X ]'}</span>
+            ✕
           </button>
         </div>
 
@@ -567,7 +563,7 @@ export function SkinsModal({
           <div className="flex shrink-0 flex-row md:flex-col items-center justify-between md:justify-start gap-2.5 md:gap-0 self-stretch md:self-start border-2 border-[#251842] bg-[#120722] p-2.5 md:p-3.5 shadow-[2px_2px_0_#08040f]">
             <div className="flex items-center gap-2.5 md:flex-col md:gap-0">
               <div className="relative flex items-center justify-center border-2 border-[#38225c] bg-[#1a0e2e] p-1.5 md:p-2.5 shadow-inner">
-                <canvas ref={previewCanvasRef} width={96} height={96} className="h-16 w-16 md:h-24 md:w-24 block" />
+                <canvas ref={previewCanvasRef} width={96} height={96} style={{ imageRendering: 'pixelated' }} className="h-20 w-20 md:h-24 md:w-24 block [image-rendering:pixelated]" />
               </div>
               <div className="text-left md:mt-2.5 md:text-center">
                 <div className="font-pixel text-[12px] text-white sm:text-[13px] md:text-[15px]">{selectedSkin.name}</div>
