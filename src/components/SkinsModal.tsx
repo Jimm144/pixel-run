@@ -474,16 +474,18 @@ export function SkinsModal({
       >
         {/* Header */}
         <div className="flex items-center justify-between gap-2 border-b-2 border-[#251842] pb-2 sm:pb-2.5">
-          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <div className="flex min-w-0 flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-3">
             <h2 className="font-pixel text-[12px] text-[#3ef2c8] whitespace-nowrap sm:text-[14px] md:text-[16px]">
               CHARACTER LOCKER
             </h2>
-            <div className="flex shrink-0 items-center gap-1.5 border-2 border-[#3ef2c8]/60 bg-[#092922] px-2 py-0.5 font-pixel text-[8px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] whitespace-nowrap sm:text-[9px] md:text-[10px]">
-              <GemIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-              <span>GEMS: {stats.gems}</span>
-            </div>
-            <div className="flex shrink-0 items-center gap-1.5 border-2 border-[#ffd166]/60 bg-[#2b2005] px-2 py-0.5 font-pixel text-[8px] text-[#ffd166] shadow-[2px_2px_0_#08040f] whitespace-nowrap sm:text-[9px] md:text-[10px]">
-              <span>UNLOCKED: {unlockedSkins.length}/{SKIN_LIST.length}</span>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <div className="flex shrink-0 items-center gap-1.5 border-2 border-[#3ef2c8]/60 bg-[#092922] px-2 py-0.5 font-pixel text-[7.5px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] whitespace-nowrap sm:text-[9px] md:text-[10px]">
+                <GemIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                <span>GEMS: {stats.gems}</span>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5 border-2 border-[#ffd166]/60 bg-[#2b2005] px-2 py-0.5 font-pixel text-[7.5px] text-[#ffd166] shadow-[2px_2px_0_#08040f] whitespace-nowrap sm:text-[9px] md:text-[10px]">
+                <span>UNLOCKED: {unlockedSkins.length}/{SKIN_LIST.length}</span>
+              </div>
             </div>
           </div>
           <button
