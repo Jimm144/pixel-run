@@ -21,13 +21,16 @@ const RELAYS = [
   'wss://relay.damus.io',
   'wss://nos.lol',
   'wss://relay.nostr.band',
-  'wss://nostr.wine',
-  'wss://eden.nostr.land',
-  'wss://relay.current.fyi',
   'wss://purplerelay.com',
-  'wss://relay.snort.social',
-  'wss://relay.primal.net',
+  'wss://eden.nostr.land',
 ];
+
+const ROOM_CONFIG = {
+  appId: APP_ID,
+  relayConfig: {
+    urls: RELAYS,
+  },
+};
 
 function registerMessageAction<T>(
   room: any,
@@ -192,13 +195,7 @@ export class P2PManager {
       const { joinRoom, selfId } = await import('trystero/nostr');
       this.localPeerId = selfId;
 
-      this.room = joinRoom(
-        {
-          appId: APP_ID,
-          relayUrls: RELAYS,
-        } as any,
-        this.roomId,
-      );
+      this.room = joinRoom(ROOM_CONFIG as any, this.roomId);
 
       // 1. Unreliable coordinates channel
       this.sendTickAction = registerMessageAction<PlayerTickPayload>(this.room, 'tick', (data, peerId) => {
@@ -271,13 +268,7 @@ export class P2PManager {
     this.stopBrowsingPublicLobbies();
     try {
       const { joinRoom } = await import('trystero/nostr');
-      this.discoveryRoom = joinRoom(
-        {
-          appId: APP_ID,
-          relayUrls: RELAYS,
-        } as any,
-        DISCOVERY_ROOM,
-      );
+      this.discoveryRoom = joinRoom(ROOM_CONFIG as any, DISCOVERY_ROOM);
 
       const sendRequest = registerMessageAction<{ ts: number }>(this.discoveryRoom, 'req_lobbies');
       registerMessageAction<PublicLobbyInfo>(this.discoveryRoom, 'public_lobby', (data) => {
@@ -321,13 +312,7 @@ export class P2PManager {
     this.stopPublicAnnounce();
     try {
       const { joinRoom } = await import('trystero/nostr');
-      this.discoveryRoom = joinRoom(
-        {
-          appId: APP_ID,
-          relayUrls: RELAYS,
-        } as any,
-        DISCOVERY_ROOM,
-      );
+      this.discoveryRoom = joinRoom(ROOM_CONFIG as any, DISCOVERY_ROOM);
 
       const sendLobby = registerMessageAction<PublicLobbyInfo>(this.discoveryRoom, 'public_lobby');
 
