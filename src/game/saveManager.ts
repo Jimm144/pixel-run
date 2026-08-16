@@ -198,21 +198,34 @@ export async function copySaveCodeToClipboard(givenContent?: string): Promise<bo
 
 export async function restoreSaveFromString(raw: string): Promise<{ success: boolean; error?: string }> {
   try {
-    let clean = raw.trim();
+    // Aggressively clean the input
+    let clean = raw
+      .trim()
+      .replace(/\r\n/g, '\n')
+      .replace(/\u00a0/g, ' '); // non-breaking space
 
-    // 1. Strip surrounding quotes, markdown ticks, or brackets
-    if ((clean.startsWith('"') && clean.endsWith('"')) || (clean.startsWith("'") && clean.endsWith("'"))) {
+    // Strip surrounding quotes or backticks
+    if (
+      (clean.startsWith('"') && clean.endsWith('"')) ||
+      (clean.startsWith("'") && clean.endsWith("'")) ||
+      (clean.startsWith('`') && clean.endsWith('`'))
+    ) {
       clean = clean.slice(1, -1).trim();
     }
-    if (clean.startsWith('```') && clean.endsWith('```')) {
+    // Strip markdown code fences
+    if (clean.startsWith('```')) {
       clean = clean.replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/, '').trim();
     }
 
-    // 2. Direct JSON support (unencrypted or raw exports)
+    if (!clean) {
+      return { success: false, error: 'EMPTY SAVE CODE' };
+    }
+
+    // 1. Raw JSON support (unencrypted dev exports)
     if (clean.startsWith('{') && clean.endsWith('}')) {
       try {
         const parsed = JSON.parse(clean);
-        if (parsed && parsed.storage && typeof parsed.storage === 'object') {
+        if (parsed?.storage && typeof parsed.storage === 'object') {
           for (const [key, val] of Object.entries(parsed.storage)) {
             if (typeof key === 'string' && key.startsWith('pixeldash.') && typeof val === 'string') {
               localStorage.setItem(key, val);
@@ -223,22 +236,34 @@ export async function restoreSaveFromString(raw: string): Promise<{ success: boo
       } catch {}
     }
 
-    // 3. Extract base64 payload (strip SAVE_MAGIC and any accidental internal whitespace)
-    let b64Data = clean;
-    if (clean.includes(SAVE_MAGIC)) {
-      b64Data = clean.slice(clean.indexOf(SAVE_MAGIC) + SAVE_MAGIC.length);
+    // 2. Extract base64 payload — accept with or without PRSAVE1: prefix
+    let b64Data: string;
+    const magicIdx = clean.indexOf(SAVE_MAGIC);
+    if (magicIdx !== -1) {
+      b64Data = clean.slice(magicIdx + SAVE_MAGIC.length);
+    } else if (/^[A-Za-z0-9+/=]+$/.test(clean.replace(/\s/g, ''))) {
+      // Looks like raw base64 — try it directly
+      b64Data = clean;
+    } else {
+      return { success: false, error: 'INVALID SAVE CODE FORMAT' };
     }
+
+    // Strip all whitespace from base64
     b64Data = b64Data.replace(/[\s\r\n\t]/g, '');
+
+    if (!b64Data) {
+      return { success: false, error: 'EMPTY SAVE CODE' };
+    }
 
     let combined: Uint8Array;
     try {
       combined = base64ToBuffer(b64Data);
     } catch {
-      return { success: false, error: 'INVALID SAVE CODE' };
+      return { success: false, error: 'INVALID SAVE CODE — CHECK FOR MISSING CHARACTERS' };
     }
 
     if (combined.length <= 12) {
-      return { success: false, error: 'CORRUPTED SAVE DATA' };
+      return { success: false, error: 'SAVE CODE TOO SHORT — COPY THE FULL CODE' };
     }
 
     const iv = combined.slice(0, 12);
@@ -253,18 +278,23 @@ export async function restoreSaveFromString(raw: string): Promise<{ success: boo
         ciphertext
       );
     } catch {
-      return { success: false, error: 'TAMPERED OR INVALID SAVE FILE' };
+      return { success: false, error: 'SAVE CODE FROM DIFFERENT DEVICE OR CORRUPTED' };
     }
 
     const dec = new TextDecoder();
     const jsonStr = dec.decode(decrypted);
-    const parsed: ExportPayload = JSON.parse(jsonStr);
 
-    if (!parsed || !parsed.storage || typeof parsed.storage !== 'object') {
+    let parsed: ExportPayload;
+    try {
+      parsed = JSON.parse(jsonStr);
+    } catch {
+      return { success: false, error: 'CORRUPTED SAVE DATA' };
+    }
+
+    if (!parsed?.storage || typeof parsed.storage !== 'object') {
       return { success: false, error: 'INCOMPATIBLE SAVE VERSION' };
     }
 
-    // Apply storage values safely
     for (const [key, val] of Object.entries(parsed.storage)) {
       if (typeof key === 'string' && key.startsWith('pixeldash.') && typeof val === 'string') {
         localStorage.setItem(key, val);

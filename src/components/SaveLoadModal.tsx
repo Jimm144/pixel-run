@@ -4,7 +4,6 @@ import {
   downloadSaveFile,
   copySaveCodeToClipboard,
   restoreSaveFromString,
-  triggerImportSaveDialog,
 } from '../game/saveManager';
 import { PixelButton } from './ui';
 import { sfx } from '../game/audio';
@@ -24,6 +23,8 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Real file input rendered in the tree — required for iOS/Android file picker
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (mode === 'save') {
@@ -61,28 +62,40 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
       setSuccessMsg('COPIED TO CLIPBOARD!');
       setTimeout(() => setCopied(false), 3000);
     } else {
-      // If browser blocked automatic copy, select text and prompt user
       if (textareaRef.current) {
         textareaRef.current.focus();
         textareaRef.current.select();
       }
       setCopied(false);
-      setErrorMsg('CODE SELECTED — TAP COPY IN POPUP');
+      setErrorMsg('CODE SELECTED — TAP AND HOLD TO COPY');
     }
   };
 
-  const handleUploadFile = () => {
+  // File input change handler — reads the file and restores
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
     setErrorMsg(null);
-    triggerImportSaveDialog((res) => {
-      if (res.success) {
+    setLoading(true);
+    try {
+      const text = await file.text();
+      const result = await restoreSaveFromString(text);
+      if (result.success) {
         sfx.play('gem');
         onRestoreSuccess();
         onClose();
       } else {
         sfx.play('death');
-        setErrorMsg(res.error || 'INVALID SAVE FILE');
+        setErrorMsg(result.error || 'INVALID SAVE FILE');
       }
-    });
+    } catch {
+      sfx.play('death');
+      setErrorMsg('FAILED TO READ FILE');
+    } finally {
+      setLoading(false);
+      // Reset input so same file can be selected again
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const handleRestoreFromText = async () => {
@@ -187,16 +200,27 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
         ) : (
           <div className="flex w-full flex-col gap-3">
             <p className="text-[7.5px] leading-relaxed text-[#9d8fd6] sm:text-[8.5px]">
-              Upload your .save file or paste your encrypted save code string below.
+              Select your .save file or paste your save code string below.
             </p>
 
-            <PixelButton
-              variant="ghost"
-              onClick={handleUploadFile}
-              className="w-full py-2.5 text-[9px] sm:text-[10px]"
+            {/* Hidden real file input — rendered in tree for iOS/Android reliability */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".save,.dat,.txt,text/plain"
+              aria-hidden="true"
+              tabIndex={-1}
+              onChange={handleFileChange}
+              className="sr-only"
+              id="save-file-input"
+            />
+            {/* Label acts as the click target — guaranteed to open file picker on all platforms */}
+            <label
+              htmlFor="save-file-input"
+              className="flex w-full cursor-pointer items-center justify-center border-2 border-[#3ef2c8]/60 bg-[#092922] py-2.5 font-pixel text-[9px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] transition-colors hover:bg-[#0d3b2d] active:translate-x-[1px] active:translate-y-[1px] sm:text-[10px]"
             >
-              UPLOAD .SAVE FILE
-            </PixelButton>
+              {loading ? 'LOADING...' : 'SELECT .SAVE FILE'}
+            </label>
 
             <div className="flex flex-col text-left">
               <span className="mb-1 text-[6.5px] text-[#6f5fa8] sm:text-[7.5px]">
