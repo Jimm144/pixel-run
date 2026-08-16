@@ -410,7 +410,7 @@ export function SkinsModal({
       <div
         className={
           touch
-          ? 'flex w-full flex-col bg-[#0d0619] p-0 text-white tablet:max-w-[840px] tablet:border-4 tablet:border-[#3ef2c8] tablet:p-4 tablet:shadow-[0_0_0_4px_#08040f,0_0_35px_rgba(62,242,200,0.25)]'
+          ? 'flex min-h-full w-full flex-col bg-[#0d0619] p-0 text-white tablet:min-h-0 tablet:max-w-[840px] tablet:border-4 tablet:border-[#3ef2c8] tablet:p-4 tablet:shadow-[0_0_0_4px_#08040f,0_0_35px_rgba(62,242,200,0.25)]'
              : 'flex max-h-[94vh] w-full max-w-[840px] flex-col border-4 border-[#3ef2c8] bg-[#0d0619] p-4 text-white shadow-[0_0_0_4px_#08040f,0_0_35px_rgba(62,242,200,0.25)] tablet:max-w-[min(840px,calc(100vw-32px))]'
         }
       >
@@ -434,7 +434,7 @@ export function SkinsModal({
                  : 'flex h-7 min-w-[64px] shrink-0 items-center justify-center border-2 border-[#ff4d6d] bg-[#ff4d6d]/20 px-2 py-0.5 font-pixel text-[9px] text-[#ff4d6d] shadow-[2px_2px_0_#08040f] whitespace-nowrap hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px] sm:min-w-[70px] sm:text-[10px]'
             }
           >
-            {touch ? '✕' : '[ X ]'}
+            <span className={touch ? 'relative -top-px' : undefined}>{touch ? '✕' : '[ X ]'}</span>
           </button>
         </div>
 
@@ -469,7 +469,7 @@ export function SkinsModal({
         <div
           className={
               touch
-                ? 'mt-3 grid grid-cols-1 gap-3 overflow-hidden tablet:grid-cols-[230px_1fr] tablet:gap-4'
+                ? 'mt-3 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden tablet:grid tablet:flex-none tablet:grid-cols-[230px_1fr] tablet:gap-4'
               : 'mt-3 flex flex-col md:grid md:grid-cols-[230px_1fr] md:items-start gap-3 md:gap-4 overflow-hidden'
           }
         >
@@ -533,7 +533,7 @@ export function SkinsModal({
           <div
             className={
               touch
-                 ? 'grid max-h-[350px] grid-cols-2 gap-2 overflow-y-auto p-0 tablet:max-h-[600px] tablet:grid-cols-3'
+                ? 'grid min-h-0 min-w-0 flex-1 grid-cols-2 gap-2 overflow-y-auto p-0 tablet:max-h-[600px] tablet:flex-none tablet:grid-cols-3'
                 : 'grid max-h-[340px] sm:max-h-[380px] md:max-h-[420px] grid-cols-2 md:grid-cols-3 gap-2 overflow-y-auto p-0'
             }
           >
@@ -571,7 +571,7 @@ export function SkinsModal({
                           backgroundColor: tierTheme.bg,
                         }}
                       >
-                        {skin.tier}
+                        <span className="relative top-px">{skin.tier}</span>
                       </span>
                     </div>
 
