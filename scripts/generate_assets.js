@@ -381,9 +381,11 @@ function generatePreviewCard() {
 }
 
 const pubDir = path.resolve('public');
+const previewBuf = generatePreviewCard();
 fs.writeFileSync(path.join(pubDir, 'icon-192.png'), generateSquareAppIcon(192));
 fs.writeFileSync(path.join(pubDir, 'icon-512.png'), generateSquareAppIcon(512));
 fs.writeFileSync(path.join(pubDir, 'apple-touch-icon.png'), generateSquareAppIcon(180));
-fs.writeFileSync(path.join(pubDir, 'preview.png'), generatePreviewCard());
+fs.writeFileSync(path.join(pubDir, 'preview.png'), previewBuf);
+fs.writeFileSync(path.join(pubDir, 'og-image.png'), previewBuf);
 
-console.log('Successfully generated: icon-192.png, icon-512.png, apple-touch-icon.png, preview.png');
+console.log('Successfully generated: icon-192.png, icon-512.png, apple-touch-icon.png, preview.png, og-image.png');
