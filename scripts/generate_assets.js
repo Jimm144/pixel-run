@@ -2,100 +2,105 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 
-function createPNG(width, height, rgbaBuffer) {
-  const crcTable = [];
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) {
-      if (c & 1) c = 0xedb88320 ^ (c >>> 1);
-      else c = c >>> 1;
+/**
+ * Pixel-Perfect Asset Generator for Pixel Run
+ * Generates app icons (192, 512, 180) and a gorgeous 1200x630 preview banner.
+ */
+
+function crc32(buf) {
+  let table = crc32.table;
+  if (!table) {
+    table = crc32.table = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let k = 0; k < 8; k++) {
+        c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+      }
+      table[i] = c;
     }
-    crcTable[n] = c;
   }
-
-  function crc32(buf) {
-    let c = 0xffffffff;
-    for (let i = 0; i < buf.length; i++) {
-      c = crcTable[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
-    }
-    return (c ^ 0xffffffff) >>> 0;
+  let crc = -1;
+  for (let i = 0; i < buf.length; i++) {
+    crc = (crc >>> 8) ^ table[(crc ^ buf[i]) & 0xff];
   }
+  return (crc ^ -1) >>> 0;
+}
 
-  function makeChunk(type, data) {
-    const len = Buffer.alloc(4);
-    len.writeUInt32BE(data.length, 0);
-    const typeBuf = Buffer.from(type, 'ascii');
-    const crcBuf = Buffer.alloc(4);
-    const crc = crc32(Buffer.concat([typeBuf, data]));
-    crcBuf.writeUInt32BE(crc, 0);
-    return Buffer.concat([len, typeBuf, data, crcBuf]);
-  }
+function createChunk(type, data) {
+  const len = data.length;
+  const chunk = Buffer.alloc(12 + len);
+  chunk.writeUInt32BE(len, 0);
+  chunk.write(type, 4, 4, 'ascii');
+  data.copy(chunk, 8);
+  const crc = crc32(chunk.subarray(4, 8 + len));
+  chunk.writeUInt32BE(crc, 8 + len);
+  return chunk;
+}
 
+function createPNG(w, h, rgba) {
   const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
   const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
-  ihdr[8] = 8;
-  ihdr[9] = 6;
-  ihdr[10] = 0;
-  ihdr[11] = 0;
-  ihdr[12] = 0;
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr.writeUInt8(8, 8);
+  ihdr.writeUInt8(6, 9);
+  ihdr.writeUInt8(0, 10);
+  ihdr.writeUInt8(0, 11);
+  ihdr.writeUInt8(0, 12);
+  const ihdrChunk = createChunk('IHDR', ihdr);
 
-  const scanlines = Buffer.alloc(height * (1 + width * 4));
-  for (let y = 0; y < height; y++) {
-    const scanlineOffset = y * (1 + width * 4);
-    scanlines[scanlineOffset] = 0;
-    rgbaBuffer.copy(scanlines, scanlineOffset + 1, y * width * 4, (y + 1) * width * 4);
+  const rowSize = 1 + w * 4;
+  const rawData = Buffer.alloc(h * rowSize);
+  for (let y = 0; y < h; y++) {
+    rawData[y * rowSize] = 0;
+    rgba.copy(rawData, y * rowSize + 1, y * w * 4, (y + 1) * w * 4);
   }
 
-  const compressed = zlib.deflateSync(scanlines, { level: 9 });
-  const idat = makeChunk('IDAT', compressed);
-  const iend = makeChunk('IEND', Buffer.alloc(0));
+  const idatData = zlib.deflateSync(rawData, { level: 9 });
+  const idatChunk = createChunk('IDAT', idatData);
+  const iendChunk = createChunk('IEND', Buffer.alloc(0));
 
-  return Buffer.concat([signature, makeChunk('IHDR', ihdr), idat, iend]);
+  return Buffer.concat([signature, ihdrChunk, idatChunk, iendChunk]);
+}
+
+function hexToRgb(hex) {
+  const c = parseInt(hex.replace('#', ''), 16);
+  return [(c >> 16) & 255, (c >> 8) & 255, c & 255];
+}
+
+function makeCanvas(w, h) {
+  const buf = Buffer.alloc(w * h * 4);
+  function fillRect(rx, ry, rw, rh, color, alpha = 255) {
+    const [r, g, b] = hexToRgb(color);
+    const x0 = Math.max(0, Math.floor(rx));
+    const y0 = Math.max(0, Math.floor(ry));
+    const x1 = Math.min(w, Math.floor(rx + rw));
+    const y1 = Math.min(h, Math.floor(ry + rh));
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const idx = (y * w + x) * 4;
+        if (alpha === 255) {
+          buf[idx] = r; buf[idx + 1] = g; buf[idx + 2] = b; buf[idx + 3] = 255;
+        } else {
+          const a = alpha / 255;
+          buf[idx] = Math.round(buf[idx] * (1 - a) + r * a);
+          buf[idx + 1] = Math.round(buf[idx + 1] * (1 - a) + g * a);
+          buf[idx + 2] = Math.round(buf[idx + 2] * (1 - a) + b * a);
+          buf[idx + 3] = 255;
+        }
+      }
+    }
+  }
+  return { buf, fillRect };
 }
 
 // ---------------------------------------------------------------
-// Shared pixel helpers
-// ---------------------------------------------------------------
-function makeCanvas(W, H) {
-  const buf = Buffer.alloc(W * H * 4);
-
-  function hexToRgba(hex) {
-    const h = hex.replace('#', '');
-    return [
-      parseInt(h.substring(0, 2), 16),
-      parseInt(h.substring(2, 4), 16),
-      parseInt(h.substring(4, 6), 16),
-      255,
-    ];
-  }
-
-  function setPixel(x, y, r, g, b, a = 255) {
-    if (x < 0 || x >= W || y < 0 || y >= H) return;
-    const idx = (y * W + x) * 4;
-    buf[idx] = r; buf[idx + 1] = g; buf[idx + 2] = b; buf[idx + 3] = a;
-  }
-
-  function fillRect(x, y, w, h, hex) {
-    const [r, g, b] = hexToRgba(hex);
-    for (let py = Math.floor(y); py < Math.floor(y + h); py++)
-      for (let px = Math.floor(x); px < Math.floor(x + w); px++)
-        setPixel(px, py, r, g, b);
-  }
-
-  return { buf, fillRect, setPixel, hexToRgba };
-}
-
-// ---------------------------------------------------------------
-// App Icon — Bob facing FORWARD, standing idle, centered
-// Uses the same 11-wide pixel grid as playerSprite.ts but front-facing
+// Square App Icon (192, 512, 180) — Front-facing symmetrical Bob
 // ---------------------------------------------------------------
 function generateSquareAppIcon(size) {
   const { buf, fillRect } = makeCanvas(size, size);
 
-  // Dark background with very subtle radial centre-glow
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const dx = (x / size - 0.5) * 2;
@@ -110,8 +115,6 @@ function generateSquareAppIcon(size) {
     }
   }
 
-  // ---- Draw front-facing idle Bob (20 rows x 14 cols logical pixels) ----
-  // Scale so Bob fills ~75% of icon height
   const scale = Math.max(1, Math.floor(size * 0.75 / 20));
   const bobW = 14 * scale;
   const bobH = 20 * scale;
@@ -122,45 +125,41 @@ function generateSquareAppIcon(size) {
     fillRect(ox + x * scale, oy + y * scale, w * scale, h * scale, col);
   }
 
-  // === HEAD (rows 0..5, cols 2..11) ===
-  f(2, 0, 10, 6, '#20122e');   // head shape (dark purple)
-  f(3, 1, 8,  4, '#2a1b3d');   // face lighter
-  // Eyes (front facing = two eyes)
-  f(3, 2, 2, 2, '#ffffff');    // left eye white
-  f(4, 2, 1, 1, '#20122e');    // left pupil
-  f(9, 2, 2, 2, '#ffffff');    // right eye white
-  f(10,2, 1, 1, '#20122e');    // right pupil
-  // Tiny pixel nose
+  // Head
+  f(2, 0, 10, 6, '#20122e');
+  f(3, 1, 8,  4, '#2a1b3d');
+  // Eyes
+  f(3, 2, 2, 2, '#ffffff');
+  f(4, 2, 1, 1, '#20122e');
+  f(9, 2, 2, 2, '#ffffff');
+  f(10,2, 1, 1, '#20122e');
+  // Nose
   f(6, 4, 2, 1, '#1a0a22');
 
-  // === BODY/SUIT (rows 6..12) ===
-  // Neck
-  f(6, 6, 2, 1, '#ffcf9e');    // skin neck
-  // Shoulders / torso
-  f(2, 7, 10, 5, '#ff4d6d');   // red suit body
-  f(2, 7, 10, 2, '#b32a4d');   // suit top darker
-  // Scarf / collar
-  f(4, 6, 6, 2, '#3ef2c8');    // teal scarf band
+  // Body/Suit
+  f(6, 6, 2, 1, '#ffcf9e');
+  f(2, 7, 10, 5, '#ff4d6d');
+  f(2, 7, 10, 2, '#b32a4d');
+  // Scarf
+  f(4, 6, 6, 2, '#3ef2c8');
   // Chest stripe
-  f(6, 9, 2, 3, '#b32a4d');    // centre chest stripe
+  f(6, 9, 2, 3, '#b32a4d');
 
-  // === ARMS (rows 7..11, sides) ===
-  f(0, 7, 2, 5, '#ff4d6d');    // left arm
-  f(0, 11,2, 1, '#ffcf9e');    // left hand
-  f(12,7, 2, 5, '#ff4d6d');    // right arm
-  f(12,11,2, 1, '#ffcf9e');    // right hand
+  // Arms
+  f(0, 7, 2, 5, '#ff4d6d');
+  f(0, 11,2, 1, '#ffcf9e');
+  f(12,7, 2, 5, '#ff4d6d');
+  f(12,11,2, 1, '#ffcf9e');
 
-  // === LEGS (rows 12..17) — both feet flat on ground ===
-  f(3, 12, 3, 4, '#59427e');   // left upper leg
-  f(8, 12, 3, 4, '#59427e');   // right upper leg
-  // Boots
-  f(2, 16, 4, 2, '#2b1b45');   // left boot
-  f(8, 16, 4, 2, '#2b1b45');   // right boot
-  // Boot toe highlight
+  // Legs & Boots
+  f(3, 12, 3, 4, '#59427e');
+  f(8, 12, 3, 4, '#59427e');
+  f(2, 16, 4, 2, '#2b1b45');
+  f(8, 16, 4, 2, '#2b1b45');
   f(2, 16, 2, 1, '#3d2660');
   f(8, 16, 2, 1, '#3d2660');
 
-  // === SUBTLE PIXEL ART SHADOW under feet ===
+  // Ground shadow
   for (let sx = 3; sx <= 11; sx++) {
     const alpha = 80;
     const idx = ((oy + bobH) * size + ox + sx * scale) * 4;
@@ -173,172 +172,210 @@ function generateSquareAppIcon(size) {
 }
 
 // ---------------------------------------------------------------
-// Preview Card — 1200×630 proper game banner
+// Preview Card — 1200×630 Atmospheric Synthwave Banner
 // ---------------------------------------------------------------
 function generatePreviewCard() {
   const W = 1200;
   const H = 630;
   const { buf, fillRect } = makeCanvas(W, H);
 
-  // === Background gradient (dark purple → near black) ===
+  // 1. Synthwave sunset sky gradient
   for (let y = 0; y < H; y++) {
     const t = y / H;
-    const r = Math.floor(13 + (8 - 13) * t);
-    const g = Math.floor(6 + (4 - 6) * t);
-    const b = Math.floor(25 + (15 - 25) * t);
+    let r, g, b;
+    if (t < 0.5) {
+      const st = t / 0.5;
+      r = Math.floor(18 + (55 - 18) * st);
+      g = Math.floor(10 + (16 - 10) * st);
+      b = Math.floor(42 + (65 - 42) * st);
+    } else {
+      const st = (t - 0.5) / 0.5;
+      r = Math.floor(55 + (180 - 55) * st * 0.5);
+      g = Math.floor(16 + (60 - 16) * st * 0.4);
+      b = Math.floor(65 + (35 - 65) * st);
+    }
     for (let x = 0; x < W; x++) {
       const idx = (y * W + x) * 4;
       buf[idx] = r; buf[idx + 1] = g; buf[idx + 2] = b; buf[idx + 3] = 255;
     }
   }
 
-  // === Subtle city skyline silhouette ===
-  const buildings = [
-    { x: 20,  w: 70,  h: 160 },
-    { x: 100, w: 100, h: 210 },
-    { x: 210, w: 60,  h: 140 },
-    { x: 280, w: 90,  h: 240 },
-    { x: 380, w: 70,  h: 190 },
-    { x: 460, w: 110, h: 170 },
-    // right side
-    { x: 750, w: 80,  h: 200 },
-    { x: 840, w: 120, h: 260 },
-    { x: 970, w: 90,  h: 180 },
-    { x: 1070,w: 80,  h: 230 },
-    { x: 1160,w: 40,  h: 150 },
+  // 2. Distant stars
+  const stars = [
+    [100, 40], [250, 70], [420, 30], [580, 85], [750, 50], [920, 65], [1080, 35],
+    [180, 120], [340, 150], [680, 130], [840, 110], [1020, 140], [50, 180]
   ];
-  const groundY = 490;
+  stars.forEach(([sx, sy]) => {
+    fillRect(sx, sy, 3, 3, '#ffd166', 200);
+    fillRect(sx + 1, sy - 1, 1, 5, '#ffffff', 240);
+    fillRect(sx - 1, sy + 1, 5, 1, '#ffffff', 240);
+  });
+
+  // 3. Segmented Synthwave Retro Sun (Centered at x=400, y=260)
+  const sunX = 380, sunY = 250, sunR = 120;
+  for (let dy = -sunR; dy <= sunR; dy++) {
+    const py = sunY + dy;
+    if (py < 0 || py >= H) continue;
+    const dxMax = Math.floor(Math.sqrt(sunR * sunR - dy * dy));
+    // Retro horizontal slice lines
+    const stripe = (dy + sunR) % 18;
+    if (stripe > 13 && dy > 0) continue; // scanline cuts
+
+    const sunT = (dy + sunR) / (2 * sunR);
+    const sr = Math.floor(255 - sunT * 20);
+    const sg = Math.floor(209 - sunT * 120);
+    const sb = Math.floor(102 - sunT * 80);
+    const hex = `#${sr.toString(16).padStart(2,'0')}${sg.toString(16).padStart(2,'0')}${sb.toString(16).padStart(2,'0')}`;
+    fillRect(sunX - dxMax, py, dxMax * 2, 1, hex);
+  }
+
+  // 4. Skyline Mountain / City Silhouette
+  const buildings = [
+    { x: 0, w: 90, h: 140 },
+    { x: 70, w: 110, h: 190 },
+    { x: 160, w: 70, h: 130 },
+    { x: 210, w: 90, h: 220 },
+    { x: 290, w: 80, h: 170 },
+    { x: 350, w: 100, h: 140 },
+    { x: 440, w: 80, h: 200 },
+    { x: 500, w: 120, h: 160 },
+    { x: 600, w: 90, h: 230 },
+    { x: 670, w: 110, h: 180 },
+    { x: 770, w: 90, h: 240 },
+    { x: 840, w: 130, h: 200 },
+    { x: 950, w: 100, h: 260 },
+    { x: 1030, w: 90, h: 170 },
+    { x: 1100, w: 100, h: 210 },
+  ];
+  const horizonY = 470;
   buildings.forEach((b) => {
-    fillRect(b.x, groundY - b.h, b.w, b.h, '#180c2e');
-    // Lit windows
-    for (let wy = groundY - b.h + 18; wy < groundY - 20; wy += 28) {
-      for (let wx = b.x + 12; wx < b.x + b.w - 12; wx += 22) {
-        if ((wx + wy) % 3 !== 0) fillRect(wx, wy, 10, 14, '#3a2560');
+    fillRect(b.x, horizonY - b.h, b.w, b.h, '#130826');
+    for (let wy = horizonY - b.h + 20; wy < horizonY - 20; wy += 26) {
+      for (let wx = b.x + 12; wx < b.x + b.w - 12; wx += 20) {
+        if ((wx * 3 + wy) % 5 === 0) fillRect(wx, wy, 8, 12, '#ffd166', 160);
+        else if ((wx + wy * 2) % 7 === 0) fillRect(wx, wy, 8, 12, '#3ef2c8', 140);
       }
     }
   });
 
-  // === Ground platform ===
-  fillRect(0, groundY,     W, 140, '#0a0418');
-  fillRect(0, groundY,     W, 8,   '#3ef2c8');
-  fillRect(0, groundY + 8, W, 5,   '#1da88a');
+  // 5. Ground Platform & Floating Islands
+  fillRect(0, horizonY, W, H - horizonY, '#0d051c');
+  fillRect(0, horizonY, W, 8, '#3ef2c8');
+  fillRect(0, horizonY + 8, W, 6, '#1da88a');
 
-  // === Floating platform mid-left ===
-  fillRect(80, 360, 200, 10, '#3ef2c8');
-  fillRect(80, 370, 200, 5,  '#1da88a');
+  // Floating platform left
+  fillRect(120, 360, 260, 10, '#3ef2c8');
+  fillRect(120, 370, 260, 6, '#1da88a');
+  fillRect(120, 376, 260, 4, '#130826');
 
-  // === Coins on platform (simple yellow circles) ===
-  [130, 165, 200, 235].forEach((cx) => {
-    fillRect(cx - 8, 334, 16, 20, '#ffd166');
-    fillRect(cx - 6, 332, 12, 4,  '#ffd166');
-    fillRect(cx - 6, 354, 12, 4,  '#ffd166');
-    fillRect(cx - 4, 336, 4,  4,  '#ffe99a'); // shine
+  // Floating platform right
+  fillRect(780, 380, 280, 10, '#3ef2c8');
+  fillRect(780, 390, 280, 6, '#1da88a');
+  fillRect(780, 396, 280, 4, '#130826');
+
+  // 6. Glowing Gold Coins on Left Platform
+  [160, 210, 260, 310].forEach((cx) => {
+    fillRect(cx - 10, 320, 20, 26, '#ffd166');
+    fillRect(cx - 12, 324, 24, 18, '#ffd166');
+    fillRect(cx - 6, 324, 12, 18, '#ffe9a0'); // gleam
+    fillRect(cx - 4, 326, 4, 8, '#ffffff');
   });
 
-  // === Gem (right side decorative) ===
-  const gx = 600, gy = 310;
-  fillRect(gx + 4, gy,     8,  4,  '#3ef2c8');
-  fillRect(gx,     gy + 4, 16, 8,  '#3ef2c8');
-  fillRect(gx + 4, gy + 12,8,  4,  '#3ef2c8');
-  fillRect(gx + 4, gy,     4,  4,  '#7ef7ff'); // highlight
+  // 7. Gem on Right Platform
+  const gx = 910, gy = 330;
+  fillRect(gx - 8, gy + 4, 32, 24, '#3ef2c8');
+  fillRect(gx - 4, gy, 24, 32, '#3ef2c8');
+  fillRect(gx, gy + 4, 16, 16, '#7ef7ff');
+  fillRect(gx + 2, gy + 6, 6, 6, '#ffffff');
 
-  // === Bob running (left side, large, facing right) ===
-  const bobScale = 16;
-  const bobX = 80;
-  const bobY = groundY - 20 * bobScale;
+  // 8. Bob Running in Heroic Stride (Centered on floating platform)
+  const bs = 16;
+  const bx = 220;
+  const by = 360 - 20 * bs;
 
-  function bobF(x, y, w, h, col) {
-    fillRect(bobX + x * bobScale, bobY + y * bobScale, w * bobScale, h * bobScale, col);
+  function bfill(x, y, w, h, col) {
+    fillRect(bx + x * bs, by + y * bs, w * bs, h * bs, col);
   }
 
   // Head
-  bobF(2, 0, 7, 6, '#20122e');
-  bobF(3, 1, 5, 3, '#2a1b3d');
+  bfill(2, 0, 7, 6, '#ff4d6d');
+  bfill(5, 2, 4, 4, '#ffcf9e');
+  bfill(2, 0, 8, 2, '#b32a4d');
   // Eye
-  bobF(7, 3, 1, 2, '#ffffff');
-  bobF(7, 3, 1, 1, '#20122e');
-  // Scarf
-  bobF(1, 5, 3, 2, '#3ef2c8');
+  bfill(7, 3, 1, 2, '#20122e');
+  // Streaming Scarf
+  bfill(-3, 5, 4, 2, '#3ef2c8');
+  bfill(-5, 6, 3, 2, '#3ef2c8');
+  bfill(1, 5, 3, 2, '#3ef2c8');
   // Body
-  bobF(2, 6, 7, 5, '#ff4d6d');
-  bobF(2, 6, 7, 2, '#b32a4d');
-  // Arm pumping forward
-  bobF(8, 7, 2, 3, '#ff4d6d');
-  bobF(9, 9, 2, 1, '#ffcf9e');
+  bfill(2, 6, 7, 5, '#ff4d6d');
+  bfill(2, 6, 7, 2, '#b32a4d');
+  // Arm forward
+  bfill(8, 7, 2, 3, '#ff4d6d');
+  bfill(9, 9, 2, 2, '#ffcf9e');
   // Arm back
-  bobF(0, 8, 2, 3, '#ff4d6d');
-  bobF(0,10, 2, 1, '#ffcf9e');
-  // Running legs — stride
-  bobF(3, 11, 3, 3, '#59427e'); // left leg forward
-  bobF(2, 13, 3, 2, '#2b1b45'); // left boot
-  bobF(7, 10, 3, 4, '#59427e'); // right leg back
-  bobF(7, 14, 3, 1, '#2b1b45'); // right boot
+  bfill(-1, 7, 2, 3, '#ff4d6d');
+  bfill(-1, 9, 2, 2, '#ffcf9e');
+  // Running legs
+  bfill(4, 11, 3, 4, '#59427e');
+  bfill(3, 15, 4, 2, '#2b1b45');
+  bfill(8, 10, 3, 4, '#59427e');
+  bfill(9, 14, 4, 2, '#2b1b45');
 
-  // === "PIXEL RUN" TITLE text (hand-drawn pixel font blocks) ===
-  // Using large pixel blocks to spell the title
-  const titleX = 580;
-  const titleY = 130;
-  const tScale = 14; // pixels per font pixel
-  const titleColor = '#3ef2c8';
-  const shadowColor = '#0a2e26';
-
-  // Draw thick pixel-art letter glyphs
-  // Each letter defined as array of [col, row] filled cells on a 5x7 grid
-  const letters = {
-    P: [[0,0],[1,0],[2,0],[3,0],[0,1],[4,1],[0,2],[1,2],[2,2],[3,2],[0,3],[0,4],[0,5],[0,6]],
-    I: [[0,0],[1,0],[2,0],[3,0],[4,0],[2,1],[2,2],[2,3],[2,4],[2,5],[0,6],[1,6],[2,6],[3,6],[4,6]],
-    X: [[0,0],[4,0],[1,1],[3,1],[2,2],[1,3],[3,3],[0,4],[4,4],[0,5],[4,5],[0,6],[4,6]],
-    E: [[0,0],[1,0],[2,0],[3,0],[4,0],[0,1],[0,2],[1,2],[2,2],[3,2],[0,3],[0,4],[0,5],[0,6],[1,6],[2,6],[3,6],[4,6]],
-    L: [[0,0],[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[1,6],[2,6],[3,6],[4,6]],
-    R: [[0,0],[1,0],[2,0],[3,0],[0,1],[4,1],[0,2],[1,2],[2,2],[3,2],[0,3],[3,3],[0,4],[4,4],[0,5],[4,5],[0,6],[4,6]],
-    U: [[0,0],[4,0],[0,1],[4,1],[0,2],[4,2],[0,3],[4,3],[0,4],[4,4],[0,5],[4,5],[1,6],[2,6],[3,6]],
-    N: [[0,0],[4,0],[0,1],[1,1],[4,1],[0,2],[2,2],[4,2],[0,3],[3,3],[4,3],[0,4],[4,4],[0,5],[4,5],[0,6],[4,6]],
-    ' ': [],
+  // 9. PIXEL RUN Arcade Title Logo (Right side, crisp and bold)
+  const font7x9 = {
+    P: ['1111110','1000001','1000001','1111110','1000000','1000000','1000000','1000000','1000000'],
+    I: ['1111111','0001000','0001000','0001000','0001000','0001000','0001000','0001000','1111111'],
+    X: ['1000001','1000001','0100010','0010100','0001000','0010100','0100010','1000001','1000001'],
+    E: ['1111111','1000000','1000000','1111110','1000000','1000000','1000000','1000000','1111111'],
+    L: ['1000000','1000000','1000000','1000000','1000000','1000000','1000000','1000000','1111111'],
+    R: ['1111110','1000001','1000001','1111110','1000100','1000010','1000001','1000001','1000001'],
+    U: ['1000001','1000001','1000001','1000001','1000001','1000001','1000001','1000001','0111110'],
+    N: ['1000001','1100001','1010001','1001001','1000101','1000011','1000001','1000001','1000001'],
+    ' ': ['0000000','0000000','0000000','0000000','0000000','0000000','0000000','0000000','0000000'],
   };
 
-  function drawLetter(letter, lx, ly, scale, color) {
-    const cells = letters[letter] || [];
-    cells.forEach(([cx, cy]) => {
-      fillRect(lx + cx * scale, ly + cy * scale, scale, scale, color);
+  function drawGlyph(ch, gx, gy, sc, color) {
+    const rows = font7x9[ch] || font7x9[' '];
+    rows.forEach((row, r) => {
+      for (let c = 0; c < row.length; c++) {
+        if (row[c] === '1') {
+          fillRect(gx + c * sc, gy + r * sc, sc, sc, color);
+        }
+      }
     });
   }
 
-  const word1 = 'PIXEL';
-  const word2 = 'RUN';
-  const letterW = 5 * tScale + 3; // letter width + gap
+  function drawWord(text, wx, wy, sc, color, shadowCol) {
+    const gw = 7 * sc + 2 * sc;
+    if (shadowCol) {
+      text.split('').forEach((ch, i) => drawGlyph(ch, wx + i * gw + sc, wy + sc, sc, shadowCol));
+    }
+    text.split('').forEach((ch, i) => drawGlyph(ch, wx + i * gw, wy, sc, color));
+  }
 
-  // Shadow pass
-  word1.split('').forEach((ch, i) => drawLetter(ch, titleX + i * (letterW + 2) + 3, titleY + 3, tScale, shadowColor));
-  word2.split('').forEach((ch, i) => drawLetter(ch, titleX + i * (letterW + 2) + 3, titleY + (7 * tScale + 20) + 3, tScale, shadowColor));
-  // Main pass
-  word1.split('').forEach((ch, i) => drawLetter(ch, titleX + i * (letterW + 2), titleY, tScale, titleColor));
-  word2.split('').forEach((ch, i) => drawLetter(ch, titleX + i * (letterW + 2), titleY + (7 * tScale + 20), tScale, titleColor));
+  // Draw "PIXEL RUN"
+  const titleScale = 12;
+  const titleX = 540;
+  const titleY = 110;
+  drawWord('PIXEL', titleX, titleY, titleScale, '#3ef2c8', '#081d19');
+  drawWord('RUN', titleX + (5 * 9 * titleScale + 20), titleY, titleScale, '#ffd166', '#261b04');
 
-  // === Subtitle "INFINITE PLATFORMER" in smaller pixel text ===
-  const sub = 'INFINITE PLATFORMER';
-  const sScale = 5;
-  const sLetterW = 5 * sScale + 2;
-  const subY = titleY + 7 * tScale * 2 + 50;
-  const subX = titleX;
-  // Shadow
-  sub.split('').forEach((ch, i) => drawLetter(ch, subX + i * (sLetterW) + 2, subY + 2, sScale, shadowColor));
-  // Text
-  sub.split('').forEach((ch, i) => drawLetter(ch, subX + i * (sLetterW), subY, sScale, '#6f5fa8'));
+  // Subtitle banner badge: "★ RETRO INFINITE RUNNER ★"
+  const subY = titleY + 9 * titleScale + 30;
+  fillRect(titleX - 10, subY - 6, 610, 36, '#180a30');
+  fillRect(titleX - 10, subY - 6, 610, 2, '#3ef2c8');
+  fillRect(titleX - 10, subY + 28, 610, 2, '#3ef2c8');
 
-  // === URL tag ===
-  const url = 'JIMM144.GITHUB.IO/PIXEL-RUN';
-  const uScale = 3;
-  const uLetterW = 5 * uScale + 1;
-  const urlY = H - 60;
-  const urlW = url.split('').length * uLetterW;
-  const urlX = Math.floor((W - urlW) / 2);
-  url.split('').forEach((ch, i) => drawLetter(ch, urlX + i * uLetterW, urlY, uScale, '#3d2e6e'));
+  // Small pixel text for subtitle
+  const subScale = 3;
+  drawWord('RETRO INFINITE PLATFORMER', titleX + 20, subY + 4, subScale, '#ffffff', '#0a0418');
 
-  // === Decorative teal border ===
-  fillRect(0, 0, W, 6, '#3ef2c8');
-  fillRect(0, H - 6, W, 6, '#3ef2c8');
-  fillRect(0, 0, 6, H, '#3ef2c8');
-  fillRect(W - 6, 0, 6, H, '#3ef2c8');
+  // 10. Frame borders
+  fillRect(0, 0, W, 8, '#3ef2c8');
+  fillRect(0, H - 8, W, 8, '#3ef2c8');
+  fillRect(0, 0, 8, H, '#3ef2c8');
+  fillRect(W - 8, 0, 8, H, '#3ef2c8');
 
   return createPNG(W, H, buf);
 }
@@ -349,4 +386,4 @@ fs.writeFileSync(path.join(pubDir, 'icon-512.png'), generateSquareAppIcon(512));
 fs.writeFileSync(path.join(pubDir, 'apple-touch-icon.png'), generateSquareAppIcon(180));
 fs.writeFileSync(path.join(pubDir, 'preview.png'), generatePreviewCard());
 
-console.log('Generated: icon-192.png, icon-512.png, apple-touch-icon.png, preview.png');
+console.log('Successfully generated: icon-192.png, icon-512.png, apple-touch-icon.png, preview.png');

@@ -1,6 +1,7 @@
 /**
- * Encrypted Save Manager for Pixel Run
- * Uses AES-GCM encryption with Web Crypto API to ensure tamper-proof save files.
+ * Save Manager for Pixel Run
+ * Failsafe cross-browser & cross-device backup and restore.
+ * Supports Base64-encoded JSON, legacy AES-GCM payloads, and raw JSON.
  */
 
 const SAVE_MAGIC = 'PRSAVE1:';
@@ -11,62 +12,6 @@ export interface ExportPayload {
   version: 1;
   timestamp: number;
   storage: Record<string, string>;
-}
-
-async function getEncryptionKey(): Promise<CryptoKey> {
-  const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    enc.encode(SECRET_PASSPHRASE),
-    { name: 'PBKDF2' },
-    false,
-    ['deriveKey']
-  );
-  return crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt: SALT,
-      iterations: 100000,
-      hash: 'SHA-256',
-    },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  );
-}
-
-function bufferToBase64(buf: Uint8Array): string {
-  let binary = '';
-  const len = buf.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(buf[i]);
-  }
-  // URL-safe base64: replace + with - and / with _ and remove padding =
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-function base64ToBuffer(b64: string): Uint8Array {
-  // Accept both standard and URL-safe base64; strip iOS smart chars
-  let clean = b64
-    .replace(/[\u2018\u2019]/g, "'")    // iOS smart single quotes
-    .replace(/[\u201c\u201d]/g, '"')    // iOS smart double quotes
-    .replace(/[\u2013\u2014]/g, '-')    // iOS en/em dashes -> hyphens
-    .replace(/\s/g, '');               // any whitespace
-
-  // Normalize URL-safe -> standard base64
-  clean = clean.replace(/-/g, '+').replace(/_/g, '/');
-
-  // Add padding
-  while (clean.length % 4 !== 0) clean += '=';
-
-  const binary = atob(clean);
-  const len = binary.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
 }
 
 export const GAME_STORAGE_KEYS = [
@@ -82,6 +27,67 @@ export const GAME_STORAGE_KEYS = [
   'pixeldash.unlocked_skins',
   'pixeldash.equipped_skin',
 ];
+
+async function getEncryptionKey(): Promise<CryptoKey | null> {
+  try {
+    if (typeof crypto === 'undefined' || !crypto.subtle) return null;
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      enc.encode(SECRET_PASSPHRASE),
+      { name: 'PBKDF2' },
+      false,
+      ['deriveKey']
+    );
+    return await crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: SALT,
+        iterations: 100000,
+        hash: 'SHA-256',
+      },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  } catch {
+    return null;
+  }
+}
+
+function bufferToBase64(buf: Uint8Array): string {
+  let binary = '';
+  const len = buf.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(buf[i]);
+  }
+  // URL-safe base64
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+function base64ToBuffer(b64: string): Uint8Array {
+  // Normalize iOS smart punctuation & whitespace
+  let clean = b64
+    .replace(/[\u2018\u2019]/g, "'")    // iOS smart single quotes
+    .replace(/[\u201c\u201d]/g, '"')    // iOS smart double quotes
+    .replace(/[\u2013\u2014]/g, '-')    // iOS en/em dashes -> hyphens
+    .replace(/\s/g, '');               // any whitespace
+
+  // Convert URL-safe base64 to standard base64
+  clean = clean.replace(/-/g, '+').replace(/_/g, '/');
+
+  // Re-pad
+  while (clean.length % 4 !== 0) clean += '=';
+
+  const binary = atob(clean);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
 
 export async function exportSaveData(): Promise<string> {
   const storageData: Record<string, string> = {};
@@ -117,19 +123,7 @@ export async function exportSaveData(): Promise<string> {
   const enc = new TextEncoder();
   const data = enc.encode(jsonStr);
 
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await getEncryptionKey();
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    data
-  );
-
-  const combined = new Uint8Array(iv.length + ciphertext.byteLength);
-  combined.set(iv, 0);
-  combined.set(new Uint8Array(ciphertext), iv.length);
-
-  return SAVE_MAGIC + bufferToBase64(combined);
+  return SAVE_MAGIC + bufferToBase64(data);
 }
 
 export function getSaveFilename(): string {
@@ -144,7 +138,7 @@ export async function downloadSaveFile(): Promise<boolean> {
     const filename = getSaveFilename();
     const blob = new Blob([content], { type: 'application/octet-stream' });
 
-    // 1. Mobile & Webview Share API fallback (Snapchat, Instagram, iOS Safari, Android)
+    // 1. Mobile Share API fallback (Snapchat, Instagram, iOS Safari, Android)
     if (typeof navigator !== 'undefined' && 'canShare' in navigator && 'share' in navigator) {
       try {
         const file = new File([blob], filename, { type: 'application/octet-stream' });
@@ -152,7 +146,7 @@ export async function downloadSaveFile(): Promise<boolean> {
           await navigator.share({
             files: [file],
             title: 'Pixel Run Save File',
-            text: 'My encrypted Pixel Run save backup',
+            text: 'My Pixel Run save backup',
           });
           return true;
         }
@@ -184,27 +178,33 @@ export async function downloadSaveFile(): Promise<boolean> {
 }
 
 export async function copySaveCodeToClipboard(givenContent?: string): Promise<boolean> {
-  const content = givenContent || (await exportSaveData());
-  try {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
+  const content = (givenContent || (await exportSaveData())).trim();
+
+  // 1. Try modern async Clipboard API
+  if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    try {
       await navigator.clipboard.writeText(content);
       return true;
-    }
-  } catch {}
+    } catch {}
+  }
 
-  // Fallback: document.execCommand
+  // 2. iOS Safari & in-app webview (Snapchat, IG) compliant execCommand fallback
   try {
-    const textArea = document.createElement('textarea');
-    textArea.value = content;
-    textArea.style.position = 'fixed';
-    textArea.style.left = '-9999px';
-    textArea.style.top = '-9999px';
-    textArea.setAttribute('readonly', '');
-    document.body.appendChild(textArea);
-    textArea.select();
-    const successful = document.execCommand('copy');
-    document.body.removeChild(textArea);
-    if (successful) return true;
+    const el = document.createElement('textarea');
+    el.value = content;
+    el.style.position = 'fixed';
+    el.style.top = '0';
+    el.style.left = '0';
+    el.style.width = '100px';
+    el.style.height = '100px';
+    el.style.opacity = '0.01';
+    el.style.pointerEvents = 'none';
+    document.body.appendChild(el);
+    el.focus({ preventScroll: true });
+    el.setSelectionRange(0, content.length);
+    const ok = document.execCommand('copy');
+    document.body.removeChild(el);
+    if (ok) return true;
   } catch {}
 
   return false;
@@ -212,11 +212,12 @@ export async function copySaveCodeToClipboard(givenContent?: string): Promise<bo
 
 export async function restoreSaveFromString(raw: string): Promise<{ success: boolean; error?: string }> {
   try {
-    // Aggressively clean the input
+    // Aggressively clean input
     let clean = raw
       .trim()
       .replace(/\r\n/g, '\n')
-      .replace(/\u00a0/g, ' '); // non-breaking space
+      .replace(/[\u00a0\u200b\u200c\u200d\ufeff]/g, ' ') // zero-width & non-breaking spaces
+      .trim();
 
     // Strip surrounding quotes or backticks
     if (
@@ -235,40 +236,43 @@ export async function restoreSaveFromString(raw: string): Promise<{ success: boo
       return { success: false, error: 'EMPTY SAVE CODE' };
     }
 
-    // 1. Raw JSON support (unencrypted dev exports)
+    // Helper: apply storage entries to localStorage
+    const applyStorage = (storageObj: Record<string, string>): boolean => {
+      let applied = 0;
+      for (const [key, val] of Object.entries(storageObj)) {
+        if (typeof key === 'string' && key.startsWith('pixeldash.') && typeof val === 'string') {
+          localStorage.setItem(key, val);
+          applied++;
+        }
+      }
+      return applied > 0;
+    };
+
+    // TIER 1: Direct JSON parsing
     if (clean.startsWith('{') && clean.endsWith('}')) {
       try {
         const parsed = JSON.parse(clean);
         if (parsed?.storage && typeof parsed.storage === 'object') {
-          for (const [key, val] of Object.entries(parsed.storage)) {
-            if (typeof key === 'string' && key.startsWith('pixeldash.') && typeof val === 'string') {
-              localStorage.setItem(key, val);
-            }
-          }
-          return { success: true };
+          if (applyStorage(parsed.storage)) return { success: true };
         }
       } catch {}
     }
 
-    // 2. Extract base64 payload — accept with or without PRSAVE1: prefix
-    let b64Data: string;
-    const magicIdx = clean.indexOf(SAVE_MAGIC);
-    if (magicIdx !== -1) {
-      b64Data = clean.slice(magicIdx + SAVE_MAGIC.length);
-    } else if (/^[A-Za-z0-9+/=]+$/.test(clean.replace(/\s/g, ''))) {
-      // Looks like raw base64 — try it directly
-      b64Data = clean;
-    } else {
-      return { success: false, error: 'INVALID SAVE CODE FORMAT' };
+    // TIER 2: Extract base64 payload (with or without PRSAVE prefix)
+    let b64Data = clean;
+    const prefixMatch = clean.match(/^(?:PRSAVE\d*[:\s-]*)(.*)$/is);
+    if (prefixMatch && prefixMatch[1]) {
+      b64Data = prefixMatch[1].trim();
     }
 
-    // Strip all whitespace from base64
+    // Clean whitespace from base64
     b64Data = b64Data.replace(/[\s\r\n\t]/g, '');
 
     if (!b64Data) {
       return { success: false, error: 'EMPTY SAVE CODE' };
     }
 
+    // Attempt Base64 Decoding
     let combined: Uint8Array;
     try {
       combined = base64ToBuffer(b64Data);
@@ -276,58 +280,70 @@ export async function restoreSaveFromString(raw: string): Promise<{ success: boo
       return { success: false, error: 'INVALID SAVE CODE — CHECK FOR MISSING CHARACTERS' };
     }
 
-    if (combined.length <= 12) {
-      return { success: false, error: 'SAVE CODE TOO SHORT — COPY THE FULL CODE' };
-    }
-
-    const iv = combined.slice(0, 12);
-    const ciphertext = combined.slice(12);
-    const key = await getEncryptionKey();
-
-    let decrypted: ArrayBuffer;
+    // TIER 2A: Direct Base64 JSON Payload (PRSAVE1 standard)
     try {
-      decrypted = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv },
-        key,
-        ciphertext
-      );
-    } catch {
-      return { success: false, error: 'SAVE CODE FROM DIFFERENT DEVICE OR CORRUPTED' };
-    }
-
-    const dec = new TextDecoder();
-    const jsonStr = dec.decode(decrypted);
-
-    let parsed: ExportPayload;
-    try {
-      parsed = JSON.parse(jsonStr);
-    } catch {
-      return { success: false, error: 'CORRUPTED SAVE DATA' };
-    }
-
-    if (!parsed?.storage || typeof parsed.storage !== 'object') {
-      return { success: false, error: 'INCOMPATIBLE SAVE VERSION' };
-    }
-
-    for (const [key, val] of Object.entries(parsed.storage)) {
-      if (typeof key === 'string' && key.startsWith('pixeldash.') && typeof val === 'string') {
-        localStorage.setItem(key, val);
+      const dec = new TextDecoder();
+      const text = dec.decode(combined);
+      if (text.startsWith('{') && text.endsWith('}')) {
+        const parsed = JSON.parse(text);
+        if (parsed?.storage && typeof parsed.storage === 'object') {
+          if (applyStorage(parsed.storage)) return { success: true };
+        }
       }
+    } catch {}
+
+    // TIER 2B: Legacy AES-GCM Encrypted Payload
+    if (combined.length > 12) {
+      try {
+        const iv = combined.slice(0, 12);
+        const ciphertext = combined.slice(12);
+        const key = await getEncryptionKey();
+        if (key) {
+          const decrypted = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv },
+            key,
+            ciphertext
+          );
+          const dec = new TextDecoder();
+          const jsonStr = dec.decode(decrypted);
+          const parsed = JSON.parse(jsonStr);
+          if (parsed?.storage && typeof parsed.storage === 'object') {
+            if (applyStorage(parsed.storage)) return { success: true };
+          }
+        }
+      } catch {}
     }
 
-    return { success: true };
+    // TIER 3: Fallback Regex Extraction for any embedded pixeldash keys
+    try {
+      const keyMatches = clean.matchAll(/"(pixeldash\.[a-zA-Z0-9_.-]+)"\s*:\s*("(?:[^"\\]|\\.)*"|\d+|true|false|\{[^}]*\}|\[[^\]]*\])/g);
+      const extracted: Record<string, string> = {};
+      for (const match of keyMatches) {
+        const key = match[1];
+        let rawVal = match[2];
+        if (rawVal.startsWith('"') && rawVal.endsWith('"')) {
+          try { rawVal = JSON.parse(rawVal); } catch {}
+        }
+        extracted[key] = typeof rawVal === 'string' ? rawVal : JSON.stringify(rawVal);
+      }
+      if (Object.keys(extracted).length > 0) {
+        if (applyStorage(extracted)) return { success: true };
+      }
+    } catch {}
+
+    return { success: false, error: 'INVALID SAVE CODE FORMAT' };
   } catch {
     return { success: false, error: 'FAILED TO RESTORE SAVE' };
   }
 }
 
 /**
- * Triggers a file picker completely programmatically without mounting inputs in React DOM.
+ * Triggers a file picker programmatically
  */
 export function triggerImportSaveDialog(onResult: (res: { success: boolean; error?: string }) => void): void {
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.save,.dat,.txt';
+  input.accept = '.save,.dat,.txt,text/plain';
   input.style.display = 'none';
 
   input.addEventListener('change', async () => {

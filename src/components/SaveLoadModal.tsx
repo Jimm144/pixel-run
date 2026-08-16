@@ -124,6 +124,23 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
     }
   };
 
+  const handlePasteFromClipboard = async () => {
+    setErrorMsg(null);
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+          setInputCode(text.trim());
+          sfx.play('ui');
+          setSuccessMsg('PASTED FROM CLIPBOARD!');
+          setTimeout(() => setSuccessMsg(null), 2500);
+          return;
+        }
+      }
+    } catch {}
+    setErrorMsg('TAP INSIDE THE BOX AND PASTE MANUALLY');
+  };
+
   return (
     <div
       role="dialog"
@@ -133,7 +150,7 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="relative flex w-full max-w-[380px] flex-col items-center border-4 border-[#3ef2c8] bg-[#0d0619] p-4 text-center font-pixel text-white shadow-[0_0_0_4px_#08040f,0_0_35px_rgba(62,242,200,0.25)] sm:p-5">
+      <div className="relative flex w-full max-w-[380px] flex-col items-center border-4 border-[#3ef2c8] bg-[#0d0619] p-4 text-center font-pixel text-white shadow-[0_0_0_4px_#08040f] sm:p-5">
         {/* Header */}
         <div className="mb-3 flex w-full items-center justify-between border-b-2 border-[#251842] pb-2">
           <h2 className="text-[11px] uppercase tracking-wider text-[#3ef2c8] sm:text-[13px]">
@@ -163,7 +180,7 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
         {mode === 'save' ? (
           <div className="flex w-full flex-col gap-3">
             <p className="text-[7.5px] leading-relaxed text-[#9d8fd6] sm:text-[8.5px]">
-              Download your encrypted backup or copy the save code to restore later.
+              Download your backup file or copy the save code string to restore in Safari.
             </p>
 
             <div className="flex flex-col gap-2">
@@ -179,20 +196,21 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
                 onClick={handleCopy}
                 className="w-full py-2.5 text-[8.5px] sm:text-[9.5px]"
               >
-                {copied ? '✓ COPIED!' : 'COPY SAVE CODE'}
+                {copied ? '✓ COPIED TO CLIPBOARD!' : 'COPY SAVE CODE'}
               </PixelButton>
             </div>
 
             {/* Selectable Save Code Box */}
             <div className="mt-1 flex flex-col text-left">
               <span className="mb-1 text-[6.5px] text-[#6f5fa8] sm:text-[7.5px]">
-                BACKUP CODE STRING:
+                BACKUP CODE STRING (TAP TO SELECT ALL):
               </span>
               <textarea
                 ref={textareaRef}
-                readOnly
                 value={saveCode}
+                onFocus={(e) => e.target.select()}
                 onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+                onChange={() => {}}
                 className="h-16 w-full resize-none border-2 border-[#251842] bg-[#120722] p-2 font-mono text-[7px] text-[#ffd166] selection:bg-[#3ef2c8] selection:text-[#08040f] focus:border-[#3ef2c8] focus:outline-none"
               />
             </div>
@@ -200,7 +218,7 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
         ) : (
           <div className="flex w-full flex-col gap-3">
             <p className="text-[7.5px] leading-relaxed text-[#9d8fd6] sm:text-[8.5px]">
-              Select your .save file or paste your save code string below.
+              Select your .save file or paste your backup code string below.
             </p>
 
             {/* Hidden real file input — rendered in tree for iOS/Android reliability */}
@@ -223,9 +241,18 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
             </label>
 
             <div className="flex flex-col text-left">
-              <span className="mb-1 text-[6.5px] text-[#6f5fa8] sm:text-[7.5px]">
-                OR PASTE SAVE CODE:
-              </span>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-[6.5px] text-[#6f5fa8] sm:text-[7.5px]">
+                  OR PASTE SAVE CODE:
+                </span>
+                <button
+                  type="button"
+                  onClick={handlePasteFromClipboard}
+                  className="cursor-pointer border border-[#3ef2c8]/40 bg-[#092922] px-1.5 py-0.5 text-[6.5px] text-[#3ef2c8] hover:bg-[#0d3b2d]"
+                >
+                  PASTE FROM CLIPBOARD
+                </button>
+              </div>
               <textarea
                 value={inputCode}
                 onChange={(e) => setInputCode(e.target.value)}

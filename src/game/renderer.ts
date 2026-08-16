@@ -1913,7 +1913,7 @@ export class Renderer {
     this.drawPowerUpHud();
 
     // 3. DISTANCE & GEMS (Top Right)
-    const rightMargin = mobile ? 56 : 8;
+    const rightMargin = mobile ? 34 : 8;
     if (this.hudM !== m) {
       this.hudM = m;
       this.hudMText = m + 'M';
