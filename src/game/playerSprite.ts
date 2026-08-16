@@ -667,24 +667,14 @@ export function drawPlayerSprite(
       f(1, 3, 9, 3, '#ffffff');         // main beard
       f(2, 5, 7, 2, '#f1f5f9');         // lower beard
       f(4, 7, 3, 1, '#e2e8f0');         // beard tip
-      f(4, 3, 3, 1, '#f8fafc');         // white moustache
     } else if (skinId === 'beach_bob') {
-      // Cool Red Backward Sports Cap
-      f(1, -2, 9, 3, tint('#ff4d6d'));  // cap crown
-      f(8, -1, 3, 1, tint('#b32a4d'));  // snapback / visor flap
-      // Sun-Kissed Tan Face
-      f(2, 0, 7, 6, tint('#f4a261'));
-      f(2, 0, 8, 2, tint('#e76f51'));
-      // Sleek Black Pixel Sunglasses with Cyan Reflective Lens & Glints
-      f(2, 1, 7, 3, '#0d0619');         // frame
-      f(3, 2, 2, 1, '#00b4d8');         // cyan lens
-      f(6, 2, 2, 1, '#00b4d8');         // cyan lens
-      f(4, 1, 1, 1, '#ffffff');         // lens glint
-      f(7, 1, 1, 1, '#ffffff');         // lens glint
-      // Tropical Hawaiian Flower Lei
-      f(1, 5, 3, 2, '#ff70a6');
-      f(4, 5, 2, 1, '#ffd166');
-      f(7, 5, 2, 1, '#3ef2c8');
+      // Classic Bob with stylish dark pixel sunglasses & ocean beachwear
+      f(2, 0, 7, 6, SUIT);
+      f(5, 2, 4, 4, SKIN);
+      f(2, 0, 8, 2, SUIT_D);
+      // Dark sunglasses with bright teal lens glint
+      f(6, 3, 3, 2, '#120820');
+      f(8, 3, 1, 1, '#7ef7ff');
     } else if (skinId === 'mob') {
       // Rotting Undead Zombie
       f(2, 0, 7, 6, tint('#5ea846'));   // decaying sickly green skin
@@ -773,7 +763,7 @@ export function drawPlayerSprite(
     }
 
     // --- SCARF / COLLAR ---
-    if (skinId !== 'panda' && skinId !== 'pig' && skinId !== 'mr_soup' && skinId !== 'angel' && skinId !== 'santa' && skinId !== 'easter_bunny' && skinId !== 'beach_bob' && skinId !== 'pumpkin_bob' && skinId !== 'mob' && skinId !== 'witch') {
+    if (skinId !== 'panda' && skinId !== 'pig' && skinId !== 'mr_soup' && skinId !== 'angel' && skinId !== 'santa' && skinId !== 'easter_bunny' && skinId !== 'pumpkin_bob' && skinId !== 'mob' && skinId !== 'witch') {
       f(1, 5, 3, 2, SCARF);
     }
   }

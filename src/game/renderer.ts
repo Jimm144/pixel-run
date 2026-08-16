@@ -1843,7 +1843,8 @@ export class Renderer {
   private drawPowerUpHud() {
     const c = this.ctx;
     let x = 6;
-    const y = this.mobileView ? (this.g.best > 0 ? 42 : 32) : 45;
+    const hasBest = this.g.best > 0;
+    const y = hasBest ? 44 : 34;
     const W = Math.floor(VW / this.hudScale);
     const status = (remaining: number, kind: PowerUpKind) => {
       // The propeller flashes with 0s left — draw the icon alone, no "0".
@@ -1868,16 +1869,17 @@ export class Renderer {
     const m = Math.floor(this.g.distance / 10);
     const hs = this.hudScale;
     const mobile = this.mobileView;
+    const isNarrow = VW < 300;
     const lblS = 1;
     const digS = 2;
     const bestS = 1;
-    const bestY = 30;
+    const bestY = 32;
     const adv = 6 * digS;
     c.save();
     if (hs !== 1) c.scale(hs, hs);
     const W = Math.floor(VW / hs);
 
-    // score — only rebuild the padded strings when the values change
+    // 1. SCORE (Top Left)
     drawText(c, 'SCORE', 6, 6, lblS, this.g.zone.accent2, '#150a24');
     if (this.hudScore !== this.g.score) {
       this.hudScore = this.g.score;
@@ -1893,7 +1895,7 @@ export class Renderer {
     }
     drawText(c, scoreStr.slice(leadingZeroes), 6 + leadingZeroes * adv, 15, digS, '#ffffff', '#150a24');
 
-    // best / high score
+    // 2. BEST / HIGH SCORE (Below Score)
     if (this.g.best > 0) {
       const isNewHigh = this.g.score > this.g.best;
       const displayBest = isNewHigh ? this.g.score : this.g.best;
@@ -1910,25 +1912,25 @@ export class Renderer {
     }
     this.drawPowerUpHud();
 
-    // distance + gems (right) — clean non-overlapping positioning
-    const rightMargin = mobile ? 42 : 8;
+    // 3. DISTANCE & GEMS (Top Right)
+    const rightMargin = mobile ? 56 : 8;
     if (this.hudM !== m) {
       this.hudM = m;
       this.hudMText = m + 'M';
     }
     const dtxt = this.hudMText;
-    const distScale = mobile ? 1 : 2;
+    const distScale = 2; // Nice and large for clarity
     drawText(c, dtxt, W - rightMargin - textWidth(dtxt, distScale), 6, distScale, this.g.zone.accent, '#150a24');
 
-    // Gems counter - shows gems collected in this run
+    // Gems counter (y: 24)
     if (this.hudGems !== this.g.runGems) {
       this.hudGems = this.g.runGems;
       this.hudGemsText = 'X' + pad(this.g.runGems, 2);
     }
     const gtxt = this.hudGemsText;
-    const gw = textWidth(gtxt, 1) + 10;
+    const gw = textWidth(gtxt, 1) + 12;
     const gx0 = W - rightMargin - gw;
-    const gy = mobile ? 18 : 22;
+    const gy = 24;
 
     // Exact matching diamond jewel sprite
     c.fillStyle = '#08121e';
@@ -1946,8 +1948,14 @@ export class Renderer {
 
     c.restore();
 
-    // Combo bar rendered centered between left score and right distance
-    this.drawCombo(Math.round(W / 2), 8);
+    // 4. COMBO BAR
+    // On mobile / narrow screens, place below the top row (y = 44) centered in the open sky.
+    // On wide desktop, place top center (y = 8).
+    if (mobile || isNarrow) {
+      this.drawCombo(Math.round(W / 2), 44);
+    } else {
+      this.drawCombo(Math.round(W / 2), 8);
+    }
   }
 
   private drawCombo(labelCenterX: number, y: number) {

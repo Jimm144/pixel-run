@@ -387,8 +387,8 @@ export const SKINS: Record<SkinId, SkinDef> = {
     ghostTrail: '#ffffff',
     unlock: {
       type: 'holiday',
-      threshold: 2500,
-      desc: 'RUN 2,500M IN 1 RUN (DEC 1 - JAN 6)',
+      threshold: 600,
+      desc: 'RUN 600M IN 1 RUN (DEC 1 - JAN 6)',
       holidayWindows: [['1201', '0106']],
     },
   },
@@ -404,8 +404,8 @@ export const SKINS: Record<SkinId, SkinDef> = {
     ghostTrail: '#c8e6c9',
     unlock: {
       type: 'holiday',
-      threshold: 2000,
-      desc: 'RUN 2,000M IN 1 RUN (EASTER WEEK)',
+      threshold: 500,
+      desc: 'RUN 500M IN 1 RUN (EASTER WEEK)',
       holidayWindows: [], // computed dynamically via isEasterSeason()
     },
   },
@@ -421,8 +421,8 @@ export const SKINS: Record<SkinId, SkinDef> = {
     ghostTrail: '#00b4d8',
     unlock: {
       type: 'holiday',
-      threshold: 2500,
-      desc: 'RUN 2,500M IN 1 RUN (JUN 1 - AUG 31)',
+      threshold: 600,
+      desc: 'RUN 600M IN 1 RUN (JUN 1 - AUG 31)',
       holidayWindows: [['0601', '0831']],
     },
   },
@@ -438,8 +438,8 @@ export const SKINS: Record<SkinId, SkinDef> = {
     ghostTrail: '#ff7518',
     unlock: {
       type: 'holiday',
-      threshold: 10,
-      desc: '10 KILLS IN 1 RUN (OCT 1 - NOV 5)',
+      threshold: 25,
+      desc: '25 KILLS IN 1 RUN (OCT 1 - NOV 5)',
       holidayWindows: [['1001', '1105']],
     },
   },
@@ -681,23 +681,23 @@ export function evaluateSkinUnlocks(
 
   // Check Seasonal/Holiday In-Game Challenges during Active Window
   if (currentRun) {
-    // Santa: Run 2500m in 1 run during Christmas season
-    if (isHolidayActive(SKINS.santa.unlock) && currentRun.meters >= 2500 && !unlocked.has('santa')) {
+    // Santa: Run 600m in 1 run during Christmas season
+    if (isHolidayActive(SKINS.santa.unlock) && currentRun.meters >= 600 && !unlocked.has('santa')) {
       unlocked.add('santa');
       newUnlocks.push('santa');
     }
-    // Easter Bunny: Run 2000m in 1 run during Easter week
-    if (isEasterSeason() && currentRun.meters >= 2000 && !unlocked.has('easter_bunny')) {
+    // Easter Bunny: Run 500m in 1 run during Easter week
+    if (isEasterSeason() && currentRun.meters >= 500 && !unlocked.has('easter_bunny')) {
       unlocked.add('easter_bunny');
       newUnlocks.push('easter_bunny');
     }
-    // Beach Bob: Run 2500m in 1 run during Summer season
-    if (isHolidayActive(SKINS.beach_bob.unlock) && currentRun.meters >= 2500 && !unlocked.has('beach_bob')) {
+    // Beach Bob: Run 600m in 1 run during Summer season
+    if (isHolidayActive(SKINS.beach_bob.unlock) && currentRun.meters >= 600 && !unlocked.has('beach_bob')) {
       unlocked.add('beach_bob');
       newUnlocks.push('beach_bob');
     }
-    // Pumpkin Bob: 10 Kills in 1 run during Halloween season
-    if (isHolidayActive(SKINS.pumpkin_bob.unlock) && (currentRun.kills ?? 0) >= 10 && !unlocked.has('pumpkin_bob')) {
+    // Pumpkin Bob: 25 Kills in 1 run during Halloween season
+    if (isHolidayActive(SKINS.pumpkin_bob.unlock) && (currentRun.kills ?? 0) >= 25 && !unlocked.has('pumpkin_bob')) {
       unlocked.add('pumpkin_bob');
       newUnlocks.push('pumpkin_bob');
     }
