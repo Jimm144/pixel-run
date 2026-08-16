@@ -3,6 +3,7 @@ import type { Stats } from '../game/engine';
 import { DailyQuestPanel } from './QuestPanels';
 import { PauseIcon, PixelButton, Panel, Stat } from './ui';
 import type { QuestDefinition, QuestRecord, QuestRunStats } from '../game/quests';
+import { sfx } from '../game/audio';
 
 const pad = (n: number, l: number) => Math.max(0, Math.floor(n)).toString().padStart(l, '0');
 
@@ -435,7 +436,10 @@ export function PauseScreen({
   const handleMenu = onMenu ?? onQuit ?? (() => {});
 
   return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-[#08040f]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] [@media(max-height:640px)]:items-end [@media(max-height:640px)]:pb-8">
+    <div
+      className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-[#08040f]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] [@media(max-height:640px)]:items-end [@media(max-height:640px)]:pb-8"
+      onPointerDown={() => sfx.unlock()}
+    >
       <Panel className="w-full max-w-[300px] p-4 tablet:max-w-[420px] tablet:p-6">
         <h2 className="mb-3 text-center font-pixel text-[16px] text-[#3ef2c8] tablet:mb-4 tablet:text-[18px]">PAUSED</h2>
         <div className="mb-3 grid grid-cols-2 gap-2 tablet:mb-4 tablet:gap-3">
@@ -498,7 +502,10 @@ export function GameOverScreen({
   touch: boolean;
 }) {
   return (
-    <div className="absolute inset-0 z-10 flex items-start justify-center overflow-y-auto bg-[#08040f]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]">
+    <div
+      className="absolute inset-0 z-10 flex items-start justify-center overflow-y-auto bg-[#08040f]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
+      onPointerDown={() => sfx.unlock()}
+    >
       <div className="my-auto flex w-full max-w-[380px] flex-col items-center gap-3 tablet:max-w-[460px]">
         <h2 className="animate-shake-in font-pixel text-[22px] text-[#ff4d6d] drop-shadow-[0_4px_0_#08040f] tablet:text-[28px]">
           WASTED

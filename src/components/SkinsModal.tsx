@@ -11,8 +11,7 @@ import {
   saveUnlockedSkins,
   saveLifetimeStats,
   loadLifetimeStats,
-  isHolidayActive,
-  isEasterSeason,
+  isSkinAvailable,
 } from '../game/skins';
 import { drawPlayerSprite } from '../game/playerSprite';
 import { inputManager, type GamepadAction } from '../game/input';
@@ -169,12 +168,19 @@ export function SkinsModal({
 
   const handleEquip = useCallback(
     (id: SkinId) => {
-      if (!unlockedSkins.includes(id)) return;
+      const skin = SKINS[id];
+      const isHolActive = skin?.unlock.type === 'holiday' && isSkinAvailable(skin);
+      if (!unlockedSkins.includes(id) && !isHolActive) return;
+      if (isHolActive && !unlockedSkins.includes(id)) {
+        const nextUnlocked = [...unlockedSkins, id];
+        saveUnlockedSkins(nextUnlocked);
+        onUpdateUnlocked(nextUnlocked, stats);
+      }
       onEquip(id);
       saveEquippedSkin(id);
       sfx.play('ui');
     },
-    [unlockedSkins, onEquip],
+    [unlockedSkins, onUpdateUnlocked, stats, onEquip],
   );
 
   // Full 2D Keyboard & Gamepad Navigation
@@ -463,11 +469,11 @@ export function SkinsModal({
       );
     }
     if (skin.unlock.type === 'holiday') {
-      const active = skin.id === 'easter_bunny' ? isEasterSeason() : isHolidayActive(skin.unlock);
+      const active = isSkinAvailable(skin);
       return (
         <div className={`flex h-[20px] sm:h-[22px] w-full items-center justify-center border px-1 text-center font-pixel text-[6px] ${
           active
-            ? 'border-[#ff80ab]/60 bg-[#2b0a1a] text-[#ff80ab]'
+            ? 'border-[#ff70a6]/60 bg-[#33081e] text-[#ff70a6]'
             : 'border-[#453c60] bg-[#1c162e] text-[#6f5fa8]'
         }`}>
           {active ? '🎉 AVAILABLE NOW!' : skin.unlock.desc}
@@ -488,8 +494,8 @@ export function SkinsModal({
       <div
         className={
           touch
-            ? 'flex h-full min-h-0 w-full flex-col bg-[#0d0619] p-0 text-white tablet:h-auto tablet:max-h-[92vh] tablet:max-w-[780px] tablet:border-4 tablet:border-[#3ef2c8] tablet:p-4 tablet:shadow-[0_0_0_4px_#08040f,0_0_35px_rgba(62,242,200,0.25)]'
-            : 'flex max-h-[94vh] w-full max-w-[840px] flex-col border-4 border-[#3ef2c8] bg-[#0d0619] p-4 text-white shadow-[0_0_0_4px_#08040f,0_0_35px_rgba(62,242,200,0.25)] tablet:max-w-[min(840px,calc(100vw-32px))]'
+            ? 'flex h-full min-h-0 w-full flex-col bg-[#0d0619] p-0 text-white tablet:h-auto tablet:max-h-[92vh] tablet:max-w-[780px] tablet:border-4 tablet:border-[#3ef2c8] tablet:p-4 tablet:shadow-[0_0_0_4px_#08040f]'
+            : 'flex max-h-[94vh] w-full max-w-[840px] flex-col border-4 border-[#3ef2c8] bg-[#0d0619] p-4 text-white shadow-[0_0_0_4px_#08040f] tablet:max-w-[min(840px,calc(100vw-32px))]'
         }
       >
         {/* Header */}
@@ -591,7 +597,7 @@ export function SkinsModal({
                 <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#3ef2c8] bg-[#3ef2c8]/20 px-2 font-pixel text-[8.5px] md:text-[9px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f]">
                   EQUIPPED
                 </div>
-              ) : isUnlocked ? (
+              ) : (isUnlocked || (selectedSkin.unlock.type === 'holiday' && isSkinAvailable(selectedSkin))) ? (
                 <button
                   type="button"
                   onClick={() => handleEquip(selectedSkinId)}
@@ -605,7 +611,7 @@ export function SkinsModal({
                   onClick={() => inputManager.triggerKonami()}
                   className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#ffd166] bg-[#ffd166]/20 px-2 font-pixel text-[7.5px] md:text-[8px] text-[#ffd166] shadow-[2px_2px_0_#08040f] hover:bg-[#ffd166]/40 active:translate-x-[1px] active:translate-y-[1px]"
                 >
-                  {touch ? 'TAP TO UNLOCK KONAMI' : 'ENTER KONAMI CODE'}
+                  ???????
                 </button>
               ) : selectedSkin.unlock.type === 'gems' ? (
                 <button
@@ -637,7 +643,8 @@ export function SkinsModal({
             }
           >
             {filteredSkins.map((skin, idx) => {
-              const unlocked = unlockedSkins.includes(skin.id);
+              const isHolActive = skin.unlock.type === 'holiday' && isSkinAvailable(skin);
+              const unlocked = unlockedSkins.includes(skin.id) || isHolActive;
               const equipped = equippedSkin === skin.id;
               const isCardFocused = focusSection === 'grid' && focusedIndex === idx;
               const selected = selectedSkinId === skin.id;
@@ -703,7 +710,7 @@ export function SkinsModal({
           </div>
         </div>
 
-        {/* Footer with Controls (Konami code listed like standard controls) */}
+        {/* Footer with Controls */}
         <div className="mt-2 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 border-t-2 border-[#251842] pt-1.5 text-center font-pixel text-[6px] text-[#6f5fa8] sm:mt-2.5 sm:pt-2 sm:text-[7.5px] tablet:text-[8px] md:text-[8.5px]">
           {touch ? (
             <>
@@ -711,7 +718,8 @@ export function SkinsModal({
               <button
                 type="button"
                 onClick={() => inputManager.triggerKonami()}
-                className="inline-flex cursor-pointer items-center gap-[1px] text-[#9d8fd6] transition-colors hover:text-[#ffd166] active:translate-y-[1px]"
+                className="inline-flex cursor-pointer items-center gap-[1px] text-[#453c60] transition-colors hover:text-[#453c60] active:translate-y-[1px]"
+                title="???"
               >
                 <PixelArrow dir="up" />
                 <PixelArrow dir="up" />
@@ -721,7 +729,7 @@ export function SkinsModal({
                 <PixelArrow dir="right" />
                 <PixelArrow dir="left" />
                 <PixelArrow dir="right" />
-                <span className="ml-[1px]">BA: KONAMI CODE</span>
+                <span className="ml-[1px]">???????</span>
               </button>
             </>
           ) : (
@@ -730,7 +738,8 @@ export function SkinsModal({
               <button
                 type="button"
                 onClick={() => inputManager.triggerKonami()}
-                className="inline-flex cursor-pointer items-center gap-[1px] text-[#9d8fd6] transition-colors hover:text-[#ffd166] active:translate-y-[1px]"
+                className="inline-flex cursor-pointer items-center gap-[1px] text-[#453c60] transition-colors hover:text-[#453c60] active:translate-y-[1px]"
+                title="???"
               >
                 <PixelArrow dir="up" />
                 <PixelArrow dir="up" />
@@ -740,7 +749,7 @@ export function SkinsModal({
                 <PixelArrow dir="right" />
                 <PixelArrow dir="left" />
                 <PixelArrow dir="right" />
-                <span className="ml-[1px]">BA: KONAMI CODE</span>
+                <span className="ml-[1px]">???????</span>
               </button>
             </>
           )}

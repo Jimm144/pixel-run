@@ -445,7 +445,9 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
     if (!g || g.phase !== 'playing') return;
     jumpId.current = e.pointerId;
     startY.current = e.clientY;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    // Only capture pointer during active gameplay — capturing during transitions
+    // causes the pointer to be stuck on the wrapper and miss overlay buttons.
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     g.pressJump();
   };
 

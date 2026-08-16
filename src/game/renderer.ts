@@ -1843,9 +1843,7 @@ export class Renderer {
   private drawPowerUpHud() {
     const c = this.ctx;
     let x = 6;
-    // HUD space is scaled by hudScale; W is the virtual width in that space.
-    // Mobile gives the row a little more air below the compacted BEST line.
-    const y = this.mobileView ? 50 : 45;
+    const y = this.mobileView ? (this.g.best > 0 ? 42 : 32) : 45;
     const W = Math.floor(VW / this.hudScale);
     const status = (remaining: number, kind: PowerUpKind) => {
       // The propeller flashes with 0s left — draw the icon alone, no "0".
@@ -1868,14 +1866,12 @@ export class Renderer {
     const c = this.ctx;
     if (this.g.phase === 'ready') return;
     const m = Math.floor(this.g.distance / 10);
-    // The HUD draws in its own scaled space so the text zooms up on phones
-    // while the world keeps its pixel grid; W is the virtual width there.
     const hs = this.hudScale;
     const mobile = this.mobileView;
     const lblS = 1;
     const digS = 2;
     const bestS = 1;
-    const bestY = 32;
+    const bestY = 30;
     const adv = 6 * digS;
     c.save();
     if (hs !== 1) c.scale(hs, hs);
@@ -1914,16 +1910,17 @@ export class Renderer {
     }
     this.drawPowerUpHud();
 
-    // distance + gems (right) — rendered on desktop, tablet, and mobile
-    const rightMargin = mobile ? 38 : 6;
+    // distance + gems (right) — clean non-overlapping positioning
+    const rightMargin = mobile ? 42 : 8;
     if (this.hudM !== m) {
       this.hudM = m;
       this.hudMText = m + 'M';
     }
     const dtxt = this.hudMText;
-    drawText(c, dtxt, W - rightMargin - textWidth(dtxt, 2), 6, 2, this.g.zone.accent, '#150a24');
+    const distScale = mobile ? 1 : 2;
+    drawText(c, dtxt, W - rightMargin - textWidth(dtxt, distScale), 6, distScale, this.g.zone.accent, '#150a24');
 
-    // Gems counter (y: 22) - shows gems collected in this run
+    // Gems counter - shows gems collected in this run
     if (this.hudGems !== this.g.runGems) {
       this.hudGems = this.g.runGems;
       this.hudGemsText = 'X' + pad(this.g.runGems, 2);
@@ -1931,7 +1928,7 @@ export class Renderer {
     const gtxt = this.hudGemsText;
     const gw = textWidth(gtxt, 1) + 10;
     const gx0 = W - rightMargin - gw;
-    const gy = 22;
+    const gy = mobile ? 18 : 22;
 
     // Exact matching diamond jewel sprite
     c.fillStyle = '#08121e';
@@ -1945,17 +1942,12 @@ export class Renderer {
     c.fillStyle = '#ffffff';
     c.fillRect(gx0 + 1, gy + 2, 1, 1);
 
-    drawText(c, gtxt, gx0 + 9, 22, 1, '#3ef2c8', '#150a24');
+    drawText(c, gtxt, gx0 + 9, gy, 1, '#3ef2c8', '#150a24');
 
-    // combo — fixed layout, colour-only pulse (no size jitter). Mobile sits
-    // it right-aligned, just below the touch pause button.
-    if (mobile) {
-      c.restore();
-      this.drawCombo(VW - 45, 46);
-    } else {
-      this.drawCombo(W / 2, 8);
-      c.restore();
-    }
+    c.restore();
+
+    // Combo bar rendered centered between left score and right distance
+    this.drawCombo(Math.round(W / 2), 8);
   }
 
   private drawCombo(labelCenterX: number, y: number) {

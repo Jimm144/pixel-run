@@ -1,6 +1,6 @@
-export type SkinTier = 'common' | 'rare' | 'epic' | 'legendary' | 'godly';
+export type SkinTier = 'common' | 'rare' | 'epic' | 'legendary' | 'godly' | 'exotic';
 
-export const TIERS: (SkinTier | 'all')[] = ['all', 'common', 'rare', 'epic', 'legendary', 'godly'];
+export const TIERS: (SkinTier | 'all')[] = ['all', 'common', 'rare', 'epic', 'legendary', 'godly', 'exotic'];
 
 export const TIER_COLORS: Record<SkinTier | 'all', { text: string; bg: string; border: string }> = {
   all: { text: '#3ef2c8', bg: '#092922', border: '#1da88a' },
@@ -9,6 +9,7 @@ export const TIER_COLORS: Record<SkinTier | 'all', { text: string; bg: string; b
   epic: { text: '#c98cff', bg: '#2a1145', border: '#8b4cd6' },
   legendary: { text: '#ffd166', bg: '#3d2b05', border: '#d49b1a' },
   godly: { text: '#ff4d6d', bg: '#3b0613', border: '#d9254c' },
+  exotic: { text: '#ff70a6', bg: '#33081e', border: '#ff2a85' },
 };
 
 export type SkinId =
@@ -34,7 +35,9 @@ export type SkinId =
   | 'mr_soup'
   | 'demon'
   | 'santa'
-  | 'easter_bunny';
+  | 'easter_bunny'
+  | 'beach_bob'
+  | 'pumpkin_bob';
 
 export interface SkinUnlockInfo {
   type: 'free' | 'gems' | 'coins' | 'distance' | 'score' | 'quests' | 'moon' | 'konami' | 'save' | 'holiday';
@@ -84,6 +87,13 @@ export function isEasterSeason(daysBefore = 7, daysAfter = 7): boolean {
   easter.setHours(0, 0, 0, 0);
   const diff = Math.round((today.getTime() - easter.getTime()) / 86400000);
   return diff >= -daysBefore && diff <= daysAfter;
+}
+
+/** Check if a skin is currently available in-season */
+export function isSkinAvailable(skin: SkinDef): boolean {
+  if (skin.unlock.type !== 'holiday') return true;
+  if (skin.id === 'easter_bunny') return isEasterSeason();
+  return isHolidayActive(skin.unlock);
 }
 
 export interface SkinDef {
@@ -355,7 +365,7 @@ export const SKINS: Record<SkinId, SkinDef> = {
   santa: {
     id: 'santa',
     name: 'SANTA',
-    tier: 'legendary',
+    tier: 'exotic',
     suit: '#c0392b',
     suitDark: '#7b241c',
     skin: '#ffcf9e',
@@ -371,7 +381,7 @@ export const SKINS: Record<SkinId, SkinDef> = {
   easter_bunny: {
     id: 'easter_bunny',
     name: 'E. BUNNY',
-    tier: 'legendary',
+    tier: 'exotic',
     suit: '#d4f1c7',
     suitDark: '#91c882',
     skin: '#f8d7da',
@@ -382,6 +392,38 @@ export const SKINS: Record<SkinId, SkinDef> = {
       type: 'holiday',
       desc: 'LIMITED TIME — EASTER WEEK',
       holidayWindows: [], // computed dynamically via isEasterSeason()
+    },
+  },
+  beach_bob: {
+    id: 'beach_bob',
+    name: 'BEACH BOB',
+    tier: 'exotic',
+    suit: '#00b4d8',
+    suitDark: '#0077b6',
+    skin: '#ffcf9e',
+    boot: '#ffd166',
+    scarf: '#ff70a6',
+    ghostTrail: '#00b4d8',
+    unlock: {
+      type: 'holiday',
+      desc: 'LIMITED TIME — SUMMER (JUN-AUG)',
+      holidayWindows: [['0601', '0831']],
+    },
+  },
+  pumpkin_bob: {
+    id: 'pumpkin_bob',
+    name: 'PUMPKIN BOB',
+    tier: 'exotic',
+    suit: '#ff7518',
+    suitDark: '#c85a17',
+    skin: '#ffb703',
+    boot: '#2e104d',
+    scarf: '#7ae04a',
+    ghostTrail: '#ff7518',
+    unlock: {
+      type: 'holiday',
+      desc: 'LIMITED TIME — HALLOWEEN (OCT-NOV)',
+      holidayWindows: [['1001', '1105']],
     },
   },
 };
@@ -490,6 +532,13 @@ export function loadUnlockedSkins(): SkinId[] {
     }
     if (stats.bloodMoonDone && !arr.includes('demon')) {
       arr.push('demon');
+    }
+
+    // Auto-unlock active limited/holiday skins
+    for (const skin of Object.values(SKINS)) {
+      if (skin.unlock.type === 'holiday' && isSkinAvailable(skin) && !arr.includes(skin.id)) {
+        arr.push(skin.id);
+      }
     }
 
     try {

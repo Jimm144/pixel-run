@@ -685,6 +685,40 @@ export function drawPlayerSprite(
       f(-2, 3 + eggSwing, 3, 5, '#ffd166');
       f(-2, 4 + eggSwing, 3, 1, '#ff80ab');
       f(-2, 6 + eggSwing, 3, 1, '#3ef2c8');
+    } else if (skinId === 'beach_bob') {
+      // Straw sun-visor / summer hat
+      f(0, -3, 11, 2, tint('#ffd166')); // hat brim
+      f(2, -5, 7, 2, tint('#e0a82e'));  // hat crown
+      // Sun-kissed face
+      f(2, 0, 7, 6, tint('#ffcf9e'));
+      f(2, 0, 8, 2, tint('#f4a261'));
+      // Cool black sunglasses / shades with white lens shine
+      f(4, 2, 5, 2, '#100820');
+      f(5, 2, 1, 1, '#ffffff');
+      f(8, 2, 1, 1, '#ffffff');
+      // Tropical Hawaiian lei / flower collar
+      f(1, 5, 3, 2, tint('#ff70a6'));
+      f(4, 5, 2, 1, '#ffd166');
+    } else if (skinId === 'pumpkin_bob') {
+      // Green vine stem on top
+      f(5, -6, 2, 4, tint('#7ae04a'));
+      f(6, -7, 2, 2, tint('#58b430'));
+      // Round Jack-o'-lantern Pumpkin Head
+      f(1, -2, 9, 8, tint('#ff7518'));
+      f(2, -3, 7, 10, tint('#ff7518'));
+      f(2, -2, 7, 2, tint('#c85a17')); // top shadow
+      f(2, 4, 7, 2, tint('#c85a17'));  // bottom shadow
+      // Carved glowing triangular eyes (yellow inner glow)
+      f(3, 0, 2, 2, '#ffe066');
+      f(7, 0, 2, 2, '#ffe066');
+      f(4, 0, 1, 1, '#ffffff');
+      f(8, 0, 1, 1, '#ffffff');
+      // Carved spooky jagged Jack-o'-lantern smile
+      f(3, 3, 1, 1, '#ffe066');
+      f(4, 4, 1, 1, '#ffe066');
+      f(5, 3, 1, 1, '#ffe066');
+      f(6, 4, 1, 1, '#ffe066');
+      f(7, 3, 1, 1, '#ffe066');
     } else {
       // Classic Bob / Bobette / Cob / Mob
       f(2, 0, 7, 6, SUIT);
@@ -694,7 +728,7 @@ export function drawPlayerSprite(
     }
 
     // --- SCARF / COLLAR ---
-    if (skinId !== 'panda' && skinId !== 'pig' && skinId !== 'mr_soup' && skinId !== 'angel' && skinId !== 'santa' && skinId !== 'easter_bunny') {
+    if (skinId !== 'panda' && skinId !== 'pig' && skinId !== 'mr_soup' && skinId !== 'angel' && skinId !== 'santa' && skinId !== 'easter_bunny' && skinId !== 'beach_bob' && skinId !== 'pumpkin_bob') {
       f(1, 5, 3, 2, SCARF);
     }
   }

@@ -153,11 +153,9 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       cv.style.top = `${Math.round((r.height - displayHeight) / 2)}px`;
       cv.style.transform = 'none';
       cv.style.translate = 'none';
-      // Keep the HUD at a steady on-screen size: it is drawn inside the
-      // buffer, so it zooms with the canvas — compensate by scaling it up
-      // when the canvas is small (phones), never down (desktop stays 1).
-      gameRef.current?.setHudScale(Math.max(1, Math.min(1.9, 2.9 / s)));
-      // Mobile layout: compact score, no meters/coins, world lifted higher
+      // Keep the HUD at a crisp 1:1 pixel scale on all devices
+      gameRef.current?.setHudScale(1);
+      // Mobile layout: compact score, world lifted higher
       // and parallax planes spread out — all desktop views stay untouched.
       const coarse = window.matchMedia('(pointer: coarse)').matches;
       gameRef.current?.setMobileView(coarse);

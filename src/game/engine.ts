@@ -675,14 +675,24 @@ export class Game implements GenHost, RenderHost {
       this.sx = 0.8;
       this.sy = 1.25;
     }
+    const hasPropeller = (this.propellerHat > 0 || this.propellerFlashing) && !this.onGround && !this.diving;
     let g = GRAV_FALL;
     if (this.diving) g = GRAV_DIVE;
-    else if ((this.propellerHat > 0 || this.propellerFlashing) && !this.onGround && this.jumpHeld) g = this.vy > 0 ? 0.08 : 0.16;
+    else if (hasPropeller) {
+      // Slower drop even when not pressing, and even slower when pressing jump
+      if (this.jumpHeld) {
+        g = this.vy > 0 ? 0.05 : 0.12;
+      } else {
+        g = this.vy > 0 ? 0.16 : 0.26;
+      }
+    }
     else if (this.eventTimer > 0 && this.eventKind === 'desert' && this.padFlight <= 0) g = this.vy < 0 ? 0.3 : 0.48;
     else if (this.vy < 0) g = this.padFlight > 0 ? GRAV : this.jumpHeld ? GRAV_HOLD : GRAV;
     this.vy = Math.min(MAX_FALL + (this.diving ? 5 : 0), this.vy + g);
-    if ((this.propellerHat > 0 || this.propellerFlashing) && !this.onGround && !this.diving && this.jumpHeld && this.vy > 1.8)
-      this.vy = 1.8;
+    if (hasPropeller) {
+      const maxPropFall = this.jumpHeld ? 1.2 : 2.6;
+      if (this.vy > maxPropFall) this.vy = maxPropFall;
+    }
 
     /* ---- integrate + collide */
     const prevBottom = this.py + PLAYER_H;
