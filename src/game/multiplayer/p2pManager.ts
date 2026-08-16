@@ -25,8 +25,20 @@ const TRACKERS = [
   'wss://open.ftorrent.com',
 ];
 
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun3.l.google.com:19302' },
+  { urls: 'stun:stun4.l.google.com:19302' },
+  { urls: 'stun:stun.cloudflare.com:3478' },
+];
+
 const ROOM_CONFIG = {
   appId: APP_ID,
+  rtcConfig: {
+    iceServers: ICE_SERVERS,
+  },
   relayConfig: {
     urls: TRACKERS,
   },
