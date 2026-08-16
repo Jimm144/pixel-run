@@ -118,24 +118,67 @@ export async function exportSaveData(): Promise<string> {
   return SAVE_MAGIC + bufferToBase64(combined);
 }
 
-export async function downloadSaveFile(): Promise<void> {
-  const content = await exportSaveData();
-  const blob = new Blob([content], { type: 'application/octet-stream' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
+export function getSaveFilename(): string {
   const d = new Date();
   const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-  a.href = url;
-  a.download = `pixel-run-${dateStr}.save`;
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    try {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch {}
-  }, 2000);
+  return `pixel-run-${dateStr}.save`;
+}
+
+export async function downloadSaveFile(): Promise<boolean> {
+  try {
+    const content = await exportSaveData();
+    const filename = getSaveFilename();
+    const blob = new Blob([content], { type: 'application/octet-stream' });
+
+    // 1. Mobile & Webview Share API fallback (Snapchat, Instagram, iOS Safari, Android)
+    if (typeof navigator !== 'undefined' && 'canShare' in navigator && 'share' in navigator) {
+      try {
+        const file = new File([blob], filename, { type: 'application/octet-stream' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'Pixel Run Save File',
+            text: 'My encrypted Pixel Run save backup',
+          });
+          return true;
+        }
+      } catch (err: unknown) {
+        // User cancelled share or aborted
+        if (err instanceof Error && err.name === 'AbortError') {
+          return true;
+        }
+      }
+    }
+
+    // 2. Standard direct blob download
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      try {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch {}
+    }, 2000);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function copySaveCodeToClipboard(): Promise<boolean> {
+  try {
+    const content = await exportSaveData();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(content);
+      return true;
+    }
+  } catch {}
+  return false;
 }
 
 export async function restoreSaveFromString(raw: string): Promise<{ success: boolean; error?: string }> {

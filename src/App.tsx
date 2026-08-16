@@ -35,6 +35,7 @@ import {
 import { SkinsModal } from './components/SkinsModal';
 import { SkinUnlockModal } from './components/SkinUnlockModal';
 import { FeedbackModal } from './components/FeedbackModal';
+import { SaveLoadModal } from './components/SaveLoadModal';
 import {
   loadEquippedSkin,
   loadUnlockedSkins,
@@ -47,7 +48,6 @@ import {
   SKINS,
 } from './game/skins';
 import { inputManager } from './game/input';
-import { downloadSaveFile, triggerImportSaveDialog } from './game/saveManager';
 
 const QUEST_SHARE_WIDTH = 1200;
 const QUEST_SHARE_HEIGHT = 500;
@@ -257,6 +257,7 @@ export function App() {
   const [lifetimeStats, setLifetimeStats] = useState<LifetimeStats>(() => loadLifetimeStats());
   const [skinsModalOpen, setSkinsModalOpen] = useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [saveLoadModal, setSaveLoadModal] = useState<'save' | 'load' | null>(null);
   const [skinToast, setSkinToast] = useState<string | null>(null);
   const [unlockedSkinPopup, setUnlockedSkinPopup] = useState<SkinId | null>(null);
   const skinToastTimer = useRef(0);
@@ -269,51 +270,36 @@ export function App() {
     skinToastTimer.current = window.setTimeout(() => setSkinToast(null), 3500);
   }, []);
 
-  const handleExportSave = useCallback(async () => {
-    try {
-      const currentUnlocked = loadUnlockedSkins();
-      let newlyUnlocked = false;
-      if (!currentUnlocked.includes('safe_bob')) {
-        const next = [...currentUnlocked, 'safe_bob' as SkinId];
-        saveUnlockedSkins(next);
-        setUnlockedSkins(next);
-        newlyUnlocked = true;
-      }
-
-      await downloadSaveFile();
-      sfx.play('gem');
-
-      if (newlyUnlocked) {
-        triggerSkinToast('SAFE BOB', 'safe_bob');
-      } else {
-        triggerSkinToast('SAVE FILE DOWNLOADED');
-      }
-    } catch {
-      triggerSkinToast('SAVE EXPORT FAILED');
+  const handleExportSave = useCallback(() => {
+    const currentUnlocked = loadUnlockedSkins();
+    if (!currentUnlocked.includes('safe_bob')) {
+      const next = [...currentUnlocked, 'safe_bob' as SkinId];
+      saveUnlockedSkins(next);
+      setUnlockedSkins(next);
+      triggerSkinToast('SAFE BOB', 'safe_bob');
     }
+    sfx.play('ui');
+    setSaveLoadModal('save');
   }, [triggerSkinToast]);
 
   const handleImportSave = useCallback(() => {
-    triggerImportSaveDialog((res) => {
-      if (res.success) {
-        const freshLifetime = loadLifetimeStats();
-        const freshUnlocked = loadUnlockedSkins();
-        const freshEquipped = loadEquippedSkin();
-        const freshBest = bestScore();
-        setLifetimeStats(freshLifetime);
-        setUnlockedSkins(freshUnlocked);
-        setEquippedSkin(freshEquipped);
-        setBest(freshBest);
-        setQuestRecord(loadQuestRecord());
-        setVolumes(loadVolumes());
-        gameRef.current?.setSkin(freshEquipped);
-        sfx.play('gem');
-        triggerSkinToast('PROGRESS RESTORED!');
-      } else {
-        sfx.play('death');
-        triggerSkinToast(res.error || 'INVALID SAVE FILE');
-      }
-    });
+    sfx.play('ui');
+    setSaveLoadModal('load');
+  }, []);
+
+  const handleRestoreComplete = useCallback(() => {
+    const freshLifetime = loadLifetimeStats();
+    const freshUnlocked = loadUnlockedSkins();
+    const freshEquipped = loadEquippedSkin();
+    const freshBest = bestScore();
+    setLifetimeStats(freshLifetime);
+    setUnlockedSkins(freshUnlocked);
+    setEquippedSkin(freshEquipped);
+    setBest(freshBest);
+    setQuestRecord(loadQuestRecord());
+    setVolumes(loadVolumes());
+    gameRef.current?.setSkin(freshEquipped);
+    triggerSkinToast('PROGRESS RESTORED!');
   }, [triggerSkinToast]);
 
   // Konami Code listener
@@ -807,6 +793,14 @@ export function App() {
         )}
         {showFeedbackModal && (
           <FeedbackModal onClose={() => setShowFeedbackModal(false)} />
+        )}
+        {saveLoadModal && (
+          <SaveLoadModal
+            mode={saveLoadModal}
+            onClose={() => setSaveLoadModal(null)}
+            onRestoreSuccess={handleRestoreComplete}
+            touch={touch}
+          />
         )}
         {swUpdate && ui !== 'playing' && (
           <div className="fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 border-2 border-[#ffd166] bg-[#140a26]/95 px-3 py-1.5 font-pixel text-[#ffd166] shadow-[3px_3px_0_#08040f]">
