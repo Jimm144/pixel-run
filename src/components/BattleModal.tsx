@@ -13,7 +13,6 @@ interface BattleModalProps {
   localSkin: SkinId;
   matchResult: MatchResult | null;
   onClearMatchResult: () => void;
-  touch?: boolean;
 }
 
 export function BattleModal({
@@ -23,7 +22,6 @@ export function BattleModal({
   localSkin,
   matchResult,
   onClearMatchResult,
-  touch = false,
 }: BattleModalProps) {
   const [tab, setTab] = useState<'host' | 'join'>('host');
   const [joinSubTab, setJoinSubTab] = useState<'code' | 'public'>('code');
@@ -35,22 +33,127 @@ export function BattleModal({
   const [statusMsg, setStatusMsg] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [joined, setJoined] = useState(false);
+  const [joinFailed, setJoinFailed] = useState(false);
 
   const localCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const oppCanvasesRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
+  const hostInitInFlightRef = useRef(false);
+  const autoJoinAttemptedRef = useRef(false);
+  // Mirrors isPublicRoom so initHost() (which captures isPub at call time)
+  // can apply a privacy toggle that happened mid-init.
+  const isPublicRoomRef = useRef(isPublicRoom);
+
+  const hasAutoJoinHash = () =>
+    typeof window !== 'undefined' && window.location.hash.startsWith('#battle=');
 
   // Initialize Host Room (Private by default)
-  const initHost = useCallback(async (isPub = false) => {
+  const initHost = useCallback(async () => {
+    const isPub = isPublicRoomRef.current;
     const code = await p2p.host(localName, localSkin, isPub);
+    // Apply a privacy toggle that happened while host() was in flight.
+    if (p2p.isPublic !== isPublicRoomRef.current) {
+      p2p.setRoomVisibility(isPublicRoomRef.current);
+    }
     setRoomCode(code);
     setStatusMsg(`ROOM ${code} READY`);
   }, [localName, localSkin]);
 
+  // Restore lobby state when the modal remounts (e.g. after a match ended).
+  // p2p keeps the room + opponents alive between matches, so re-hosting or
+  // re-joining here would strand the party and break REMATCH.
   useEffect(() => {
-    if (!matchResult && tab === 'host' && !roomCode) {
-      initHost(isPublicRoom);
+    if (p2p.state !== 'idle' && p2p.roomId) {
+      setRoomCode(p2p.roomId);
+      setOpponents(Array.from(p2p.opponents.values()));
+      if (p2p.role === 'joiner') {
+        setTab('join');
+        setJoined(true);
+      } else {
+        setTab('host');
+      }
     }
-  }, [tab, roomCode, matchResult, initHost, isPublicRoom]);
+  }, []);
+
+  useEffect(() => {
+    isPublicRoomRef.current = isPublicRoom;
+  }, [isPublicRoom]);
+
+  // Initialize Host Room (Private by default). Guarded so StrictMode's
+  // double effect-invoke, privacy toggles, a live p2p session or an incoming
+  // #battle= auto-join never create a duplicate room.
+  useEffect(() => {
+    if (
+      !matchResult &&
+      tab === 'host' &&
+      !roomCode &&
+      !hasAutoJoinHash() &&
+      p2p.state === 'idle' &&
+      !hostInitInFlightRef.current
+    ) {
+      hostInitInFlightRef.current = true;
+      initHost().finally(() => {
+        hostInitInFlightRef.current = false;
+      });
+    }
+  }, [tab, roomCode, matchResult, initHost]);
+
+  // P2P event subscriptions owned by the modal. Mounted BEFORE the auto-join
+  // effect so no early join events (errors, opponent updates) get dropped.
+  // App.tsx owns onOpponentTicks/onOpponentDeath/onMatchResult; this modal owns
+  // onOpponentsUpdate/onCountdown/onMatchStart/onError/onStateChange — neither
+  // side's cleanup stomps the other's handlers.
+  useEffect(() => {
+    p2p.onOpponentsUpdate = (opps) => {
+      setOpponents([...opps]);
+      if (opps.length > 0) {
+        sfx.play('gem');
+        setJoined(true);
+        setJoinFailed(false);
+        setStatusMsg(`${opps.length + 1}/${MAX_PLAYERS} PLAYERS CONNECTED`);
+      } else {
+        if (p2p.role === 'host') {
+          setStatusMsg(`ROOM ${p2p.roomId || roomCode} READY — WAITING FOR PLAYERS`);
+        } else {
+          setStatusMsg(joined ? 'SEARCHING FOR HOST...' : 'CONNECTING...');
+        }
+      }
+    };
+
+    p2p.onCountdown = (sec) => {
+      setCountdown(sec);
+      if (sec > 0) sfx.play('jump');
+      else sfx.play('slam');
+    };
+
+    p2p.onMatchStart = (seed) => {
+      onStartBattle(seed);
+    };
+
+    p2p.onError = (err) => {
+      setStatusMsg(err);
+      // Only terminal failures warrant the death sting; the "still
+      // connecting" hints are non-terminal (a late host still connects).
+      if (/FULL|FAILED|INVALID/.test(err)) {
+        sfx.play('death');
+      }
+    };
+
+    p2p.onStateChange = (state) => {
+      if (state === 'idle' && p2p.role === 'joiner') {
+        setJoined(false);
+        setJoinFailed(false);
+      }
+    };
+
+    return () => {
+      p2p.onOpponentsUpdate = null;
+      p2p.onCountdown = null;
+      p2p.onMatchStart = null;
+      p2p.onError = null;
+      p2p.onStateChange = null;
+    };
+  }, [onStartBattle, roomCode, joined]);
 
   // Browse public lobbies when in public tab
   useEffect(() => {
@@ -66,11 +169,15 @@ export function BattleModal({
     }
   }, [tab, joinSubTab]);
 
-  // Auto-join from URL hash (#battle=CODE)
+  // Auto-join from URL hash (#battle=CODE). Guarded against StrictMode
+  // double-invoke and against re-joining when a live session already exists
+  // (e.g. modal remounted after a match).
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.location.hash.startsWith('#battle=')) {
+    if (autoJoinAttemptedRef.current || p2p.state !== 'idle') return;
+    if (hasAutoJoinHash()) {
       const codeFromUrl = window.location.hash.replace('#battle=', '').trim();
       if (codeFromUrl) {
+        autoJoinAttemptedRef.current = true;
         setTab('join');
         setJoinSubTab('code');
         setInputCode(codeFromUrl);
@@ -79,44 +186,19 @@ export function BattleModal({
     }
   }, []);
 
-  // Listen to P2P manager events
+  // Joiner search timeout: after ~15s with no host, surface a TRY AGAIN
+  // action. Generous window so slow-but-successful NAT traversal (>8s) isn't
+  // falsely flagged; a late host still connects and clears the failure.
   useEffect(() => {
-    p2p.onOpponentsUpdate = (opps) => {
-      setOpponents([...opps]);
-      if (opps.length > 0) {
-        sfx.play('gem');
-        setStatusMsg(`${opps.length + 1}/${MAX_PLAYERS} PLAYERS CONNECTED`);
-      } else {
-        if (p2p.role === 'host') {
-          setStatusMsg(`ROOM ${p2p.roomId || roomCode} READY — WAITING FOR PLAYERS`);
-        } else {
-          setStatusMsg('SEARCHING FOR HOST...');
-        }
+    if (!joined || opponents.length > 0 || tab !== 'join') return;
+    const timer = window.setTimeout(() => {
+      if (p2p.role === 'joiner' && p2p.opponents.size === 0) {
+        setJoinFailed(true);
+        setStatusMsg(`STILL SEARCHING FOR HOST ${roomCode} — SLOW CONNECTION? TRY AGAIN`);
       }
-    };
-
-    p2p.onCountdown = (sec) => {
-      setCountdown(sec);
-      if (sec > 0) sfx.play('jump');
-      else sfx.play('superPad');
-    };
-
-    p2p.onMatchStart = (seed) => {
-      onStartBattle(seed);
-    };
-
-    p2p.onError = (err) => {
-      setStatusMsg(err);
-      sfx.play('death');
-    };
-
-    return () => {
-      p2p.onOpponentsUpdate = null;
-      p2p.onCountdown = null;
-      p2p.onMatchStart = null;
-      p2p.onError = null;
-    };
-  }, [onStartBattle, roomCode]);
+    }, 15000);
+    return () => window.clearTimeout(timer);
+  }, [joined, opponents.length, tab, roomCode]);
 
   // Render animated sprite previews in lobby
   useEffect(() => {
@@ -173,10 +255,20 @@ export function BattleModal({
       setStatusMsg('ENTER ROOM CODE');
       return;
     }
-    setStatusMsg(`CONNECTING TO ${code.toUpperCase()}...`);
-    const ok = await p2p.join(code, localName, localSkin);
+    const parsed = p2p.parseRoomCode(code);
+    if (!parsed.valid) {
+      setStatusMsg(parsed.error || 'INVALID ROOM CODE');
+      sfx.play('death');
+      return;
+    }
+    setJoined(false);
+    setJoinFailed(false);
+    setRoomCode(parsed.code);
+    setStatusMsg(`CONNECTING TO ${parsed.code}...`);
+    const ok = await p2p.join(parsed.code, localName, localSkin);
     if (ok) {
-      setRoomCode(code.toUpperCase());
+      setJoined(true);
+      setStatusMsg('SEARCHING FOR HOST...');
     }
   };
 
@@ -206,7 +298,13 @@ export function BattleModal({
   };
 
   const handleRematch = () => {
+    if (opponents.length === 0) {
+      setStatusMsg('NO OPPONENTS TO REMATCH');
+      sfx.play('death');
+      return;
+    }
     onClearMatchResult();
+    setCountdown(null);
     p2p.requestRematch();
   };
 
@@ -285,7 +383,7 @@ export function BattleModal({
               >
                 REMATCH
               </PixelButton>
-              <PixelButton variant="secondary" onClick={handleExit} className="flex-1">
+              <PixelButton variant="ghost" onClick={handleExit} className="flex-1">
                 MENU
               </PixelButton>
             </div>
@@ -310,8 +408,10 @@ export function BattleModal({
                 type="button"
                 onClick={() => {
                   setTab('host');
+                  setJoined(false);
+                  setJoinFailed(false);
                   if (p2p.role !== 'host' || !roomCode) {
-                    initHost(isPublicRoom);
+                    initHost();
                   }
                 }}
                 className={`flex-1 py-1.5 text-[8px] transition-colors ${
@@ -326,6 +426,8 @@ export function BattleModal({
                 type="button"
                 onClick={() => {
                   setTab('join');
+                  setJoined(false);
+                  setJoinFailed(false);
                   if (p2p.role === 'host') {
                     p2p.leave();
                     setRoomCode('');
@@ -478,6 +580,24 @@ export function BattleModal({
               </div>
             )}
 
+            {/* Retry affordance when the host could not be reached */}
+            {joinFailed && tab === 'join' && (
+              <button
+                type="button"
+                onClick={() => handleJoinCode(roomCode)}
+                className="mb-2 border border-[#ff4d6d] bg-[#ff4d6d]/20 px-3 py-1 text-[7px] font-bold text-[#ff4d6d] transition-colors hover:bg-[#ff4d6d]/40 active:scale-95"
+              >
+                TRY AGAIN ({roomCode || 'SEARCH'})
+              </button>
+            )}
+
+            {/* Host hint: joiners need reachable networks */}
+            {tab === 'host' && roomCode && opponents.length === 0 && (
+              <div className="mb-2 max-w-xs text-center text-[6px] leading-relaxed text-[#6b5880]">
+                SHARE THE LINK OR CODE — JOINERS NEED A REACHABLE NETWORK (OPEN NAT / SAME LAN)
+              </div>
+            )}
+
             {/* Compact 5-Player Party Strip */}
             <div className="w-full max-w-md border border-[#2c1f4d] bg-[#080312] p-2 mb-3">
               <div className="text-[7px] text-[#a090c0] mb-1.5 text-center">
@@ -491,7 +611,7 @@ export function BattleModal({
                     YOU
                   </span>
                   <span className="border border-[#3ef2c8] bg-[#3ef2c8]/20 px-1 text-[5px] text-[#3ef2c8]">
-                    {tab === 'host' ? 'HOST' : (opponents.length > 0 ? 'READY' : 'JOINING...')}
+                    {tab === 'host' ? 'HOST' : opponents.length > 0 ? 'READY' : joined ? 'SEARCHING' : 'JOINING...'}
                   </span>
                 </div>
 
@@ -560,7 +680,11 @@ export function BattleModal({
                 }`}>
                   {opponents.length > 0
                     ? 'CONNECTED - WAITING FOR HOST TO START'
-                    : (roomCode ? `CONNECTING TO ${roomCode}...` : 'ENTER CODE TO JOIN HOST')}
+                    : joined
+                      ? 'SEARCHING FOR HOST...'
+                      : roomCode
+                        ? `CONNECTING TO ${roomCode}...`
+                        : 'ENTER CODE TO JOIN HOST'}
                 </div>
               )}
             </div>

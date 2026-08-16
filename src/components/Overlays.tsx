@@ -98,30 +98,29 @@ function PlayIcon({ className = 'h-[16px] w-[16px]' }: { className?: string }) {
 function PixelSwordsIcon({ className = 'h-5 w-5 sm:h-6 sm:w-6' }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" className={className} fill="currentColor" shapeRendering="crispEdges" aria-hidden="true">
-      {/* Blade 1 (top-left to bottom-right) */}
-      <rect x="2" y="1" width="2" height="2" />
+      {/* Blade 1 (top-left to bottom-right, long) */}
+      <rect x="1" y="1" width="2" height="2" />
       <rect x="3" y="3" width="2" height="2" />
       <rect x="5" y="5" width="2" height="2" />
       <rect x="7" y="7" width="2" height="2" />
       <rect x="9" y="9" width="2" height="2" />
-      {/* Crossguard 1 */}
+      {/* Crossguard 1 (thin) */}
       <rect x="11" y="7" width="2" height="2" />
-      <rect x="7" y="11" width="2" height="2" />
-      {/* Hilt & Pommel 1 */}
+      {/* Hilt & Pommel 1 (short) */}
       <rect x="11" y="11" width="2" height="2" />
       <rect x="13" y="13" width="2" height="2" />
 
-      {/* Blade 2 (top-right to bottom-left) */}
-      <rect x="12" y="1" width="2" height="2" />
-      <rect x="11" y="3" width="2" height="2" />
-      <rect x="9" y="5" width="2" height="2" />
-      <rect x="5" y="9" width="2" height="2" />
-      {/* Crossguard 2 */}
-      <rect x="3" y="7" width="2" height="2" />
-      <rect x="7" y="11" width="2" height="2" />
-      {/* Hilt & Pommel 2 */}
-      <rect x="3" y="11" width="2" height="2" />
-      <rect x="1" y="13" width="2" height="2" />
+      {/* Blade 2 (top-right to bottom-left, long) */}
+      <rect x="14" y="1" width="2" height="2" />
+      <rect x="12" y="3" width="2" height="2" />
+      <rect x="10" y="5" width="2" height="2" />
+      <rect x="8" y="7" width="2" height="2" />
+      <rect x="6" y="9" width="2" height="2" />
+      {/* Crossguard 2 (thin) */}
+      <rect x="4" y="7" width="2" height="2" />
+      {/* Hilt & Pommel 2 (short) */}
+      <rect x="4" y="11" width="2" height="2" />
+      <rect x="2" y="13" width="2" height="2" />
     </svg>
   );
 }

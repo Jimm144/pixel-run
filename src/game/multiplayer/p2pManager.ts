@@ -17,12 +17,13 @@ export const MAX_PLAYERS = 5;
 
 const PLAYER_COLORS = ['#7ef7ff', '#ff70a6', '#ffd166', '#a78bfa'];
 
+// Only trackers verified reachable are kept. trystero slices relayConfig.urls to
+// `redundancy ?? 3`, so the first N entries are the only ones ever used — dead
+// trackers must not occupy those slots.
 const TRACKERS = [
   'wss://tracker.openwebtorrent.com',
-  'wss://tracker.webtorrent.dev',
-  'wss://tracker.btorrent.xyz',
-  'wss://tracker.files.fm:7073/announce',
   'wss://open.ftorrent.com',
+  'wss://tracker.webtorrent.dev',
 ];
 
 const ICE_SERVERS = [
@@ -36,11 +37,14 @@ const ICE_SERVERS = [
 
 const ROOM_CONFIG = {
   appId: APP_ID,
+  // Joiners must announce promptly so hosts find them; never let a room go dormant.
+  passive: false,
   rtcConfig: {
     iceServers: ICE_SERVERS,
   },
   relayConfig: {
     urls: TRACKERS,
+    redundancy: TRACKERS.length,
   },
 };
 
@@ -49,14 +53,8 @@ function registerMessageAction<T>(
   namespace: string,
   onMessage?: (data: T, peerId: string) => void
 ): (data: T, targetPeerId?: string) => Promise<void> {
+  // trystero 0.25.3 makeAction returns { send, onMessage, onReceiveProgress }.
   const action = room.makeAction(namespace);
-  if (Array.isArray(action)) {
-    const [send, get] = action;
-    if (onMessage) get((data: T, peerId: string) => onMessage(data, peerId));
-    return async (data: T, targetPeerId?: string) => {
-      send(data, targetPeerId);
-    };
-  }
   if (onMessage) {
     action.onMessage = (data: T, context: any) => {
       const peerId = typeof context === 'string' ? context : (context?.peerId || '');
@@ -74,12 +72,12 @@ function registerMessageAction<T>(
   };
 }
 
+// In trystero 0.25.3 these are accessor properties (getter/setter). Calling
+// `room.onPeerJoin(handler)` when a handler is already set invokes the OLD
+// handler with the new handler as its peerId argument, which sends handshakes
+// to a function id. Always assign through the setter instead.
 function bindPeerEvent(room: any, eventName: 'onPeerJoin' | 'onPeerLeave', handler: (peerId: string) => void) {
-  if (typeof room[eventName] === 'function') {
-    room[eventName](handler);
-  } else {
-    room[eventName] = handler;
-  }
+  room[eventName] = handler;
 }
 
 export class P2PManager {
@@ -98,12 +96,26 @@ export class P2PManager {
   public opponentDeaths: Map<string, { score: number; meters: number; kills: number }> = new Map();
   public opponentTicks: Map<string, PlayerTickPayload> = new Map();
 
-  // Discovery state
-  private discoveryRoom: any = null;
+  // Discovery state. The host's announce room and a joiner's browse room are
+  // kept SEPARATE so browsing public lobbies can never tear down a host's
+  // announce (they share the same DISCOVERY_ROOM namespace in trystero).
+  private announceRoom: any = null;
+  private browseRoom: any = null;
   private discoveryAnnounceTimer: number | null = null;
   public publicLobbies: Map<string, PublicLobbyInfo> = new Map();
 
   private room: any = null;
+  // Guards against overlapping init/leave calls (React StrictMode double
+  // effects, rapid re-join of the same code). trystero caches rooms per
+  // appId+roomId until leave() fully settles (~100ms), so a re-join must wait
+  // for the previous leave before creating a fresh room.
+  private initSeq = 0;
+  private pendingRoomLeave: Promise<void> | null = null;
+  private announceSeq = 0;
+  private browseSeq = 0;
+  private announceLeavePromise: Promise<void> | null = null;
+  private browseLeavePromise: Promise<void> | null = null;
+  private initTimeout: number | null = null;
   private sendTickAction: ((data: PlayerTickPayload, targetPeerId?: string) => void) | null = null;
   private sendEventAction: ((data: NetEventPacket, targetPeerId?: string) => void) | null = null;
 
@@ -195,6 +207,11 @@ export class P2PManager {
   }
 
   private async initRoom() {
+    const seq = ++this.initSeq;
+    if (this.initTimeout !== null) {
+      clearTimeout(this.initTimeout);
+      this.initTimeout = null;
+    }
     this.setState('connecting');
     this.localOutgoingSeq = 0;
     this.peerSeqs.clear();
@@ -203,8 +220,17 @@ export class P2PManager {
     this.opponentDeaths.clear();
     this.localFinalStats = null;
 
+    const roomId = this.roomId;
+    const isHost = this.role === 'host';
+
     try {
       const { joinRoom, selfId } = await import('@trystero-p2p/torrent');
+      if (seq !== this.initSeq) return; // superseded by a newer init
+      if (this.pendingRoomLeave) {
+        await this.pendingRoomLeave;
+        this.pendingRoomLeave = null;
+        if (seq !== this.initSeq) return;
+      }
       this.localPeerId = selfId;
 
       this.room = joinRoom(ROOM_CONFIG as any, this.roomId);
@@ -257,19 +283,23 @@ export class P2PManager {
         this.startPublicAnnounce();
       }
 
-      setTimeout(() => {
-        if (this.state === 'connecting' && this.opponents.size === 0) {
-          if (this.onError) {
-            if (this.role === 'host') {
-              this.onError(`ROOM ${this.roomId} READY — WAITING FOR PLAYERS`);
-            } else {
-              this.onError(`SEARCHING FOR ROOM ${this.roomId}...`);
-            }
+      // Non-terminal status hint after 5s of no peer. Captures the seq, roomId
+      // and role at schedule time so a superseded init can never fire into the
+      // next join's connect window, and leave() cancels it outright.
+      this.initTimeout = window.setTimeout(() => {
+        this.initTimeout = null;
+        if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size > 0) return;
+        if (this.onError) {
+          if (isHost) {
+            this.onError(`ROOM ${roomId} READY — WAITING FOR PLAYERS`);
+          } else {
+            this.onError(`CAN'T REACH ROOM ${roomId} — CHECK CODE / HOST ONLINE`);
           }
         }
       }, 5000);
 
     } catch (err: any) {
+      if (seq !== this.initSeq) return;
       if (this.onError) this.onError(err?.message || 'CONNECTION FAILED');
       this.setState('idle');
     }
@@ -278,12 +308,18 @@ export class P2PManager {
   // Public Lobby Discovery Subsystem
   public async startBrowsingPublicLobbies() {
     this.stopBrowsingPublicLobbies();
+    const seq = ++this.browseSeq;
     try {
       const { joinRoom } = await import('@trystero-p2p/torrent');
-      this.discoveryRoom = joinRoom(ROOM_CONFIG as any, DISCOVERY_ROOM);
+      if (this.browseLeavePromise) {
+        await this.browseLeavePromise;
+        this.browseLeavePromise = null;
+        if (seq !== this.browseSeq) return;
+      }
+      this.browseRoom = joinRoom(ROOM_CONFIG as any, DISCOVERY_ROOM);
 
-      const sendRequest = registerMessageAction<{ ts: number }>(this.discoveryRoom, 'req_lobbies');
-      registerMessageAction<PublicLobbyInfo>(this.discoveryRoom, 'public_lobby', (data) => {
+      const sendRequest = registerMessageAction<{ ts: number }>(this.browseRoom, 'req_lobbies');
+      registerMessageAction<PublicLobbyInfo>(this.browseRoom, 'public_lobby', (data) => {
         if (data && data.roomId && Date.now() - data.ts < 20000) {
           this.publicLobbies.set(data.roomId, data);
           this.prunePublicLobbies();
@@ -294,7 +330,7 @@ export class P2PManager {
       });
 
       // Request immediate announcements from existing hosts
-      bindPeerEvent(this.discoveryRoom, 'onPeerJoin', () => {
+      bindPeerEvent(this.browseRoom, 'onPeerJoin', () => {
         sendRequest({ ts: Date.now() });
       });
       sendRequest({ ts: Date.now() });
@@ -302,11 +338,12 @@ export class P2PManager {
   }
 
   public stopBrowsingPublicLobbies() {
-    if (this.discoveryRoom) {
+    this.browseSeq++; // invalidate any in-flight browse
+    if (this.browseRoom) {
       try {
-        this.discoveryRoom.leave();
+        this.browseLeavePromise = Promise.resolve(this.browseRoom.leave()).catch(() => {});
       } catch {}
-      this.discoveryRoom = null;
+      this.browseRoom = null;
     }
     this.publicLobbies.clear();
   }
@@ -322,11 +359,17 @@ export class P2PManager {
 
   private async startPublicAnnounce() {
     this.stopPublicAnnounce();
+    const seq = ++this.announceSeq;
     try {
       const { joinRoom } = await import('@trystero-p2p/torrent');
-      this.discoveryRoom = joinRoom(ROOM_CONFIG as any, DISCOVERY_ROOM);
+      if (this.announceLeavePromise) {
+        await this.announceLeavePromise;
+        this.announceLeavePromise = null;
+        if (seq !== this.announceSeq) return;
+      }
+      this.announceRoom = joinRoom(ROOM_CONFIG as any, DISCOVERY_ROOM);
 
-      const sendLobby = registerMessageAction<PublicLobbyInfo>(this.discoveryRoom, 'public_lobby');
+      const sendLobby = registerMessageAction<PublicLobbyInfo>(this.announceRoom, 'public_lobby');
 
       const broadcast = (targetPeerId?: string) => {
         if (!this.isPublic || this.state === 'playing' || !this.roomId) return;
@@ -342,10 +385,10 @@ export class P2PManager {
       };
 
       // Respond immediately when a browser joins discovery or requests lobbies
-      registerMessageAction<{ ts: number }>(this.discoveryRoom, 'req_lobbies', (_, peerId) => {
+      registerMessageAction<{ ts: number }>(this.announceRoom, 'req_lobbies', (_, peerId) => {
         broadcast(peerId);
       });
-      bindPeerEvent(this.discoveryRoom, 'onPeerJoin', (peerId: string) => {
+      bindPeerEvent(this.announceRoom, 'onPeerJoin', (peerId: string) => {
         broadcast(peerId);
       });
 
@@ -355,15 +398,16 @@ export class P2PManager {
   }
 
   private stopPublicAnnounce() {
+    this.announceSeq++; // invalidate any in-flight announce
     if (this.discoveryAnnounceTimer) {
       clearInterval(this.discoveryAnnounceTimer);
       this.discoveryAnnounceTimer = null;
     }
-    if (this.discoveryRoom) {
+    if (this.announceRoom) {
       try {
-        this.discoveryRoom.leave();
+        this.announceLeavePromise = Promise.resolve(this.announceRoom.leave()).catch(() => {});
       } catch {}
-      this.discoveryRoom = null;
+      this.announceRoom = null;
     }
   }
 
@@ -733,6 +777,11 @@ export class P2PManager {
   }
 
   public leave() {
+    this.initSeq++; // invalidate any in-flight initRoom
+    if (this.initTimeout !== null) {
+      clearTimeout(this.initTimeout);
+      this.initTimeout = null;
+    }
     this.releaseWakeLock();
     this.stopMatchWatchdog();
     this.stopPublicAnnounce();
@@ -741,7 +790,7 @@ export class P2PManager {
 
     if (this.room) {
       try {
-        this.room.leave();
+        this.pendingRoomLeave = Promise.resolve(this.room.leave()).catch(() => {});
       } catch {}
       this.room = null;
     }

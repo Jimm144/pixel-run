@@ -642,6 +642,10 @@ export function App() {
       setBattleModalOpen(true);
     }
 
+    // App owns the in-match/result callbacks — they must survive BattleModal
+    // mount/unmount cycles. BattleModal owns onOpponentsUpdate/onCountdown/
+    // onMatchStart/onError/onStateChange. The two sets never overlap, so
+    // neither side's cleanup stomps the other's handlers.
     p2p.onOpponentTicks = (ticks) => {
       gameRef.current?.setOpponentStates(ticks);
     };
@@ -900,7 +904,6 @@ export function App() {
             localSkin={equippedSkin}
             matchResult={matchResult}
             onClearMatchResult={() => setMatchResult(null)}
-            touch={touch}
           />
         )}
         {showFeedbackModal && (
