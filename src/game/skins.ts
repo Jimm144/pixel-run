@@ -20,6 +20,7 @@ export type SkinId =
   | 'mob'
   | 'panda'
   | 'pig'
+  | 'goat'
   | 'fmhy'
   | 'skeleton'
   | 'moon_man'
@@ -148,6 +149,18 @@ export const SKINS: Record<SkinId, SkinDef> = {
     boot: '#9e3b5e',
     scarf: '#ff5c8a',
     ghostTrail: '#ff9ebb',
+    unlock: { type: 'gems', cost: 150, desc: '150 GEMS' },
+  },
+  goat: {
+    id: 'goat',
+    name: 'GOAT',
+    tier: 'epic',
+    suit: '#e2e8f0',
+    suitDark: '#94a3b8',
+    skin: '#f8fafc',
+    boot: '#334155',
+    scarf: '#ffd166',
+    ghostTrail: '#cbd5e1',
     unlock: { type: 'gems', cost: 150, desc: '150 GEMS' },
   },
   fmhy: {

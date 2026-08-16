@@ -499,16 +499,13 @@ export function SkinsModal({
           </button>
         </div>
 
-        {/* Tier Tabs (Colored when selected, rarity hover on unselected, with collected counts) */}
+        {/* Tier Tabs (Colored when selected, rarity hover on unselected, no individual counts) */}
         <div className="mt-2.5 flex flex-wrap gap-1.5 border-b-2 border-[#251842] pb-2.5">
           {TIERS.map((tier, idx) => {
             const active = selectedTier === tier;
             const theme = TIER_COLORS[tier];
             const isHovered = hoveredTier === tier && !active;
             const isTabFocused = focusSection === 'tabs' && selectedTierIndex === idx;
-            const tierSkins = tier === 'all' ? SKIN_LIST : SKIN_LIST.filter((s) => s.tier === tier);
-            const tierUnlocked = tierSkins.filter((s) => unlockedSkins.includes(s.id)).length;
-            const countLabel = ` (${tierUnlocked}/${tierSkins.length})`;
 
             return (
               <button
@@ -526,12 +523,11 @@ export function SkinsModal({
                   backgroundColor: active ? theme.text : isHovered ? theme.bg : '#140a26',
                   borderColor: active ? theme.text : isHovered ? theme.border : '#251842',
                 }}
-                className={`cursor-pointer border-2 px-2.5 py-1 font-pixel text-[7.5px] uppercase tracking-wider shadow-[2px_2px_0_#08040f] transition-[color,background-color,border-color,transform] duration-75 hover:-translate-y-[1px] active:translate-x-[1px] active:translate-y-[1px] sm:text-[9px] ${
+                className={`cursor-pointer border-2 px-3 py-1 font-pixel text-[8px] uppercase tracking-wider shadow-[2px_2px_0_#08040f] transition-[color,background-color,border-color,transform] duration-75 hover:-translate-y-[1px] active:translate-x-[1px] active:translate-y-[1px] sm:text-[9.5px] ${
                   isTabFocused ? 'nav-focus' : ''
                 }`}
               >
-                <span>{tier}</span>
-                <span className="opacity-80 text-[6.5px] sm:text-[8px]">{countLabel}</span>
+                {tier}
               </button>
             );
           })}

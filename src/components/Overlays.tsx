@@ -102,6 +102,21 @@ function RetryIcon({ className = 'h-[16px] w-[16px]' }: { className?: string }) 
   );
 }
 
+function PixelReloadIcon({ className = 'h-[7px] w-[7px]' }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 7 7" className={className} fill="currentColor" shapeRendering="crispEdges">
+      <rect x="2" y="0" width="3" height="1" />
+      <rect x="5" y="1" width="1" height="2" />
+      <rect x="5" y="3" width="1" height="1" />
+      <rect x="4" y="4" width="2" height="1" />
+      <rect x="2" y="5" width="3" height="1" />
+      <rect x="1" y="3" width="1" height="2" />
+      <rect x="0" y="0" width="2" height="2" />
+      <rect x="0" y="2" width="1" height="1" />
+    </svg>
+  );
+}
+
 /* -------------------------------------------------------------------- start */
 export function StartScreen({
   best,
@@ -308,7 +323,7 @@ export function StartScreen({
                 className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[7px] text-[#3ef2c8]/70 transition-colors hover:text-[#3ef2c8] tablet:text-[9px]"
               >
                 <span>UPDATE</span>
-                <span className="text-[8px]">↻</span>
+                <PixelReloadIcon />
               </button>
             </>
           )}

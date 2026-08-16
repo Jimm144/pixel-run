@@ -53,26 +53,21 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
 
   const handleCopy = async () => {
     setErrorMsg(null);
-    const ok = await copySaveCodeToClipboard();
+    setSuccessMsg(null);
+    const ok = await copySaveCodeToClipboard(saveCode);
     if (ok) {
       sfx.play('ui');
       setCopied(true);
       setSuccessMsg('COPIED TO CLIPBOARD!');
       setTimeout(() => setCopied(false), 3000);
     } else {
-      // Fallback select textarea
+      // If browser blocked automatic copy, select text and prompt user
       if (textareaRef.current) {
+        textareaRef.current.focus();
         textareaRef.current.select();
-        try {
-          document.execCommand('copy');
-          sfx.play('ui');
-          setCopied(true);
-          setSuccessMsg('COPIED TO CLIPBOARD!');
-          setTimeout(() => setCopied(false), 3000);
-        } catch {
-          setErrorMsg('TAP & COPY CODE MANUALLY');
-        }
       }
+      setCopied(false);
+      setErrorMsg('CODE SELECTED — TAP COPY IN POPUP');
     }
   };
 

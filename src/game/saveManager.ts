@@ -143,7 +143,6 @@ export async function downloadSaveFile(): Promise<boolean> {
           return true;
         }
       } catch (err: unknown) {
-        // User cancelled share or aborted
         if (err instanceof Error && err.name === 'AbortError') {
           return true;
         }
@@ -170,25 +169,74 @@ export async function downloadSaveFile(): Promise<boolean> {
   }
 }
 
-export async function copySaveCodeToClipboard(): Promise<boolean> {
+export async function copySaveCodeToClipboard(givenContent?: string): Promise<boolean> {
+  const content = givenContent || (await exportSaveData());
   try {
-    const content = await exportSaveData();
     if (navigator.clipboard && navigator.clipboard.writeText) {
       await navigator.clipboard.writeText(content);
       return true;
     }
   } catch {}
+
+  // Fallback: document.execCommand
+  try {
+    const textArea = document.createElement('textarea');
+    textArea.value = content;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-9999px';
+    textArea.style.top = '-9999px';
+    textArea.setAttribute('readonly', '');
+    document.body.appendChild(textArea);
+    textArea.select();
+    const successful = document.execCommand('copy');
+    document.body.removeChild(textArea);
+    if (successful) return true;
+  } catch {}
+
   return false;
 }
 
 export async function restoreSaveFromString(raw: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const trimmed = raw.trim();
-    if (!trimmed.startsWith(SAVE_MAGIC)) {
-      return { success: false, error: 'INVALID SAVE FILE FORMAT' };
+    let clean = raw.trim();
+
+    // 1. Strip surrounding quotes, markdown ticks, or brackets
+    if ((clean.startsWith('"') && clean.endsWith('"')) || (clean.startsWith("'") && clean.endsWith("'"))) {
+      clean = clean.slice(1, -1).trim();
     }
-    const b64Data = trimmed.slice(SAVE_MAGIC.length);
-    const combined = base64ToBuffer(b64Data);
+    if (clean.startsWith('```') && clean.endsWith('```')) {
+      clean = clean.replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/, '').trim();
+    }
+
+    // 2. Direct JSON support (unencrypted or raw exports)
+    if (clean.startsWith('{') && clean.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(clean);
+        if (parsed && parsed.storage && typeof parsed.storage === 'object') {
+          for (const [key, val] of Object.entries(parsed.storage)) {
+            if (typeof key === 'string' && key.startsWith('pixeldash.') && typeof val === 'string') {
+              localStorage.setItem(key, val);
+            }
+          }
+          return { success: true };
+        }
+      } catch {}
+    }
+
+    // 3. Extract base64 payload (strip SAVE_MAGIC and any accidental internal whitespace)
+    let b64Data = clean;
+    if (clean.includes(SAVE_MAGIC)) {
+      b64Data = clean.slice(clean.indexOf(SAVE_MAGIC) + SAVE_MAGIC.length);
+    }
+    b64Data = b64Data.replace(/[\s\r\n\t]/g, '');
+
+    let combined: Uint8Array;
+    try {
+      combined = base64ToBuffer(b64Data);
+    } catch {
+      return { success: false, error: 'INVALID SAVE CODE' };
+    }
+
     if (combined.length <= 12) {
       return { success: false, error: 'CORRUPTED SAVE DATA' };
     }
@@ -212,7 +260,7 @@ export async function restoreSaveFromString(raw: string): Promise<{ success: boo
     const jsonStr = dec.decode(decrypted);
     const parsed: ExportPayload = JSON.parse(jsonStr);
 
-    if (parsed.version !== 1 || !parsed.storage || typeof parsed.storage !== 'object') {
+    if (!parsed || !parsed.storage || typeof parsed.storage !== 'object') {
       return { success: false, error: 'INCOMPATIBLE SAVE VERSION' };
     }
 
@@ -225,7 +273,7 @@ export async function restoreSaveFromString(raw: string): Promise<{ success: boo
 
     return { success: true };
   } catch {
-    return { success: false, error: 'FAILED TO PARSE SAVE FILE' };
+    return { success: false, error: 'FAILED TO RESTORE SAVE' };
   }
 }
 

@@ -559,6 +559,36 @@ export function drawPlayerSprite(
       f(6, 3, 4, 3, tint('#d9688b'));
       f(7, 4, 1, 1, '#7a2842');
       f(9, 4, 1, 1, '#7a2842');
+    } else if (skinId === 'goat') {
+      // Curved Mountain Horns
+      f(0, -4, 2, 4, '#d97706');
+      f(1, -5, 2, 2, '#fbbf24');
+      f(0, -2, 1, 2, '#92400e');
+      f(8, -4, 2, 4, '#d97706');
+      f(7, -5, 2, 2, '#fbbf24');
+      f(9, -2, 1, 2, '#92400e');
+
+      // Floppy Goat Ears
+      f(-1, 0, 2, 3, tint('#e2e8f0'));
+      f(9, 0, 2, 3, tint('#e2e8f0'));
+
+      // Goat Wool Head & Face
+      f(2, 0, 7, 6, tint('#f8fafc'));
+      f(5, 2, 4, 4, tint('#e2e8f0'));
+
+      // Horizontal slit goat eyes
+      f(6, 2, 3, 2, '#d97706');
+      f(7, 2, 2, 1, '#1e293b');
+      f(8, 2, 1, 1, '#ffffff');
+
+      // Snout & Goatee Beard
+      f(7, 4, 2, 2, '#475569');
+      f(6, 6, 2, 3, tint('#f8fafc'));
+      f(6, 8, 1, 2, tint('#cbd5e1'));
+
+      // Champion Golden Bell on Collar
+      f(2, 5, 3, 2, '#ffd166');
+      f(3, 6, 2, 2, '#d97706');
     } else if (skinId === 'demon') {
       f(1, -4, 2, 4, tint('#1a0505'));
       f(0, -5, 2, 2, tint('#ff3333'));
