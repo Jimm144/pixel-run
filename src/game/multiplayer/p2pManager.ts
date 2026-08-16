@@ -251,10 +251,14 @@ export class P2PManager {
       setTimeout(() => {
         if (this.state === 'connecting' && this.opponents.size === 0) {
           if (this.onError) {
-            this.onError('WAITING FOR PLAYERS... SHARE ROOM CODE');
+            if (this.role === 'host') {
+              this.onError(`ROOM ${this.roomId} READY — WAITING FOR PLAYERS`);
+            } else {
+              this.onError(`SEARCHING FOR ROOM ${this.roomId}...`);
+            }
           }
         }
-      }, 6000);
+      }, 5000);
 
     } catch (err: any) {
       if (this.onError) this.onError(err?.message || 'CONNECTION FAILED');
@@ -375,6 +379,7 @@ export class P2PManager {
           return;
         }
 
+        const isNewPeer = !this.opponents.has(peerId);
         const playerIdx = this.opponents.size + 2;
         const color = PLAYER_COLORS[(playerIdx - 2) % PLAYER_COLORS.length];
 
@@ -394,15 +399,14 @@ export class P2PManager {
         }
         this.setState('lobby');
 
-        if (this.role !== 'host') {
-          if (this.sendEventAction) {
-            this.sendEventAction({
-              type: 'HANDSHAKE',
-              name: this.localName,
-              skinId: this.localSkin,
-              protocolVersion: PROTOCOL_VERSION,
-            }, peerId);
-          }
+        // Mutual handshake reply: ensure both host and joiner always know each other
+        if (isNewPeer && this.sendEventAction) {
+          this.sendEventAction({
+            type: 'HANDSHAKE',
+            name: this.localName,
+            skinId: this.localSkin,
+            protocolVersion: PROTOCOL_VERSION,
+          }, peerId);
         }
 
         if (this.sendEventAction) {

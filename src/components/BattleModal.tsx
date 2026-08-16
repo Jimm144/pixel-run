@@ -85,9 +85,13 @@ export function BattleModal({
       setOpponents([...opps]);
       if (opps.length > 0) {
         sfx.play('gem');
-        setStatusMsg(`${opps.length + 1}/${MAX_PLAYERS} PLAYERS IN LOBBY`);
+        setStatusMsg(`${opps.length + 1}/${MAX_PLAYERS} PLAYERS CONNECTED`);
       } else {
-        setStatusMsg('WAITING FOR PLAYERS...');
+        if (p2p.role === 'host') {
+          setStatusMsg(`ROOM ${p2p.roomId || roomCode} READY — WAITING FOR PLAYERS`);
+        } else {
+          setStatusMsg('SEARCHING FOR HOST...');
+        }
       }
     };
 
@@ -112,7 +116,7 @@ export function BattleModal({
       p2p.onMatchStart = null;
       p2p.onError = null;
     };
-  }, [onStartBattle]);
+  }, [onStartBattle, roomCode]);
 
   // Render animated sprite previews in lobby
   useEffect(() => {
@@ -306,7 +310,9 @@ export function BattleModal({
                 type="button"
                 onClick={() => {
                   setTab('host');
-                  if (!roomCode) initHost(isPublicRoom);
+                  if (p2p.role !== 'host' || !roomCode) {
+                    initHost(isPublicRoom);
+                  }
                 }}
                 className={`flex-1 py-1.5 text-[8px] transition-colors ${
                   tab === 'host'
@@ -318,7 +324,15 @@ export function BattleModal({
               </button>
               <button
                 type="button"
-                onClick={() => setTab('join')}
+                onClick={() => {
+                  setTab('join');
+                  if (p2p.role === 'host') {
+                    p2p.leave();
+                    setRoomCode('');
+                    setOpponents([]);
+                    setStatusMsg('ENTER 4-LETTER CODE OR PICK PUBLIC ROOM');
+                  }
+                }}
                 className={`flex-1 py-1.5 text-[8px] transition-colors ${
                   tab === 'join'
                     ? 'bg-[#ff4d6d] text-[#100424] font-bold'
@@ -477,7 +491,7 @@ export function BattleModal({
                     YOU
                   </span>
                   <span className="border border-[#3ef2c8] bg-[#3ef2c8]/20 px-1 text-[5px] text-[#3ef2c8]">
-                    {p2p.role === 'host' ? 'HOST' : 'READY'}
+                    {tab === 'host' ? 'HOST' : (opponents.length > 0 ? 'READY' : 'JOINING...')}
                   </span>
                 </div>
 
@@ -527,7 +541,7 @@ export function BattleModal({
 
             {/* Launch / Status Button */}
             <div className="flex w-full max-w-xs justify-center">
-              {p2p.role === 'host' ? (
+              {tab === 'host' ? (
                 <button
                   type="button"
                   onClick={handleStartRun}
@@ -539,8 +553,14 @@ export function BattleModal({
                     : `START BATTLE (${totalPlayers} PLAYERS)`}
                 </button>
               ) : (
-                <div className="w-full border border-[#3ef2c8]/50 bg-[#0a1820] py-2 text-center text-[7px] text-[#3ef2c8]">
-                  CONNECTED - WAITING FOR HOST TO START
+                <div className={`w-full border py-2 text-center text-[7px] font-bold ${
+                  opponents.length > 0
+                    ? 'border-[#3ef2c8]/60 bg-[#0c1824] text-[#3ef2c8]'
+                    : 'border-[#ff4d6d]/40 bg-[#140820] text-[#a090c0]'
+                }`}>
+                  {opponents.length > 0
+                    ? 'CONNECTED - WAITING FOR HOST TO START'
+                    : (roomCode ? `CONNECTING TO ${roomCode}...` : 'ENTER CODE TO JOIN HOST')}
                 </div>
               )}
             </div>
