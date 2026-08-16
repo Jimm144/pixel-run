@@ -650,20 +650,79 @@ export function drawPlayerSprite(
       f(2, 0, 8, 2, SUIT_D);
       f(7, 3, 1, 2, '#20122e');        // classic eye
     } else if (skinId === 'santa') {
-      // Iconic red hat with white pompom
-      f(1, -5, 9, 2, tint('#c0392b'));
-      f(2, -7, 6, 3, tint('#c0392b'));
-      f(0, -3, 11, 2, tint('#ffffff'));
-      f(6, -9, 2, 2, tint('#eeeeee')); // pompom
-      // Jolly rosy face
-      f(2, 0, 7, 6, tint('#ffcf9e'));
-      f(2, 0, 8, 2, tint('#e8a070'));
-      // Bushy white beard covering lower face
-      f(2, 3, 7, 4, tint('#ffffff'));
-      f(3, 5, 5, 3, tint('#eeeeee'));
-      // Twinkling eye
-      f(7, 1, 1, 2, '#20122e');
-      f(8, 1, 1, 1, '#ffffff');
+      // Classic Santa Cap with Fluffy White Brim & Pompom
+      f(0, -2, 11, 2, '#ffffff');       // fluffy white fur brim
+      f(1, -5, 9, 3, tint('#c0392b'));  // red cap body
+      f(3, -7, 6, 2, tint('#a93226'));  // curved cap top
+      f(8, -7, 3, 3, '#ffffff');        // fluffy white pompom
+      f(9, -6, 1, 1, '#cbd5e1');        // pompom shadow
+      // Jolly Peach Face with Rosy Cheeks
+      f(2, 0, 7, 5, tint('#ffcf9e'));
+      f(2, 1, 2, 2, '#ff8fa3');         // rosy left cheek
+      f(7, 1, 2, 2, '#ff8fa3');         // rosy right cheek
+      f(3, 1, 1, 2, '#180a24');         // twinkling eye
+      f(7, 1, 1, 2, '#180a24');         // twinkling eye
+      f(5, 2, 2, 1, '#f4a261');         // button nose
+      // Fluffy White Beard & Moustache
+      f(1, 3, 9, 3, '#ffffff');         // main beard
+      f(2, 5, 7, 2, '#f1f5f9');         // lower beard
+      f(4, 7, 3, 1, '#e2e8f0');         // beard tip
+      f(4, 3, 3, 1, '#f8fafc');         // white moustache
+    } else if (skinId === 'beach_bob') {
+      // Cool Red Backward Sports Cap
+      f(1, -2, 9, 3, tint('#ff4d6d'));  // cap crown
+      f(8, -1, 3, 1, tint('#b32a4d'));  // snapback / visor flap
+      // Sun-Kissed Tan Face
+      f(2, 0, 7, 6, tint('#f4a261'));
+      f(2, 0, 8, 2, tint('#e76f51'));
+      // Sleek Black Pixel Sunglasses with Cyan Reflective Lens & Glints
+      f(2, 1, 7, 3, '#0d0619');         // frame
+      f(3, 2, 2, 1, '#00b4d8');         // cyan lens
+      f(6, 2, 2, 1, '#00b4d8');         // cyan lens
+      f(4, 1, 1, 1, '#ffffff');         // lens glint
+      f(7, 1, 1, 1, '#ffffff');         // lens glint
+      // Tropical Hawaiian Flower Lei
+      f(1, 5, 3, 2, '#ff70a6');
+      f(4, 5, 2, 1, '#ffd166');
+      f(7, 5, 2, 1, '#3ef2c8');
+    } else if (skinId === 'mob') {
+      // Rotting Undead Zombie
+      f(2, 0, 7, 6, tint('#5ea846'));   // decaying sickly green skin
+      f(2, 0, 8, 2, tint('#407830'));
+      f(1, -2, 4, 3, tint('#2a1b40'));  // patch of dark rotting hair
+      // Skull stitches / scar
+      f(4, -1, 3, 1, '#1a3014');
+      f(5, -2, 1, 3, '#1a3014');
+      // Sunken undead eye sockets (one glowing yellow pupil, one blank milky eye)
+      f(3, 1, 3, 3, '#152410');         // left socket
+      f(4, 2, 1, 1, '#ffd166');         // glowing yellow pupil
+      f(7, 1, 2, 2, '#152410');         // right hollow socket
+      f(8, 1, 1, 1, '#ffffff');         // milky blind eye
+      // Open mouth with rotting teeth
+      f(4, 4, 4, 1, '#152410');
+      f(4, 4, 1, 1, '#fef08a');
+      f(6, 4, 1, 1, '#fef08a');
+    } else if (skinId === 'witch') {
+      // Pointed Crooked Witch Hat with Wide Brim & Gold Ribbon
+      f(-1, -2, 13, 2, tint('#1a0826')); // wide hat brim
+      f(1, -5, 9, 3, tint('#2a0f3d'));  // lower hat cone
+      f(2, -8, 7, 3, tint('#200a30'));  // mid cone
+      f(4, -11, 4, 3, tint('#180724')); // pointy tip
+      f(6, -13, 2, 2, tint('#14051e')); // crooked top tip
+      f(1, -3, 9, 1, '#ffd166');        // golden ribbon on brim
+      f(5, -4, 2, 2, '#c084fc');        // amethyst gem on ribbon
+      // Pale Enchanted Green Witch Skin & Glowing Purple Eyes
+      f(2, 0, 7, 6, tint('#9ae6b4'));
+      f(2, 0, 8, 2, tint('#68d391'));
+      f(3, 1, 2, 2, '#c084fc');         // glowing purple eye
+      f(7, 1, 2, 2, '#c084fc');         // glowing purple eye
+      f(4, 1, 1, 1, '#ffffff');         // eye glint
+      f(8, 1, 1, 1, '#ffffff');         // eye glint
+      f(5, 4, 1, 1, '#48bb78');         // wart/nose
+      // Floating Magic Sparkles
+      const wT = frame * 0.2;
+      f(9 + Math.round(Math.sin(wT) * 2), -4 + Math.round(Math.cos(wT) * 2), 1, 1, '#e879f9');
+      f(-2 + Math.round(Math.cos(wT) * 2), -1 + Math.round(Math.sin(wT) * 2), 1, 1, '#ffd166');
     } else if (skinId === 'easter_bunny') {
       // Big floppy ears
       f(1, -8, 3, 8, tint('#d4f1c7'));
@@ -685,20 +744,6 @@ export function drawPlayerSprite(
       f(-2, 3 + eggSwing, 3, 5, '#ffd166');
       f(-2, 4 + eggSwing, 3, 1, '#ff80ab');
       f(-2, 6 + eggSwing, 3, 1, '#3ef2c8');
-    } else if (skinId === 'beach_bob') {
-      // Straw sun-visor / summer hat
-      f(0, -3, 11, 2, tint('#ffd166')); // hat brim
-      f(2, -5, 7, 2, tint('#e0a82e'));  // hat crown
-      // Sun-kissed face
-      f(2, 0, 7, 6, tint('#ffcf9e'));
-      f(2, 0, 8, 2, tint('#f4a261'));
-      // Cool black sunglasses / shades with white lens shine
-      f(4, 2, 5, 2, '#100820');
-      f(5, 2, 1, 1, '#ffffff');
-      f(8, 2, 1, 1, '#ffffff');
-      // Tropical Hawaiian lei / flower collar
-      f(1, 5, 3, 2, tint('#ff70a6'));
-      f(4, 5, 2, 1, '#ffd166');
     } else if (skinId === 'pumpkin_bob') {
       // Green vine stem on top
       f(5, -6, 2, 4, tint('#7ae04a'));
@@ -720,7 +765,7 @@ export function drawPlayerSprite(
       f(6, 4, 1, 1, '#ffe066');
       f(7, 3, 1, 1, '#ffe066');
     } else {
-      // Classic Bob / Bobette / Cob / Mob
+      // Classic Bob / Bobette / Cob
       f(2, 0, 7, 6, SUIT);
       f(5, 2, 4, 4, SKIN);
       f(2, 0, 8, 2, SUIT_D);
@@ -728,7 +773,7 @@ export function drawPlayerSprite(
     }
 
     // --- SCARF / COLLAR ---
-    if (skinId !== 'panda' && skinId !== 'pig' && skinId !== 'mr_soup' && skinId !== 'angel' && skinId !== 'santa' && skinId !== 'easter_bunny' && skinId !== 'beach_bob' && skinId !== 'pumpkin_bob') {
+    if (skinId !== 'panda' && skinId !== 'pig' && skinId !== 'mr_soup' && skinId !== 'angel' && skinId !== 'santa' && skinId !== 'easter_bunny' && skinId !== 'beach_bob' && skinId !== 'pumpkin_bob' && skinId !== 'mob' && skinId !== 'witch') {
       f(1, 5, 3, 2, SCARF);
     }
   }

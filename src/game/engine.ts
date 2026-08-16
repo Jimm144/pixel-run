@@ -681,16 +681,16 @@ export class Game implements GenHost, RenderHost {
     else if (hasPropeller) {
       // Slower drop even when not pressing, and even slower when pressing jump
       if (this.jumpHeld) {
-        g = this.vy > 0 ? 0.05 : 0.12;
+        g = this.vy > 0 ? 0.12 : 0.22;
       } else {
-        g = this.vy > 0 ? 0.16 : 0.26;
+        g = this.vy > 0 ? 0.32 : 0.40;
       }
     }
     else if (this.eventTimer > 0 && this.eventKind === 'desert' && this.padFlight <= 0) g = this.vy < 0 ? 0.3 : 0.48;
     else if (this.vy < 0) g = this.padFlight > 0 ? GRAV : this.jumpHeld ? GRAV_HOLD : GRAV;
     this.vy = Math.min(MAX_FALL + (this.diving ? 5 : 0), this.vy + g);
     if (hasPropeller) {
-      const maxPropFall = this.jumpHeld ? 1.2 : 2.6;
+      const maxPropFall = this.jumpHeld ? 2.2 : 4.6;
       if (this.vy > maxPropFall) this.vy = maxPropFall;
     }
 

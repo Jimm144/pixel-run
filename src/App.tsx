@@ -665,6 +665,8 @@ export function App() {
       meters: s.meters,
       coins: s.coins ?? 0,
       gems: s.gems,
+      kills: s.kills,
+      combo: s.combo,
       moonPhase: s.moonPhase,
     });
     setLifetimeStats(updatedStats);

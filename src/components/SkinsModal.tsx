@@ -168,19 +168,12 @@ export function SkinsModal({
 
   const handleEquip = useCallback(
     (id: SkinId) => {
-      const skin = SKINS[id];
-      const isHolActive = skin?.unlock.type === 'holiday' && isSkinAvailable(skin);
-      if (!unlockedSkins.includes(id) && !isHolActive) return;
-      if (isHolActive && !unlockedSkins.includes(id)) {
-        const nextUnlocked = [...unlockedSkins, id];
-        saveUnlockedSkins(nextUnlocked);
-        onUpdateUnlocked(nextUnlocked, stats);
-      }
+      if (!unlockedSkins.includes(id)) return;
       onEquip(id);
       saveEquippedSkin(id);
       sfx.play('ui');
     },
-    [unlockedSkins, onUpdateUnlocked, stats, onEquip],
+    [unlockedSkins, onEquip],
   );
 
   // Full 2D Keyboard & Gamepad Navigation
@@ -476,7 +469,7 @@ export function SkinsModal({
             ? 'border-[#ff70a6]/60 bg-[#33081e] text-[#ff70a6]'
             : 'border-[#453c60] bg-[#1c162e] text-[#6f5fa8]'
         }`}>
-          {active ? '🎉 AVAILABLE NOW!' : skin.unlock.desc}
+          {active ? `EVENT LIVE: ${skin.unlock.desc}` : skin.unlock.desc}
         </div>
       );
     }
@@ -597,7 +590,7 @@ export function SkinsModal({
                 <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#3ef2c8] bg-[#3ef2c8]/20 px-2 font-pixel text-[8.5px] md:text-[9px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f]">
                   EQUIPPED
                 </div>
-              ) : (isUnlocked || (selectedSkin.unlock.type === 'holiday' && isSkinAvailable(selectedSkin))) ? (
+              ) : isUnlocked ? (
                 <button
                   type="button"
                   onClick={() => handleEquip(selectedSkinId)}
@@ -643,8 +636,7 @@ export function SkinsModal({
             }
           >
             {filteredSkins.map((skin, idx) => {
-              const isHolActive = skin.unlock.type === 'holiday' && isSkinAvailable(skin);
-              const unlocked = unlockedSkins.includes(skin.id) || isHolActive;
+              const unlocked = unlockedSkins.includes(skin.id);
               const equipped = equippedSkin === skin.id;
               const isCardFocused = focusSection === 'grid' && focusedIndex === idx;
               const selected = selectedSkinId === skin.id;
