@@ -790,7 +790,7 @@ export function App() {
           }}
           onRestartHint={showRestartHint}
           onQuestProgress={handleQuestProgress}
-          modalOpen={showFeedbackModal || skinsModalOpen || !!unlockedSkinPopup}
+          modalOpen={showFeedbackModal || skinsModalOpen || !!unlockedSkinPopup || battleModalOpen}
         />
         {restartHint && (ui === 'playing' || ui === 'paused') && (
           <div className="pointer-events-none absolute inset-x-0 top-[36%] z-30 flex justify-center">

@@ -20,6 +20,11 @@ const PLAYER_COLORS = ['#7ef7ff', '#ff70a6', '#ffd166', '#a78bfa'];
 const RELAYS = [
   'wss://relay.damus.io',
   'wss://nos.lol',
+  'wss://relay.nostr.band',
+  'wss://nostr.wine',
+  'wss://eden.nostr.land',
+  'wss://relay.current.fyi',
+  'wss://purplerelay.com',
   'wss://relay.snort.social',
   'wss://relay.primal.net',
 ];
@@ -236,9 +241,11 @@ export class P2PManager {
         DISCOVERY_ROOM,
       );
 
+      const [sendRequest, getRequest] = this.discoveryRoom.makeAction('req_lobbies');
       const [, getLobby] = this.discoveryRoom.makeAction('public_lobby');
+
       getLobby((data: PublicLobbyInfo) => {
-        if (data && data.roomId && Date.now() - data.ts < 15000) {
+        if (data && data.roomId && Date.now() - data.ts < 20000) {
           this.publicLobbies.set(data.roomId, data);
           this.prunePublicLobbies();
           if (this.onPublicLobbiesUpdate) {
@@ -246,6 +253,12 @@ export class P2PManager {
           }
         }
       });
+
+      // Request immediate announcements from existing hosts
+      this.discoveryRoom.onPeerJoin(() => {
+        sendRequest({ ts: Date.now() });
+      });
+      sendRequest({ ts: Date.now() });
     } catch {}
   }
 
@@ -262,7 +275,7 @@ export class P2PManager {
   private prunePublicLobbies() {
     const now = Date.now();
     for (const [roomId, info] of this.publicLobbies.entries()) {
-      if (now - info.ts > 16000) {
+      if (now - info.ts > 20000) {
         this.publicLobbies.delete(roomId);
       }
     }
@@ -281,19 +294,31 @@ export class P2PManager {
       );
 
       const [sendLobby] = this.discoveryRoom.makeAction('public_lobby');
-      const announce = () => {
+      const [, getRequest] = this.discoveryRoom.makeAction('req_lobbies');
+
+      const broadcast = (targetPeerId?: string) => {
         if (!this.isPublic || this.state === 'playing' || !this.roomId) return;
-        sendLobby({
+        const payload = {
           roomId: this.roomId,
           hostName: this.localName,
           hostSkin: this.localSkin,
           playerCount: this.opponents.size + 1,
           maxPlayers: MAX_PLAYERS,
           ts: Date.now(),
-        });
+        };
+        sendLobby(payload, targetPeerId);
       };
-      announce();
-      this.discoveryAnnounceTimer = window.setInterval(announce, 4500);
+
+      // Respond immediately when a browser joins discovery or requests lobbies
+      getRequest((_, peerId: string) => {
+        broadcast(peerId);
+      });
+      this.discoveryRoom.onPeerJoin((peerId: string) => {
+        broadcast(peerId);
+      });
+
+      broadcast();
+      this.discoveryAnnounceTimer = window.setInterval(() => broadcast(), 3500);
     } catch {}
   }
 

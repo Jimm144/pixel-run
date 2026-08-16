@@ -390,23 +390,45 @@ export function BattleModal({
                       type="text"
                       value={inputCode}
                       onChange={(e) => setInputCode(e.target.value.toUpperCase())}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleJoinCode();
+                        }
+                      }}
+                      onKeyUp={(e) => e.stopPropagation()}
+                      onFocus={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
                       placeholder="CODE (E.G. R9K2)"
                       maxLength={8}
-                      className="flex-1 border border-[#ff4d6d]/60 bg-[#080312] px-2.5 py-1 text-center font-pixel text-[10px] text-[#ffffff] uppercase focus:border-[#3ef2c8] focus:outline-none"
+                      autoFocus
+                      className="flex-1 border border-[#ff4d6d]/60 bg-[#080312] px-2.5 py-1.5 text-center font-pixel text-[10px] text-[#ffffff] uppercase focus:border-[#3ef2c8] focus:outline-none"
                     />
                     <button
                       type="button"
                       onClick={() => handleJoinCode()}
-                      className="border border-[#3ef2c8] bg-[#3ef2c8] px-3 py-1 text-[8px] font-bold text-[#08040f] hover:bg-[#6ef5d6]"
+                      className="border border-[#3ef2c8] bg-[#3ef2c8] px-3 py-1.5 text-[8px] font-bold text-[#08040f] hover:bg-[#6ef5d6] active:scale-95"
                     >
                       JOIN
                     </button>
                   </div>
                 ) : (
-                  <div className="flex flex-col w-full max-h-28 overflow-y-auto gap-1 border border-[#ff4d6d]/20 bg-[#080312] p-1">
+                  <div className="flex flex-col w-full max-h-32 overflow-y-auto gap-1 border border-[#ff4d6d]/20 bg-[#080312] p-1">
+                    <div className="flex justify-between items-center px-1 pb-1 border-b border-[#ff4d6d]/20">
+                      <span className="text-[6px] text-[#a090c0]">DISCOVERABLE ROOMS</span>
+                      <button
+                        type="button"
+                        onClick={() => p2p.startBrowsingPublicLobbies()}
+                        className="text-[6px] text-[#3ef2c8] hover:underline"
+                      >
+                        REFRESH
+                      </button>
+                    </div>
                     {publicLobbies.length === 0 ? (
                       <div className="py-3 text-center text-[7px] text-[#6b5880]">
-                        NO PUBLIC ROOMS ACTIVE
+                        NO PUBLIC ROOMS ACTIVE (TOGGLE PUBLIC ON HOST TO BE SEEN)
                       </div>
                     ) : (
                       publicLobbies.map((lobby) => (
@@ -423,7 +445,7 @@ export function BattleModal({
                           <button
                             type="button"
                             onClick={() => handleJoinCode(lobby.roomId)}
-                            className="border border-[#3ef2c8] bg-[#3ef2c8]/20 px-2 py-0.5 text-[7px] text-[#3ef2c8] hover:bg-[#3ef2c8]/40"
+                            className="border border-[#3ef2c8] bg-[#3ef2c8]/20 px-2 py-0.5 text-[7px] text-[#3ef2c8] hover:bg-[#3ef2c8]/40 active:scale-95"
                           >
                             JOIN
                           </button>

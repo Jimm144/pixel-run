@@ -184,6 +184,18 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
+    const target = e.target as HTMLElement | null;
+    const isTyping =
+      target &&
+      (target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable ||
+        (target as any).type === 'text');
+
+    if (isTyping || modalOpenRef.current) {
+      return; // Do NOT intercept typing in input fields or shift focus
+    }
+
     document.body.classList.add('keyboard-active');
     const code = e.code;
     const g = gameRef.current;
@@ -217,7 +229,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
       }
       return;
     }
-    if (e.repeat || modalOpenRef.current) return;
+    if (e.repeat) return;
 
     if (u === 'start' || u === 'paused' || u === 'over') {
       if (code === 'ArrowDown' || code === 'KeyS') {
