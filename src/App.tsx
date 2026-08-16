@@ -330,12 +330,14 @@ export function App() {
   }, [equippedSkin]);
 
   const [swUpdate, setSwUpdate] = useState<ServiceWorkerRegistration | null>(null);
+  const swRegRef = useRef<ServiceWorkerRegistration | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
     const registerSW = async () => {
       try {
         const reg = await navigator.serviceWorker.register('./sw.js');
+        swRegRef.current = reg;
         reg.addEventListener('updatefound', () => {
           const newWorker = reg.installing;
           if (!newWorker) return;
@@ -350,8 +352,24 @@ export function App() {
         }
       } catch {}
     };
-    window.addEventListener('load', registerSW);
-    return () => window.removeEventListener('load', registerSW);
+
+    if (document.readyState === 'complete') {
+      registerSW();
+    } else {
+      window.addEventListener('load', registerSW);
+    }
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && 'serviceWorker' in navigator) {
+        swRegRef.current?.update().catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      window.removeEventListener('load', registerSW);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   const handleApplyUpdate = useCallback(() => {
@@ -360,6 +378,28 @@ export function App() {
     }
     window.location.reload();
   }, [swUpdate]);
+
+  const handleCheckUpdate = useCallback(async () => {
+    try {
+      if ('serviceWorker' in navigator) {
+        const reg = swRegRef.current || (await navigator.serviceWorker.getRegistration());
+        if (reg) {
+          await reg.update();
+          if (reg.waiting) {
+            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+            window.location.reload();
+            return;
+          }
+        }
+      }
+      triggerSkinToast('CHECKING FOR UPDATES...');
+      setTimeout(() => {
+        window.location.reload();
+      }, 800);
+    } catch {
+      window.location.reload();
+    }
+  }, [triggerSkinToast]);
 
   useEffect(() => {
     // Listen for pointer-capability changes (hybrid devices) instead of
@@ -722,6 +762,7 @@ export function App() {
             }}
             onExportSave={handleExportSave}
             onImportSave={handleImportSave}
+            onCheckUpdate={handleCheckUpdate}
           />
         )}
         {ui === 'paused' && (

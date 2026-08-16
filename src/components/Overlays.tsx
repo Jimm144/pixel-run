@@ -120,6 +120,7 @@ export function StartScreen({
   onOpenSkins,
   onExportSave,
   onImportSave,
+  onCheckUpdate,
 }: {
   best: number;
   lastRun: number;
@@ -137,6 +138,7 @@ export function StartScreen({
   onOpenSkins?: () => void;
   onExportSave?: () => void;
   onImportSave?: () => void;
+  onCheckUpdate?: () => void;
 }) {
   return (
     <div
@@ -291,6 +293,22 @@ export function StartScreen({
               >
                 <span>LOAD</span>
                 <PixelArrow dir="up" />
+              </button>
+            </>
+          )}
+          {onCheckUpdate && (
+            <>
+              <span className="text-[7px] text-[#332454]">|</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCheckUpdate();
+                }}
+                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[7px] text-[#3ef2c8]/70 transition-colors hover:text-[#3ef2c8] tablet:text-[9px]"
+              >
+                <span>UPDATE</span>
+                <span className="text-[8px]">↻</span>
               </button>
             </>
           )}

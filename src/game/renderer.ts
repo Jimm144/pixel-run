@@ -1914,39 +1914,38 @@ export class Renderer {
     }
     this.drawPowerUpHud();
 
-    // distance + gems (right) — mobile keeps the top-right corner clean
-    if (!mobile) {
-      if (this.hudM !== m) {
-        this.hudM = m;
-        this.hudMText = m + 'M';
-      }
-      const dtxt = this.hudMText;
-      drawText(c, dtxt, W - 6 - textWidth(dtxt, 2), 6, 2, this.g.zone.accent, '#150a24');
-
-      // Gems counter (y: 22) - shows gems collected in this run
-      if (this.hudGems !== this.g.runGems) {
-        this.hudGems = this.g.runGems;
-        this.hudGemsText = 'X' + pad(this.g.runGems, 2);
-      }
-      const gtxt = this.hudGemsText;
-      const gw = textWidth(gtxt, 1) + 10;
-      const gx0 = W - 6 - gw;
-      const gy = 22;
-
-      // Exact matching diamond jewel sprite
-      c.fillStyle = '#08121e';
-      c.fillRect(gx0, gy + 1, 6, 6);
-      c.fillRect(gx0 + 1, gy, 4, 8);
-      c.fillStyle = '#3ef2c8';
-      c.fillRect(gx0 + 1, gy + 1, 4, 6);
-      c.fillRect(gx0, gy + 2, 6, 4);
-      c.fillStyle = '#7ef7ff';
-      c.fillRect(gx0 + 1, gy + 1, 2, 2);
-      c.fillStyle = '#ffffff';
-      c.fillRect(gx0 + 1, gy + 2, 1, 1);
-
-      drawText(c, gtxt, gx0 + 9, 22, 1, '#3ef2c8', '#150a24');
+    // distance + gems (right) — rendered on desktop, tablet, and mobile
+    const rightMargin = mobile ? 38 : 6;
+    if (this.hudM !== m) {
+      this.hudM = m;
+      this.hudMText = m + 'M';
     }
+    const dtxt = this.hudMText;
+    drawText(c, dtxt, W - rightMargin - textWidth(dtxt, 2), 6, 2, this.g.zone.accent, '#150a24');
+
+    // Gems counter (y: 22) - shows gems collected in this run
+    if (this.hudGems !== this.g.runGems) {
+      this.hudGems = this.g.runGems;
+      this.hudGemsText = 'X' + pad(this.g.runGems, 2);
+    }
+    const gtxt = this.hudGemsText;
+    const gw = textWidth(gtxt, 1) + 10;
+    const gx0 = W - rightMargin - gw;
+    const gy = 22;
+
+    // Exact matching diamond jewel sprite
+    c.fillStyle = '#08121e';
+    c.fillRect(gx0, gy + 1, 6, 6);
+    c.fillRect(gx0 + 1, gy, 4, 8);
+    c.fillStyle = '#3ef2c8';
+    c.fillRect(gx0 + 1, gy + 1, 4, 6);
+    c.fillRect(gx0, gy + 2, 6, 4);
+    c.fillStyle = '#7ef7ff';
+    c.fillRect(gx0 + 1, gy + 1, 2, 2);
+    c.fillStyle = '#ffffff';
+    c.fillRect(gx0 + 1, gy + 2, 1, 1);
+
+    drawText(c, gtxt, gx0 + 9, 22, 1, '#3ef2c8', '#150a24');
 
     // combo — fixed layout, colour-only pulse (no size jitter). Mobile sits
     // it right-aligned, just below the touch pause button.
