@@ -168,12 +168,10 @@ class InputManager {
 
           if (this.swipeSequence[this.swipeKonamiIndex] === gesture) {
             this.swipeKonamiIndex++;
-            this.konamiIndex = this.swipeKonamiIndex;
-            // When all 8 directional swipes are completed, open mobile keyboard for 'B' and 'A'
             if (this.swipeKonamiIndex === this.swipeSequence.length) {
-              try {
-                this.hiddenInput?.focus();
-              } catch {}
+              this.triggerKonami();
+              this.swipeKonamiIndex = 0;
+              this.konamiIndex = 0;
             }
           } else {
             const matchesFirst = this.swipeSequence[0] === gesture;
@@ -203,10 +201,6 @@ class InputManager {
         this.triggerKonami();
         this.konamiIndex = 0;
         this.swipeKonamiIndex = 0;
-        if (this.hiddenInput) {
-          this.hiddenInput.value = '';
-          this.hiddenInput.blur();
-        }
       }
     } else {
       const first = this.keySequence[0];
@@ -219,7 +213,7 @@ class InputManager {
     }
   }
 
-  private triggerKonami() {
+  public triggerKonami() {
     this.konamiListeners.forEach((cb) => {
       try {
         cb();

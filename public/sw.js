@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pixel-run-v2';
+const CACHE_NAME = 'pixel-run-v3';
 
 // Install: precache the root page, font, and assets
 self.addEventListener('install', (event) => {
@@ -9,6 +9,9 @@ self.addEventListener('install', (event) => {
         './',
         'index.html',
         'preview.png',
+        'icon-192.png',
+        'icon-512.png',
+        'apple-touch-icon.png',
         'manifest.webmanifest',
         'https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap',
       ];
