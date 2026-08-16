@@ -22,26 +22,7 @@ export default defineConfig({
   },
   build: {
     target: 'es2022',
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        passes: 3,
-        drop_console: true,
-        drop_debugger: true,
-        pure_getters: true,
-        unsafe: true,
-        unsafe_arrows: true,
-        unsafe_comps: true,
-        unsafe_math: true,
-        unsafe_methods: true,
-      },
-      format: {
-        comments: false,
-      },
-      mangle: {
-        toplevel: true,
-      },
-    },
+    minify: 'esbuild',
     cssMinify: true,
     modulePreload: false,
     rollupOptions: {
