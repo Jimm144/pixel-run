@@ -305,6 +305,27 @@ export function drawPlayerSprite(
       f(-5, 3 - wy, 5, 3, tint('#4a0000'));
       f(-7, 1 - wy, 4, 3, tint('#8b0000'));
       f(-8, 0 - wy, 3, 2, tint('#ff3333'));
+    } else if (skinId === 'angel') {
+      // Celestial Archangel Wings (Multi-layered Feathered Spread)
+      const flap = air ? 0.35 : Math.sin(frame * 0.24) * 0.25;
+      const wy = Math.round(flap * 4);
+      // Top feather layer (pure white with silver sheen)
+      f(-7, 0 - wy, 6, 3, tint('#ffffff'));
+      f(-10, -2 - wy, 4, 3, tint('#ffffff'));
+      f(-11, -3 - wy, 3, 2, tint('#fffbeb'));
+      // Mid feather layer (soft celestial cream)
+      f(-8, 3 - wy, 8, 3, tint('#f1f5f9'));
+      f(-11, 0 - wy, 4, 3, tint('#f8fafc'));
+      // Lower feather tips with divine golden trim
+      f(-6, 6 - wy, 6, 2, tint('#ffd166'));
+      f(-9, 3 - wy, 4, 2, tint('#ffd166'));
+      f(-11, 2 - wy, 2, 2, tint('#f59e0b'));
+
+      // Flowing Celestial Golden Hair behind shoulders
+      f(-1, 0, 3, 6, tint('#ffd166'));
+      f(-2, 2, 3, 6, tint('#f59e0b'));
+      f(-1, 8, 2, 3, tint('#d97706'));
+      f(0, 1, 1, 9, '#fffbeb'); // golden shimmer strand
     } else if (skinId === 'pig') {
       f(-2, 7, 3, 2, tint('#d9688b'));
       f(-1, 6, 2, 2, tint('#d9688b'));
@@ -322,7 +343,24 @@ export function drawPlayerSprite(
     }
 
     // --- LEGS ---
-    if (diving) {
+    if (skinId === 'angel') {
+      // Golden Divine Greaves & Winged Sandals
+      if (diving) {
+        f(1, 10, 4, 4, tint('#ffd166'));
+        f(5, 9, 5, 3, tint('#ffd166'));
+      } else if (air) {
+        f(2, 10, 3, 4, tint('#ffd166'));
+        f(6, 9, 3, 4, tint('#ffd166'));
+        f(1, 10, 1, 2, '#fffbeb');
+        f(5, 9, 1, 2, '#fffbeb');
+      } else {
+        const legs = PLAYER_RUN_LEGS[run >= 0 ? run : 0];
+        f(legs[0], legs[1], legs[2], legs[3], tint('#ffd166'));
+        f(legs[4], legs[5], legs[6], legs[7], tint('#ffd166'));
+        f(legs[0] + 1, legs[1], 1, 2, tint('#d97706'));
+        f(legs[4] + 1, legs[5], 1, 2, tint('#d97706'));
+      }
+    } else if (diving) {
       f(1, 10, 4, 4, BOOT);
       f(5, 9, 5, 3, BOOT);
     } else if (air) {
@@ -335,7 +373,15 @@ export function drawPlayerSprite(
     }
 
     // --- BODY ---
-    if (skinId === 'zeus') {
+    if (skinId === 'angel') {
+      // Pristine Heavenly White Robes with Golden Sash & Divine Belt
+      f(2, 5, 7, 6, tint('#ffffff')); // pure white angelic tunic
+      f(4, 5, 2, 6, tint('#ffd166')); // diagonal golden sash across chest
+      f(3, 7, 4, 1, tint('#f59e0b')); // golden sash shine
+      f(2, 10, 7, 1, tint('#f1f5f9')); // robe hem
+      f(2, 9, 7, 1, tint('#ffd166')); // golden divine belt
+      f(5, 5, 2, 2, tint('#fff5ea')); // celestial neckline
+    } else if (skinId === 'zeus') {
       // Royal White Toga with Golden Sash
       f(2, 5, 7, 6, tint('#ffffff'));
       f(4, 5, 2, 6, tint('#ffd166')); // golden sash across chest
@@ -380,6 +426,17 @@ export function drawPlayerSprite(
       f(2, 7, 7, 1, SUIT);
       f(2, 9, 7, 1, SUIT);
       f(4, 5, 2, 6, SUIT);
+    } else if (skinId === 'safe_bob') {
+      // Safe Bob: Heavy armored vault steel chestplate with golden combination dial
+      f(2, 5, 7, 6, SUIT);
+      f(2, 9, 7, 2, SUIT_D);
+      // Golden vault combination lock dial in center
+      f(4, 6, 3, 3, tint('#ffd166'));
+      f(5, 7, 1, 1, '#1e293b'); // center dial notch
+      f(3, 5, 1, 1, '#94a3b8'); // steel rivet top-left
+      f(7, 5, 1, 1, '#94a3b8'); // steel rivet top-right
+      f(3, 9, 1, 1, '#94a3b8'); // steel rivet bottom-left
+      f(7, 9, 1, 1, '#94a3b8'); // steel rivet bottom-right
     } else if (skinId === 'panda') {
       f(2, 5, 7, 6, SUIT);
       f(4, 6, 4, 4, '#ffffff');
@@ -390,12 +447,12 @@ export function drawPlayerSprite(
 
     // --- ARM ---
     if (air) {
-      f(6, 3, 2, 3, skinId === 'zeus' ? SKIN : skinId === 'mr_soup' ? tint('#dee2e6') : skinId === 'fmhy' ? tint('#080811') : SUIT_D);
-      f(8, 3, 2, 2, skinId === 'zeus' ? tint('#ffd166') : skinId === 'fmhy' ? '#ffffff' : SKIN);
+      f(6, 3, 2, 3, skinId === 'zeus' || skinId === 'angel' ? SKIN : skinId === 'mr_soup' ? tint('#dee2e6') : skinId === 'fmhy' ? tint('#080811') : SUIT_D);
+      f(8, 3, 2, 2, skinId === 'zeus' || skinId === 'angel' ? tint('#ffd166') : skinId === 'fmhy' ? '#ffffff' : SKIN);
     } else {
       const armX = [5, 6, 7, 6][run >= 0 ? run : 0];
-      f(armX, 6, 2, 3, skinId === 'zeus' ? SKIN : skinId === 'mr_soup' ? tint('#dee2e6') : skinId === 'fmhy' ? tint('#080811') : SUIT_D);
-      f(armX + 2, 6, 2, 2, skinId === 'zeus' ? tint('#ffd166') : skinId === 'fmhy' ? '#ffffff' : SKIN);
+      f(armX, 6, 2, 3, skinId === 'zeus' || skinId === 'angel' ? SKIN : skinId === 'mr_soup' ? tint('#dee2e6') : skinId === 'fmhy' ? tint('#080811') : SUIT_D);
+      f(armX + 2, 6, 2, 2, skinId === 'zeus' || skinId === 'angel' ? tint('#ffd166') : skinId === 'fmhy' ? '#ffffff' : SKIN);
     }
 
     // --- HEAD & FACE ---
@@ -510,6 +567,33 @@ export function drawPlayerSprite(
       f(2, 0, 7, 6, SUIT);
       f(5, 2, 4, 4, SKIN);
       f(7, 2, 2, 2, '#ffd166');
+    } else if (skinId === 'angel') {
+      // Floating Radiant Golden Halo with Divine Shimmer
+      const haloBob = Math.round(Math.sin(frame * 0.2) * 1.5);
+      f(1, -5 + haloBob, 9, 2, '#ffd166'); // halo ring body
+      f(2, -6 + haloBob, 7, 1, '#fef08a'); // top radiant crest
+      f(4, -6 + haloBob, 3, 1, '#ffffff'); // bright gleam spark
+      f(3, -4 + haloBob, 5, 1, '#d97706'); // inner depth
+
+      // Celestial Platinum-Golden Flowing Hair (Crown & Bangs)
+      f(1, -2, 8, 3, tint('#ffd166'));
+      f(2, -3, 6, 2, tint('#fef08a'));
+      f(1, 0, 2, 5, tint('#f59e0b')); // left hair cascade
+      f(8, 0, 2, 4, tint('#f59e0b')); // right hair lock
+
+      // Ethereal Face
+      f(3, 0, 6, 5, tint('#fff5ea'));
+      // Glowing Heavenly Golden Eyes with Divine Spark
+      f(7, 2, 2, 2, '#f59e0b');
+      f(7, 2, 1, 1, '#ffd166');
+      f(8, 2, 1, 1, '#ffffff');
+
+      // Floating Divine Light Particles (Twinkling Holy Aura)
+      const pT = frame * 0.25;
+      const px1 = Math.round(Math.sin(pT) * 4);
+      const py1 = Math.round(Math.cos(pT) * 3);
+      f(9 + px1, 4 + py1, 1, 1, '#fef08a');
+      f(-3 - px1, 2 - py1, 1, 1, '#ffffff');
     } else if (skinId === 'sun_man') {
       f(0, -3, 2, 3, tint('#ffd166'));
       f(4, -4, 3, 4, tint('#ff7a45'));
@@ -526,6 +610,15 @@ export function drawPlayerSprite(
       f(5, 2, 4, 4, SKIN);
       f(4, 2, 5, 2, tint('#0d0d0d'));
       f(7, 2, 1, 1, '#ffffff');
+    } else if (skinId === 'safe_bob') {
+      // Steel Vault Helmet with golden lock badge & Bob face
+      f(1, -2, 8, 3, tint('#64748b')); // helmet crown
+      f(2, -3, 6, 2, tint('#94a3b8')); // helmet highlight crest
+      f(4, -3, 2, 2, '#ffd166');       // golden lock badge on helmet
+      f(2, 0, 7, 6, SUIT);
+      f(5, 2, 4, 4, SKIN);
+      f(2, 0, 8, 2, SUIT_D);
+      f(7, 3, 1, 2, '#20122e');        // classic eye
     } else {
       // Classic Bob / Bobette / Cob / Mob
       f(2, 0, 7, 6, SUIT);
@@ -535,7 +628,7 @@ export function drawPlayerSprite(
     }
 
     // --- SCARF / COLLAR (Rendered on front collar, does NOT overlap hair behind) ---
-    if (skinId !== 'panda' && skinId !== 'pig' && skinId !== 'mr_soup') {
+    if (skinId !== 'panda' && skinId !== 'pig' && skinId !== 'mr_soup' && skinId !== 'angel') {
       f(1, 5, 3, 2, SCARF);
     }
   }

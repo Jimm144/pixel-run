@@ -127,8 +127,8 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       const portrait = r.height > r.width;
       const w = portrait ? 240 : BASE_VW;
       const ratio = portrait
-        ? Math.min(2.2, Math.max(1.45, r.height / r.width))
-        : Math.min(1.15, Math.max(0.45, r.height / r.width));
+        ? Math.min(2.38, Math.max(1.15, r.height / r.width))
+        : Math.min(1.35, Math.max(0.42, r.height / r.width));
       const h = Math.round(w * ratio);
       const sizeChanged = w !== VW || h !== VH;
       if (sizeChanged) {
@@ -223,14 +223,14 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
               type="button"
               aria-label="Dive"
               style={{ borderColor: '#ffd166', color: '#ffd166', opacity: counting ? 0.35 : 0.75 }}
-              className="relative flex h-16 w-16 items-center justify-center border-2 bg-[#140a26]/80 shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] tablet:h-24 tablet:w-24"
+              className="relative flex h-16 w-16 items-center justify-center border-2 bg-[#140a26]/80 shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] tablet:h-20 tablet:w-20"
               {...diveHandlers}
             >
               <span className="pointer-events-none absolute -top-[4px] -left-[4px] h-2 w-2 bg-[#ffd166]" />
               <span className="pointer-events-none absolute -top-[4px] -right-[4px] h-2 w-2 bg-[#ffd166]" />
               <span className="pointer-events-none absolute -bottom-[4px] -left-[4px] h-2 w-2 bg-[#ffd166]" />
               <span className="pointer-events-none absolute -bottom-[4px] -right-[4px] h-2 w-2 bg-[#ffd166]" />
-              <svg aria-hidden="true" viewBox="0 0 32 32" className="h-9 w-9 tablet:h-14 tablet:w-14" fill="currentColor" shapeRendering="crispEdges">
+              <svg aria-hidden="true" viewBox="0 0 32 32" className="h-9 w-9 tablet:h-12 tablet:w-12" fill="currentColor" shapeRendering="crispEdges">
                 <path d="M12 4h8v14h7L16 29 5 18h7V4z" />
               </svg>
             </button>

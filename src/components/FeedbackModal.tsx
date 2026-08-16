@@ -133,7 +133,7 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
 
   return (
     <div
-      className="fixed bottom-3 left-1/2 z-40 w-full max-w-[300px] -translate-x-1/2 p-2 pointer-events-auto"
+      className="fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-1/2 z-40 w-[min(calc(100vw-24px),340px)] -translate-x-1/2 pointer-events-auto"
       onPointerDown={(e) => e.stopPropagation()}
       onPointerUp={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
@@ -166,7 +166,7 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
                 onClick={handlePromptYes}
                 className={`flex-1 border-2 py-1.5 text-center font-pixel text-[9px] transition-all active:translate-x-[1px] active:translate-y-[1px] ${
                   focusIndex === 0
-                    ? 'border-[#08040f] bg-[#3ef2c8] text-[#08040f] shadow-[2px_2px_0_#ffffff]'
+                    ? 'border-[#08040f] bg-[#3ef2c8] text-[#08040f] focus-ring'
                     : 'border-[#08040f] bg-[#3ef2c8] text-[#08040f] shadow-[1px_1px_0_#08040f] hover:bg-[#7ef7ff]'
                 }`}
               >
@@ -178,7 +178,7 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
                 onClick={handlePromptNo}
                 className={`flex-1 border-2 py-1.5 text-center font-pixel text-[9px] transition-all active:translate-x-[1px] active:translate-y-[1px] ${
                   focusIndex === 1
-                    ? 'border-[#08040f] bg-[#ff4d6d] text-white shadow-[2px_2px_0_#ffffff]'
+                    ? 'border-[#08040f] bg-[#ff4d6d] text-white focus-ring'
                     : 'border-[#08040f] bg-[#ff4d6d] text-white shadow-[1px_1px_0_#08040f] hover:bg-[#ff7088]'
                 }`}
               >
@@ -207,7 +207,7 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
                 onClick={handleStarYes}
                 className={`flex-1 border-2 py-1.5 text-center font-pixel text-[9px] transition-all active:translate-x-[1px] active:translate-y-[1px] ${
                   focusIndex === 0
-                    ? 'border-[#08040f] bg-[#3ef2c8] text-[#08040f] shadow-[2px_2px_0_#ffffff]'
+                    ? 'border-[#08040f] bg-[#3ef2c8] text-[#08040f] focus-ring'
                     : 'border-[#08040f] bg-[#3ef2c8] text-[#08040f] shadow-[1px_1px_0_#08040f] hover:bg-[#7ef7ff]'
                 }`}
               >
@@ -219,7 +219,7 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
                 onClick={handleStarNo}
                 className={`flex-1 border-2 py-1.5 text-center font-pixel text-[9px] transition-all active:translate-x-[1px] active:translate-y-[1px] ${
                   focusIndex === 1
-                    ? 'border-[#08040f] bg-[#59427e] text-white shadow-[2px_2px_0_#ffffff]'
+                    ? 'border-[#08040f] bg-[#59427e] text-white focus-ring'
                     : 'border-[#08040f] bg-[#59427e] text-white shadow-[1px_1px_0_#08040f] hover:bg-[#786b99]'
                 }`}
               >
@@ -232,7 +232,7 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
               <label
                 onClick={(e) => e.stopPropagation()}
                 className={`flex cursor-pointer items-center gap-1.5 select-none font-pixel text-[8px] transition-colors tablet:text-[9px] ${
-                  focusIndex === 2 ? 'text-[#3ef2c8]' : 'text-[#a094c4] hover:text-[#3ef2c8]'
+                  focusIndex === 2 ? 'text-[#3ef2c8] focus-ring px-1.5 py-0.5' : 'text-[#a094c4] hover:text-[#3ef2c8]'
                 }`}
               >
                 <input

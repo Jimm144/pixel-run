@@ -37,6 +37,55 @@ function ControlHint({ kind, keys, danger = false }: { kind: ControlIconKind; ke
   );
 }
 
+function PixelArrow({ dir, className = '' }: { dir: 'up' | 'down' | 'left' | 'right'; className?: string }) {
+  if (dir === 'up') {
+    return (
+      <svg
+        viewBox="0 0 7 7"
+        className={`inline-block h-[7px] w-[7px] shrink-0 align-middle fill-current ${className}`}
+        shapeRendering="crispEdges"
+        aria-hidden="true"
+      >
+        <path d="M3 0h1v1H3V0z M2 1h3v1H2V1z M1 2h5v1H1V2z M0 3h7v1H0V3z M2 4h3v3H2V4z" />
+      </svg>
+    );
+  }
+  if (dir === 'down') {
+    return (
+      <svg
+        viewBox="0 0 7 7"
+        className={`inline-block h-[7px] w-[7px] shrink-0 align-middle fill-current ${className}`}
+        shapeRendering="crispEdges"
+        aria-hidden="true"
+      >
+        <path d="M2 0h3v3H2V0z M0 3h7v1H0V3z M1 4h5v1H1V4z M2 5h3v1H2V5z M3 6h1v1H3V6z" />
+      </svg>
+    );
+  }
+  if (dir === 'left') {
+    return (
+      <svg
+        viewBox="0 0 7 7"
+        className={`inline-block h-[7px] w-[7px] shrink-0 align-middle fill-current ${className}`}
+        shapeRendering="crispEdges"
+        aria-hidden="true"
+      >
+        <path d="M0 3h1v1H0V3z M1 2h1v3H1V2z M2 1h1v5H2V1z M3 0h1v7H3V0z M4 2h3v3H4V2z" />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      viewBox="0 0 7 7"
+      className={`inline-block h-[7px] w-[7px] shrink-0 align-middle fill-current ${className}`}
+      shapeRendering="crispEdges"
+      aria-hidden="true"
+    >
+      <path d="M6 3h1v1H6V3z M5 2h1v3H5V2z M4 1h1v5H4V1z M3 0h1v7H3V0z M0 2h3v3H0V2z" />
+    </svg>
+  );
+}
+
 function PlayIcon({ className = 'h-[16px] w-[16px]' }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="currentColor">
@@ -69,6 +118,8 @@ export function StartScreen({
   questOnDayRollover,
   questOnShare,
   onOpenSkins,
+  onExportSave,
+  onImportSave,
 }: {
   best: number;
   lastRun: number;
@@ -84,14 +135,16 @@ export function StartScreen({
   questOnDayRollover?: () => void;
   questOnShare?: () => void;
   onOpenSkins?: () => void;
+  onExportSave?: () => void;
+  onImportSave?: () => void;
 }) {
   return (
     <div
-      className="absolute inset-0 z-10 flex cursor-default items-start justify-center overflow-y-auto bg-[#08040f]/88 p-4"
+      className="absolute inset-0 z-10 flex cursor-default items-start justify-center overflow-y-auto bg-[#08040f]/88 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
     >
-      <div className="my-auto flex w-full max-w-[420px] flex-col items-center gap-3 tablet:max-w-[800px]">
+      <div className="my-auto flex w-full max-w-[420px] flex-col items-center gap-3 tablet:max-w-[500px]">
         <div className="text-center">
-          <h1 className="font-pixel text-[26px] leading-none drop-shadow-[0_4px_0_#08040f] sm:text-[34px] tablet:text-[48px]">
+          <h1 className="font-pixel text-[26px] leading-none drop-shadow-[0_4px_0_#08040f] sm:text-[34px] tablet:text-[44px]">
             <span className="animate-title block text-[#3ef2c8]">PIXEL</span>
             <span className="animate-title-2 block text-[#ff4d6d]">RUN</span>
           </h1>
@@ -128,7 +181,7 @@ export function StartScreen({
           </div>
         </Panel>
         <DailyQuestPanel quests={quests} record={questRecord} run={questRun} compact decorated={false} onDayRollover={questOnDayRollover} onShare={questOnShare} />
-        <div className="flex w-full max-w-[420px] gap-2 tablet:max-w-[800px]">
+        <div className="flex w-full max-w-[420px] gap-2 tablet:max-w-[500px]">
           <button
             onClick={(e) => { e.stopPropagation(); onToggleMusic(); }}
             aria-pressed={musicOn}
@@ -181,34 +234,67 @@ export function StartScreen({
             {sfxOn ? 'SFX ON' : 'SFX OFF'}
           </button>
         </div>
-        <div className="flex w-full min-w-[280px] max-w-[480px] items-stretch gap-2 tablet:min-w-[480px]">
-          <span className="flex flex-[3]" onClick={(e) => e.stopPropagation()}>
-            <PixelButton onClick={onStart} className="flex h-full w-full items-center justify-center gap-3 py-3.5 text-[11px] tablet:py-4 tablet:text-[14px]">
-              <PlayIcon />
-              <span>START RUN</span>
-            </PixelButton>
-          </span>
+        <div className="flex w-full max-w-[420px] items-stretch gap-2 tablet:max-w-[500px]">
+          <PixelButton
+            onClick={onStart}
+            className="flex flex-[3] items-center justify-center gap-3 py-3.5 text-[11px] tablet:py-4 tablet:text-[14px]"
+          >
+            <PlayIcon />
+            <span>START RUN</span>
+          </PixelButton>
           {onOpenSkins && (
-            <span className="flex flex-1" onClick={(e) => e.stopPropagation()}>
-              <PixelButton
-                variant="ghost"
-                onClick={onOpenSkins}
-                className="flex h-full w-full items-center justify-center border-[#3ef2c8]/60 bg-[#0d2822]/80 py-3.5 text-[11px] text-[#3ef2c8] hover:bg-[#165044] hover:text-[#7ef7ff] tablet:py-4 tablet:text-[13px]"
-              >
-                SKINS
-              </PixelButton>
-            </span>
+            <PixelButton
+              variant="ghost"
+              onClick={onOpenSkins}
+              className="flex flex-1 items-center justify-center py-3.5 text-[11px] tablet:py-4 tablet:text-[13px]"
+            >
+              SKINS
+            </PixelButton>
           )}
         </div>
-        <a
-          href="https://github.com/Jimm144/pixel-run"
-          target="_blank"
-          rel="noreferrer noopener"
-          onClick={(e) => e.stopPropagation()}
-          className="font-pixel text-[7px] text-[#5c4f8e] transition-colors hover:text-[#9d8fd6] tablet:text-[9px]"
-        >
-          GITHUB
-        </a>
+        <div className="flex items-center gap-3">
+          <a
+            href="https://github.com/Jimm144/pixel-run"
+            target="_blank"
+            rel="noreferrer noopener"
+            onClick={(e) => e.stopPropagation()}
+            className="font-pixel text-[7px] text-[#5c4f8e] transition-colors hover:text-[#9d8fd6] tablet:text-[9px]"
+          >
+            GITHUB
+          </a>
+          {onExportSave && (
+            <>
+              <span className="text-[7px] text-[#332454]">|</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onExportSave();
+                }}
+                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[7px] text-[#ffd166]/70 transition-colors hover:text-[#ffd166] tablet:text-[9px]"
+              >
+                <span>SAVE</span>
+                <PixelArrow dir="down" />
+              </button>
+            </>
+          )}
+          {onImportSave && (
+            <>
+              <span className="text-[7px] text-[#332454]">|</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onImportSave();
+                }}
+                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[7px] text-[#c98cff]/70 transition-colors hover:text-[#c98cff] tablet:text-[9px]"
+              >
+                <span>LOAD</span>
+                <PixelArrow dir="up" />
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -316,7 +402,7 @@ export function PauseScreen({
   const handleMenu = onMenu ?? onQuit ?? (() => {});
 
   return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-[#08040f]/80 p-3 [@media(max-height:640px)]:items-end [@media(max-height:640px)]:pb-8">
+    <div className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-[#08040f]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] [@media(max-height:640px)]:items-end [@media(max-height:640px)]:pb-8">
       <Panel className="w-full max-w-[300px] p-4 tablet:max-w-[420px] tablet:p-6">
         <h2 className="mb-3 text-center font-pixel text-[16px] text-[#3ef2c8] tablet:mb-4 tablet:text-[18px]">PAUSED</h2>
         <div className="mb-3 grid grid-cols-2 gap-2 tablet:mb-4 tablet:gap-3">
@@ -368,7 +454,7 @@ export function GameOverScreen({
   onRestart,
   onMenu,
   onShare,
-  touch,
+  touch: _touch,
 }: {
   stats: Stats;
   best: number;
@@ -379,9 +465,9 @@ export function GameOverScreen({
   touch: boolean;
 }) {
   return (
-    <div className="absolute inset-0 z-10 flex items-start justify-center overflow-y-auto bg-[#08040f]/80 p-3">
-      <div className="my-auto flex w-full max-w-[380px] flex-col items-center gap-3 tablet:max-w-[800px]">
-        <h2 className="animate-shake-in font-pixel text-[22px] text-[#ff4d6d] drop-shadow-[0_4px_0_#08040f] tablet:text-[30px]">
+    <div className="absolute inset-0 z-10 flex items-start justify-center overflow-y-auto bg-[#08040f]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]">
+      <div className="my-auto flex w-full max-w-[380px] flex-col items-center gap-3 tablet:max-w-[460px]">
+        <h2 className="animate-shake-in font-pixel text-[22px] text-[#ff4d6d] drop-shadow-[0_4px_0_#08040f] tablet:text-[28px]">
           WASTED
         </h2>
         <Panel className="w-full">
@@ -389,7 +475,7 @@ export function GameOverScreen({
             <p className="font-pixel text-[7px] text-[#6f5fa8] tablet:text-[9px]">
               {newBest ? 'NEW PERSONAL BEST' : 'FINAL SCORE'}
             </p>
-            <p className="font-pixel text-[24px] text-[#ffd166] drop-shadow-[0_3px_0_#08040f] tablet:text-[34px]">
+            <p className="font-pixel text-[24px] text-[#ffd166] drop-shadow-[0_3px_0_#08040f] tablet:text-[32px]">
               {pad(stats.score, 6)}
             </p>
             {!newBest && (
@@ -406,32 +492,27 @@ export function GameOverScreen({
             <Stat label="COMBO" value={'X' + stats.combo} color="#c98cff" />
           </div>
         </Panel>
-        <div className="flex w-full max-w-[380px] flex-col items-center gap-2 tablet:max-w-[800px]">
-          {newBest && onShare ? (
-            <div className="flex w-full gap-2">
-              <PixelButton onClick={onRestart} className="flex flex-[3] items-center justify-center py-2.5 tablet:py-3 tablet:text-[13px]">
-                <RetryIcon className="mr-1.5 inline-block h-[15px] w-[15px] align-[-2px] tablet:h-[18px] tablet:w-[18px]" />
-                RETRY
-              </PixelButton>
-              <PixelButton
-                variant="ghost"
-                onClick={onShare}
-                small
-                className="flex flex-1 items-center justify-center px-2 py-2.5 border-[#ffd166]/70 bg-[#ffd166]/10 text-[#ffd166] hover:bg-[#ffd166]/20 hover:text-[#fff4b8] hover:border-[#ffd166] tablet:py-3 tablet:text-[10px]"
-              >
-                <ShareIcon className="mr-1.5 inline-block h-[12px] w-[12px] align-[-2px] tablet:h-[15px] tablet:w-[15px]" />
-                SHARE
-              </PixelButton>
-            </div>
-          ) : (
-            <PixelButton onClick={onRestart} className="w-full flex items-center justify-center py-3 tablet:py-3.5 tablet:text-[13px]">
+        <div className="flex w-full max-w-[380px] flex-col items-center gap-2 tablet:max-w-[460px]">
+          <div className="flex w-full gap-2">
+            <PixelButton onClick={onRestart} className="flex flex-[2] items-center justify-center py-3 text-[11px] tablet:py-3.5 tablet:text-[13px]">
               <RetryIcon className="mr-2 inline-block h-[16px] w-[16px] align-[-3px] tablet:h-[20px] tablet:w-[20px]" />
-              {touch ? 'TAP TO RETRY' : 'RETRY'}
+              RETRY
+            </PixelButton>
+            <PixelButton variant="ghost" onClick={onMenu} className="flex flex-1 items-center justify-center py-3 text-[11px] tablet:py-3.5 tablet:text-[13px]">
+              MENU
+            </PixelButton>
+          </div>
+          {newBest && onShare && (
+            <PixelButton
+              variant="ghost"
+              onClick={onShare}
+              small
+              className="w-full flex items-center justify-center py-2.5 border-[#ffd166]/70 bg-[#ffd166]/10 text-[#ffd166] hover:bg-[#ffd166]/20 hover:text-[#fff4b8] hover:border-[#ffd166] tablet:py-3 tablet:text-[10px]"
+            >
+              <ShareIcon className="mr-1.5 inline-block h-[12px] w-[12px] align-[-2px] tablet:h-[15px] tablet:w-[15px]" />
+              SHARE SCORE
             </PixelButton>
           )}
-          <PixelButton variant="ghost" onClick={onMenu} small className="tablet:py-3 tablet:text-[10px]">
-            MAIN MENU
-          </PixelButton>
         </div>
       </div>
     </div>

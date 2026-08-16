@@ -144,7 +144,7 @@ export function DailyQuestPanel({ quests, record, run, compact = false, announce
 
 export function DailyQuestAnnouncement({ quests, record, run, onDayRollover, onShare }: Omit<QuestPanelProps, 'compact' | 'announcement'>) {
   return (
-    <div className="animate-quest-announcement pointer-events-none absolute top-3 left-1/2 z-30 w-[min(94vw,720px)] -translate-x-1/2 opacity-80">
+    <div className="animate-quest-announcement pointer-events-none absolute top-3 left-1/2 z-30 w-[min(92vw,500px)] -translate-x-1/2 opacity-80">
       <DailyQuestPanel quests={quests} record={record} run={run} compact announcement decorated={false} onDayRollover={onDayRollover} onShare={onShare} />
     </div>
   );

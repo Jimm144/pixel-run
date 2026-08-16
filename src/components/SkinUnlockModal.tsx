@@ -15,13 +15,13 @@ export function SkinUnlockModal({ skinId, onEquip, onClose }: SkinUnlockModalPro
   const skin = SKINS[skinId] || SKINS.bob;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animRef = useRef<number>(0);
-  const tierColor = TIER_COLORS[skin.tier]?.text || '#ffd166';
+  const tierTheme = TIER_COLORS[skin.tier] || TIER_COLORS.common;
 
   useEffect(() => {
     sfx.play('gem');
   }, []);
 
-  // Live Canvas Sprite Animation (4x scale)
+  // Live Canvas Sprite Animation
   useEffect(() => {
     const cv = canvasRef.current;
     if (!cv) return;
@@ -94,34 +94,26 @@ export function SkinUnlockModal({ skinId, onEquip, onClose }: SkinUnlockModalPro
       role="dialog"
       aria-modal="true"
       aria-labelledby="skin-unlock-title"
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-[#08040f]/85 p-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#08040f]/90 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === e.currentTarget) handleClose();
       }}
     >
       <div
-        className="relative flex w-full max-w-[340px] flex-col items-center border-2 bg-[#120824] p-5 text-center font-pixel shadow-[0_0_30px_rgba(0,0,0,0.8)]"
-        style={{ borderColor: tierColor }}
+        className="relative flex w-full max-w-[340px] flex-col items-center border-4 bg-[#0d0619] p-5 text-center font-pixel text-white shadow-[0_0_0_4px_#08040f,0_0_35px_rgba(62,242,200,0.25)]"
+        style={{ borderColor: tierTheme.border }}
       >
-        {/* Glowing Header Banner */}
-        <div className="mb-3 flex items-center gap-1.5 text-[9px] uppercase tracking-wider tablet:text-[11px]" style={{ color: tierColor }}>
-          <span>★</span>
-          <span id="skin-unlock-title" className="drop-shadow-[0_0_8px_rgba(255,209,102,0.6)]">
-            NEW SKIN UNLOCKED!
-          </span>
-          <span>★</span>
-        </div>
+        {/* Header Title */}
+        <h3
+          id="skin-unlock-title"
+          className="mb-3 text-[10px] tracking-wider uppercase drop-shadow-[0_2px_0_#08040f] sm:text-[11px]"
+          style={{ color: tierTheme.text }}
+        >
+          NEW SKIN UNLOCKED
+        </h3>
 
         {/* Sprite Preview Frame */}
-        <div
-          className="relative mb-4 flex h-28 w-28 items-center justify-center border-2 bg-[#090314] shadow-inner"
-          style={{ borderColor: `${tierColor}88` }}
-        >
-          {/* Radial light spotlight */}
-          <div
-            className="pointer-events-none absolute inset-0 opacity-20"
-            style={{ background: `radial-gradient(circle, ${tierColor} 0%, transparent 70%)` }}
-          />
+        <div className="relative mb-3 flex h-28 w-28 items-center justify-center border-2 border-[#251842] bg-[#120722] p-2.5 shadow-[2px_2px_0_#08040f]">
           <canvas
             ref={canvasRef}
             width={112}
@@ -131,20 +123,24 @@ export function SkinUnlockModal({ skinId, onEquip, onClose }: SkinUnlockModalPro
         </div>
 
         {/* Skin Name */}
-        <h2 className="text-[14px] uppercase tracking-wide text-[#ffffff] drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] tablet:text-[16px]">
+        <h2 className="text-[14px] uppercase tracking-wide text-white drop-shadow-[0_2px_0_#08040f] sm:text-[16px]">
           {skin.name}
         </h2>
 
         {/* Tier Badge */}
-        <div
-          className="mt-1 mb-2 inline-block border px-2 py-0.5 text-[7px] uppercase tracking-wider font-bold"
-          style={{ borderColor: tierColor, color: tierColor, backgroundColor: `${tierColor}18` }}
+        <span
+          className="mt-1.5 mb-2 inline-flex min-h-[16px] items-center justify-center border px-2 font-pixel text-[7px] leading-none uppercase whitespace-nowrap sm:min-h-[18px] sm:text-[8px]"
+          style={{
+            color: tierTheme.text,
+            borderColor: tierTheme.border,
+            backgroundColor: tierTheme.bg,
+          }}
         >
-          {skin.tier}
-        </div>
+          <span className="relative top-px">{skin.tier}</span>
+        </span>
 
         {/* Unlock Requirement Info */}
-        <p className="mb-5 text-[8px] text-[#9d8fd6] tablet:text-[9px]">
+        <p className="mb-4 text-[7.5px] text-[#6f5fa8] sm:text-[8.5px]">
           {skin.unlock.desc || 'UNLOCKED'}
         </p>
 
@@ -152,15 +148,14 @@ export function SkinUnlockModal({ skinId, onEquip, onClose }: SkinUnlockModalPro
         <div className="flex w-full flex-col gap-2">
           <PixelButton
             onClick={handleEquip}
-            className="w-full py-2.5 text-[10px] text-[#08040f] tablet:text-[12px]"
-            style={{ backgroundColor: tierColor, borderColor: tierColor }}
+            className="w-full py-3 text-[10px] sm:text-[11px]"
           >
-            ⚡ EQUIP NOW
+            EQUIP
           </PixelButton>
           <PixelButton
             variant="ghost"
             onClick={handleClose}
-            className="w-full py-2 text-[8px] text-[#9d8fd6] hover:text-[#ffffff] tablet:text-[9px]"
+            className="w-full py-2.5 text-[9px] text-[#6f5fa8] hover:text-white sm:text-[10px]"
           >
             LATER
           </PixelButton>

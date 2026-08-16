@@ -90,10 +90,25 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
     });
 
     if (focusable.length === 0) return;
+    document.body.classList.add('gamepad-active');
 
     const active = document.activeElement as HTMLElement | null;
     if (!active || !focusable.includes(active)) {
-      focusable[0]?.focus();
+      const u = uiRef.current;
+      let target: HTMLElement | null = null;
+      if (u === 'start') {
+        target = focusable.find((el) => el.textContent?.includes('START RUN') || el.textContent?.includes('START')) || null;
+      } else if (u === 'paused') {
+        target = focusable.find((el) => el.textContent?.includes('RESUME')) || null;
+      } else if (u === 'over') {
+        target = focusable.find((el) => el.textContent?.includes('RETRY')) || null;
+      }
+      const initial = target || focusable[0];
+      try {
+        initial?.focus({ focusVisible: true } as FocusOptions);
+      } catch {
+        initial?.focus();
+      }
       return;
     }
 
@@ -102,62 +117,74 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
     const curCy = curRect.top + curRect.height / 2;
 
     let bestElem: HTMLElement | null = null;
-    let bestDist = Infinity;
+    let bestScore = Infinity;
 
     for (const el of focusable) {
       if (el === active) continue;
       const r = el.getBoundingClientRect();
       const cx = r.left + r.width / 2;
       const cy = r.top + r.height / 2;
-      const dx = cx - curCx;
-      const dy = cy - curCy;
-
-      let inDirection = false;
-      let score = Infinity;
 
       if (dir === 'right') {
-        if (dx > 4) {
-          inDirection = true;
+        if (r.left >= curRect.left + 2 || cx > curCx + 2) {
+          const distX = r.left >= curRect.right ? r.left - curRect.right : Math.max(0, cx - curCx);
+          const distY = Math.abs(cy - curCy);
           const vOverlap = Math.min(curRect.bottom, r.bottom) - Math.max(curRect.top, r.top);
-          const sameRow = vOverlap > -10;
-          score = dx + Math.abs(dy) * (sameRow ? 0.5 : 15.0);
+          const score = vOverlap > 0 ? distX + distY * 0.1 : distX + distY * 2.5 + 50;
+          if (score < bestScore) {
+            bestScore = score;
+            bestElem = el;
+          }
         }
       } else if (dir === 'left') {
-        if (dx < -4) {
-          inDirection = true;
+        if (r.right <= curRect.right - 2 || cx < curCx - 2) {
+          const distX = curRect.left >= r.right ? curRect.left - r.right : Math.max(0, curCx - cx);
+          const distY = Math.abs(cy - curCy);
           const vOverlap = Math.min(curRect.bottom, r.bottom) - Math.max(curRect.top, r.top);
-          const sameRow = vOverlap > -10;
-          score = -dx + Math.abs(dy) * (sameRow ? 0.5 : 15.0);
+          const score = vOverlap > 0 ? distX + distY * 0.1 : distX + distY * 2.5 + 50;
+          if (score < bestScore) {
+            bestScore = score;
+            bestElem = el;
+          }
         }
       } else if (dir === 'down') {
-        if (dy > 4) {
-          inDirection = true;
+        if (r.top >= curRect.top + 2 || cy > curCy + 2) {
+          const distY = r.top >= curRect.bottom ? r.top - curRect.bottom : Math.max(0, cy - curCy);
+          const distX = Math.abs(cx - curCx);
           const hOverlap = Math.min(curRect.right, r.right) - Math.max(curRect.left, r.left);
-          const sameCol = hOverlap > -10;
-          score = dy + Math.abs(dx) * (sameCol ? 0.5 : 15.0);
+          const score = hOverlap > 0 ? distY + distX * 0.1 : distY + distX * 2.5 + 50;
+          if (score < bestScore) {
+            bestScore = score;
+            bestElem = el;
+          }
         }
       } else if (dir === 'up') {
-        if (dy < -4) {
-          inDirection = true;
+        if (r.bottom <= curRect.bottom - 2 || cy < curCy - 2) {
+          const distY = curRect.top >= r.bottom ? curRect.top - r.bottom : Math.max(0, curCy - cy);
+          const distX = Math.abs(cx - curCx);
           const hOverlap = Math.min(curRect.right, r.right) - Math.max(curRect.left, r.left);
-          const sameCol = hOverlap > -10;
-          score = -dy + Math.abs(dx) * (sameCol ? 0.5 : 15.0);
+          const score = hOverlap > 0 ? distY + distX * 0.1 : distY + distX * 2.5 + 50;
+          if (score < bestScore) {
+            bestScore = score;
+            bestElem = el;
+          }
         }
-      }
-
-      if (inDirection && score < bestDist) {
-        bestDist = score;
-        bestElem = el;
       }
     }
 
     if (bestElem) {
-      bestElem.focus();
+      document.body.classList.add('gamepad-active');
+      try {
+        bestElem.focus({ focusVisible: true } as FocusOptions);
+      } catch {
+        bestElem.focus();
+      }
       bestElem.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
+    document.body.classList.add('keyboard-active');
     const code = e.code;
     const g = gameRef.current;
     // Only swallow native behaviour for live gameplay keys — the menu keys
@@ -301,9 +328,28 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
   };
 
   useEffect(() => {
+    const onPointerMove = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse' && (e.movementX !== 0 || e.movementY !== 0)) {
+        document.body.classList.remove('keyboard-active');
+        document.body.classList.remove('gamepad-active');
+      }
+    };
+    const onTouchStart = () => {
+      document.body.classList.remove('keyboard-active');
+      document.body.classList.remove('gamepad-active');
+    };
+    const onPointerDown = () => {
+      document.body.classList.remove('keyboard-active');
+      document.body.classList.remove('gamepad-active');
+    };
+
     window.addEventListener('keydown', onKeyDown, { passive: false });
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('blur', onBlur);
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('pointerdown', onPointerDown, { passive: true });
+    window.addEventListener('mousedown', onPointerDown, { passive: true });
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerUp);
     window.addEventListener('lostpointercapture', onLostPointerCapture);
@@ -321,12 +367,14 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
         if (state.pausePressed) cbRef.current.onPause();
       } else {
         if (state.pausePressed) {
+          document.body.classList.add('gamepad-active');
           if (u === 'paused') {
             cbRef.current.onResume();
           } else if (u === 'playing') {
             cbRef.current.onPause();
           }
         } else if (state.jumpPressed || state.confirmPressed) {
+          document.body.classList.add('gamepad-active');
           const active = document.activeElement as HTMLElement | null;
           if (active && active.tagName === 'BUTTON' && active.offsetParent !== null) {
             active.click();
@@ -337,17 +385,40 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
               cbRef.current.onResume();
             }
           }
+        } else if (state.backPressed) {
+          document.body.classList.add('gamepad-active');
+          if (!modalOpenRef.current) {
+            if (u === 'paused') {
+              cbRef.current.onResume();
+            } else if (u === 'over') {
+              const menuButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+                (btn) => btn.textContent?.includes('MENU') && btn.offsetParent !== null
+              );
+              if (menuButton) menuButton.click();
+            }
+          }
         }
       }
     });
 
     const cleanupAction = inputManager.onAction((action: GamepadAction) => {
+      document.body.classList.add('gamepad-active');
       const u = uiRef.current;
       if (!modalOpenRef.current && u !== 'playing') {
         if (action === 'down') navigate2D('down');
         else if (action === 'up') navigate2D('up');
         else if (action === 'left') navigate2D('left');
         else if (action === 'right') navigate2D('right');
+        else if (action === 'back') {
+          if (u === 'paused') {
+            cbRef.current.onResume();
+          } else if (u === 'over') {
+            const menuButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+              (btn) => btn.textContent?.includes('MENU') && btn.offsetParent !== null
+            );
+            if (menuButton) menuButton.click();
+          }
+        }
       }
     });
 
@@ -355,6 +426,10 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('touchstart', onTouchStart);
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('pointercancel', onPointerUp);
       window.removeEventListener('lostpointercapture', onLostPointerCapture);

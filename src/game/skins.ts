@@ -14,6 +14,7 @@ export const TIER_COLORS: Record<SkinTier | 'all', { text: string; bg: string; b
 export type SkinId =
   | 'bob'
   | 'bobette'
+  | 'safe_bob'
   | 'rob'
   | 'cob'
   | 'mob'
@@ -24,6 +25,7 @@ export type SkinId =
   | 'moon_man'
   | 'sun_man'
   | 'gold_bob'
+  | 'angel'
   | 'outline'
   | 'question'
   | 'zeus'
@@ -32,7 +34,7 @@ export type SkinId =
   | 'demon';
 
 export interface SkinUnlockInfo {
-  type: 'free' | 'gems' | 'coins' | 'distance' | 'score' | 'quests' | 'moon' | 'konami';
+  type: 'free' | 'gems' | 'coins' | 'distance' | 'score' | 'quests' | 'moon' | 'konami' | 'save';
   cost?: number;
   threshold?: number;
   desc: string;
@@ -75,6 +77,18 @@ export const SKINS: Record<SkinId, SkinDef> = {
     scarf: '#3ef2c8',
     ghostTrail: '#7ef7ff',
     unlock: { type: 'free', desc: 'DEFAULT' },
+  },
+  safe_bob: {
+    id: 'safe_bob',
+    name: 'SAFE BOB',
+    tier: 'common',
+    suit: '#475569',
+    suitDark: '#334155',
+    skin: '#ffcf9e',
+    boot: '#1e293b',
+    scarf: '#ffd166',
+    ghostTrail: '#94a3b8',
+    unlock: { type: 'save', desc: 'SAVE THE GAME' },
   },
   rob: {
     id: 'rob',
@@ -138,7 +152,7 @@ export const SKINS: Record<SkinId, SkinDef> = {
   },
   fmhy: {
     id: 'fmhy',
-    name: 'FMHY',
+    name: 'MEDIA MAN',
     tier: 'epic',
     suit: '#0b0b16',
     suitDark: '#05050c',
@@ -195,6 +209,18 @@ export const SKINS: Record<SkinId, SkinDef> = {
     scarf: '#fff275',
     ghostTrail: '#ffd700',
     unlock: { type: 'coins', threshold: 10000, desc: '10,000 COINS' },
+  },
+  angel: {
+    id: 'angel',
+    name: 'ANGEL',
+    tier: 'legendary',
+    suit: '#ffffff',
+    suitDark: '#cbd5e1',
+    skin: '#ffcf9e',
+    boot: '#ffd166',
+    scarf: '#ffd166',
+    ghostTrail: '#ffe9a0',
+    unlock: { type: 'score', threshold: 50000, desc: '50,000 SCORE IN 1 RUN' },
   },
   outline: {
     id: 'outline',
@@ -266,7 +292,7 @@ export const SKINS: Record<SkinId, SkinDef> = {
     boot: '#1a0505',
     scarf: '#ff7a45',
     ghostTrail: '#ff2e63',
-    unlock: { type: 'moon', desc: 'BLOOD MOON' },
+    unlock: { type: 'moon', desc: 'REACH THE BLOOD MOON' },
   },
 };
 
@@ -321,29 +347,72 @@ export function saveLifetimeStats(stats: LifetimeStats) {
   } catch {}
 }
 
-let cachedUnlocked: SkinId[] | null = null;
+function getStoredBestScore(): number {
+  try {
+    const rawV2 = localStorage.getItem('pixeldash.best.v2');
+    if (rawV2) {
+      const parsed = JSON.parse(rawV2);
+      if (typeof parsed?.score === 'number' && Number.isFinite(parsed.score)) return parsed.score;
+    }
+    const rawScores = localStorage.getItem('pixeldash.scores.v1');
+    if (rawScores) {
+      const parsed = JSON.parse(rawScores);
+      if (Array.isArray(parsed)) {
+        let max = 0;
+        for (const item of parsed) {
+          if (typeof item?.score === 'number' && item.score > max) max = item.score;
+        }
+        if (max > 0) return max;
+      }
+    }
+    const oldBest = Number(localStorage.getItem('pixeldash.best')) || 0;
+    if (oldBest > 0) return oldBest;
+  } catch {}
+  return 0;
+}
 
 export function loadUnlockedSkins(): SkinId[] {
-  if (cachedUnlocked) return [...cachedUnlocked];
   try {
     const raw = localStorage.getItem(UNLOCKED_KEY);
-    if (!raw) {
-      cachedUnlocked = ['bob', 'bobette'];
-      return ['bob', 'bobette'];
-    }
-    const arr = JSON.parse(raw).map((id: string) => id === 'lekos' ? 'leskos' : id);
+    const arr: SkinId[] = raw ? JSON.parse(raw).map((id: string) => (id === 'lekos' ? 'leskos' : id)) : ['bob', 'bobette'];
     if (!arr.includes('bob')) arr.push('bob');
     if (!arr.includes('bobette')) arr.push('bobette');
-    cachedUnlocked = arr;
+
+    // Retroactive check against lifetime stats and high score
+    const bestVal = getStoredBestScore();
+    const stats = loadLifetimeStats();
+    const maxScore = Math.max(stats.score || 0, bestVal);
+
+    if (maxScore >= 50000 && !arr.includes('angel')) {
+      arr.push('angel');
+    }
+    if (maxScore >= 100000 && !arr.includes('leskos')) {
+      arr.push('leskos');
+    }
+    if (stats.coins >= 10000 && !arr.includes('gold_bob')) {
+      arr.push('gold_bob');
+    }
+    if (stats.totalDistance >= 100000 && !arr.includes('outline')) {
+      arr.push('outline');
+    }
+    if ((stats.dailyStreak >= 15 || stats.dailySets >= 15) && !arr.includes('mr_soup')) {
+      arr.push('mr_soup');
+    }
+    if (stats.bloodMoonDone && !arr.includes('demon')) {
+      arr.push('demon');
+    }
+
+    try {
+      localStorage.setItem(UNLOCKED_KEY, JSON.stringify(arr));
+    } catch {}
+
     return arr;
   } catch {
-    cachedUnlocked = ['bob', 'bobette'];
     return ['bob', 'bobette'];
   }
 }
 
 export function saveUnlockedSkins(unlocked: SkinId[]) {
-  cachedUnlocked = [...unlocked];
   try {
     localStorage.setItem(UNLOCKED_KEY, JSON.stringify(unlocked));
   } catch {}
@@ -417,6 +486,8 @@ export function evaluateSkinUnlocks(
     }
   }
 
+  const bestVal = getStoredBestScore();
+
   // Check Gold Bob (coins milestone)
   if ((nextStats.coins >= (SKINS.gold_bob.unlock.threshold ?? MILESTONES.COINS_TARGET) || nextStats.coinsDone) && !unlocked.has('gold_bob')) {
     unlocked.add('gold_bob');
@@ -429,9 +500,17 @@ export function evaluateSkinUnlocks(
     newUnlocks.push('outline');
   }
 
+  // Check Angel (50,000 score in 1 run milestone)
+  const angelReq = SKINS.angel.unlock.threshold ?? 50000;
+  const maxScore = Math.max(nextStats.score || 0, currentRun?.score || 0, bestVal);
+  if (maxScore >= angelReq && !unlocked.has('angel')) {
+    unlocked.add('angel');
+    newUnlocks.push('angel');
+  }
+
   // Check Leskos (score in 1 run milestone)
   const scoreReq = SKINS.leskos.unlock.threshold ?? MILESTONES.SCORE_TARGET;
-  if ((nextStats.score >= scoreReq || nextStats.scoreDone || (currentRun && currentRun.score >= scoreReq)) && !unlocked.has('leskos')) {
+  if ((maxScore >= scoreReq || nextStats.scoreDone || (currentRun && currentRun.score >= scoreReq)) && !unlocked.has('leskos')) {
     unlocked.add('leskos');
     newUnlocks.push('leskos');
     nextStats.score = scoreReq;

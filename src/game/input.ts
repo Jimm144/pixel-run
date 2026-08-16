@@ -76,22 +76,46 @@ class InputManager {
   private touchStartX = 0;
   private touchStartY = 0;
   private lastTapTime = 0;
+  private hiddenInput: HTMLInputElement | null = null;
 
   constructor() {
     if (typeof window === 'undefined') return;
 
+    // Invisible input element for bringing up mobile keyboard on swipe completion
+    if (typeof document !== 'undefined') {
+      let input = document.getElementById('konami-keyboard-input') as HTMLInputElement | null;
+      if (!input) {
+        input = document.createElement('input');
+        input.id = 'konami-keyboard-input';
+        input.type = 'text';
+        input.setAttribute('autocomplete', 'off');
+        input.setAttribute('autocorrect', 'off');
+        input.setAttribute('autocapitalize', 'off');
+        input.setAttribute('spellcheck', 'false');
+        input.setAttribute('aria-hidden', 'true');
+        input.tabIndex = -1;
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        input.style.pointerEvents = 'none';
+        input.style.left = '-9999px';
+        input.style.top = '-9999px';
+        input.style.fontSize = '16px'; // Prevents iOS Safari auto-zoom on focus
+        document.body.appendChild(input);
+      }
+      this.hiddenInput = input;
+
+      this.hiddenInput.addEventListener('input', (e) => {
+        const char = (e as InputEvent).data || this.hiddenInput?.value.slice(-1) || '';
+        if (char) {
+          this.handleKey(char);
+          if (this.hiddenInput) this.hiddenInput.value = '';
+        }
+      });
+    }
+
     // Keyboard listener for Konami code
     window.addEventListener('keydown', (e) => {
-      const match = this.keySequence[this.konamiIndex]?.includes(e.key);
-      if (match) {
-        this.konamiIndex++;
-        if (this.konamiIndex === this.keySequence.length) {
-          this.triggerKonami();
-          this.konamiIndex = 0;
-        }
-      } else {
-        this.konamiIndex = this.keySequence[0].includes(e.key) ? 1 : 0;
-      }
+      this.handleKey(e.key);
     });
 
     // Touch listener for mobile swipe Konami code
@@ -134,13 +158,27 @@ class InputManager {
           if (gesture === 'doubletap' && this.swipeKonamiIndex === this.swipeSequence.length) {
             this.triggerKonami();
             this.swipeKonamiIndex = 0;
+            this.konamiIndex = 0;
+            if (this.hiddenInput) {
+              this.hiddenInput.value = '';
+              this.hiddenInput.blur();
+            }
             return;
           }
 
           if (this.swipeSequence[this.swipeKonamiIndex] === gesture) {
             this.swipeKonamiIndex++;
+            this.konamiIndex = this.swipeKonamiIndex;
+            // When all 8 directional swipes are completed, open mobile keyboard for 'B' and 'A'
+            if (this.swipeKonamiIndex === this.swipeSequence.length) {
+              try {
+                this.hiddenInput?.focus();
+              } catch {}
+            }
           } else {
-            this.swipeKonamiIndex = this.swipeSequence[0] === gesture ? 1 : 0;
+            const matchesFirst = this.swipeSequence[0] === gesture;
+            this.swipeKonamiIndex = matchesFirst ? 1 : 0;
+            this.konamiIndex = this.swipeKonamiIndex;
           }
         }
       },
@@ -149,6 +187,36 @@ class InputManager {
 
     // Start Gamepad Polling Loop
     this.pollGamepads();
+  }
+
+  private handleKey(key: string) {
+    if (!key) return;
+    const expected = this.keySequence[this.konamiIndex];
+    const matches =
+      expected &&
+      (expected.includes(key) ||
+        expected.some((k) => k.toLowerCase() === key.toLowerCase()));
+
+    if (matches) {
+      this.konamiIndex++;
+      if (this.konamiIndex === this.keySequence.length) {
+        this.triggerKonami();
+        this.konamiIndex = 0;
+        this.swipeKonamiIndex = 0;
+        if (this.hiddenInput) {
+          this.hiddenInput.value = '';
+          this.hiddenInput.blur();
+        }
+      }
+    } else {
+      const first = this.keySequence[0];
+      const matchesFirst =
+        first &&
+        (first.includes(key) ||
+          first.some((k) => k.toLowerCase() === key.toLowerCase()));
+      this.konamiIndex = matchesFirst ? 1 : 0;
+      this.swipeKonamiIndex = this.konamiIndex;
+    }
   }
 
   private triggerKonami() {
@@ -223,14 +291,15 @@ class InputManager {
           return Boolean(btn && (btn.pressed || btn.value > 0.15));
         };
 
-        // Jump: Cross / A (0), Square / X (2), R1 (5), R2 (7)
-        const curJump = isPressed(0) || isPressed(2) || isPressed(5) || isTriggerPressed(7);
+        // Jump: Cross / A (0), Square / X (2), R1 (5)
+        const curJump = isPressed(0) || isPressed(2) || isPressed(5);
 
-        // Slam / Dive: Circle / B (1), L1 (4), L2 (6), Left Stick Down (axes[1] > 0.45), Right Stick Down (axes[3] > 0.45)
+        // Slam / Dive: Circle / B (1), L1 (4), R2 (7), Left Stick Down (axes[1] > 0.45), Right Stick Down (axes[3] > 0.45)
+        // L2 (6) is completely removed. R2 (7) is Slam / Dive.
         const stickDown =
           (typeof gp.axes[1] === 'number' && gp.axes[1] > 0.45) ||
           (typeof gp.axes[3] === 'number' && gp.axes[3] > 0.45);
-        const curDive = isPressed(1) || isPressed(4) || isTriggerPressed(6) || stickDown;
+        const curDive = isPressed(1) || isPressed(4) || isTriggerPressed(7) || stickDown;
 
         // D-pad Right (15), Stick Right
         const curRight = isPressed(15) || (typeof gp.axes[0] === 'number' && gp.axes[0] > 0.35);

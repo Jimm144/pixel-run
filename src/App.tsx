@@ -47,6 +47,7 @@ import {
   SKINS,
 } from './game/skins';
 import { inputManager } from './game/input';
+import { downloadSaveFile, triggerImportSaveDialog } from './game/saveManager';
 
 const QUEST_SHARE_WIDTH = 1200;
 const QUEST_SHARE_HEIGHT = 500;
@@ -261,11 +262,59 @@ export function App() {
   const skinToastTimer = useRef(0);
 
   const triggerSkinToast = useCallback((name: string, skinId?: SkinId) => {
-    setSkinToast(name);
+    const text = skinId ? `NEW SKIN UNLOCKED: ${name}` : name;
+    setSkinToast(text);
     if (skinId) setUnlockedSkinPopup(skinId);
     window.clearTimeout(skinToastTimer.current);
     skinToastTimer.current = window.setTimeout(() => setSkinToast(null), 3500);
   }, []);
+
+  const handleExportSave = useCallback(async () => {
+    try {
+      const currentUnlocked = loadUnlockedSkins();
+      let newlyUnlocked = false;
+      if (!currentUnlocked.includes('safe_bob')) {
+        const next = [...currentUnlocked, 'safe_bob' as SkinId];
+        saveUnlockedSkins(next);
+        setUnlockedSkins(next);
+        newlyUnlocked = true;
+      }
+
+      await downloadSaveFile();
+      sfx.play('gem');
+
+      if (newlyUnlocked) {
+        triggerSkinToast('SAFE BOB', 'safe_bob');
+      } else {
+        triggerSkinToast('SAVE FILE DOWNLOADED');
+      }
+    } catch {
+      triggerSkinToast('SAVE EXPORT FAILED');
+    }
+  }, [triggerSkinToast]);
+
+  const handleImportSave = useCallback(() => {
+    triggerImportSaveDialog((res) => {
+      if (res.success) {
+        const freshLifetime = loadLifetimeStats();
+        const freshUnlocked = loadUnlockedSkins();
+        const freshEquipped = loadEquippedSkin();
+        const freshBest = bestScore();
+        setLifetimeStats(freshLifetime);
+        setUnlockedSkins(freshUnlocked);
+        setEquippedSkin(freshEquipped);
+        setBest(freshBest);
+        setQuestRecord(loadQuestRecord());
+        setVolumes(loadVolumes());
+        gameRef.current?.setSkin(freshEquipped);
+        sfx.play('gem');
+        triggerSkinToast('PROGRESS RESTORED!');
+      } else {
+        sfx.play('death');
+        triggerSkinToast(res.error || 'INVALID SAVE FILE');
+      }
+    });
+  }, [triggerSkinToast]);
 
   // Konami Code listener
   useEffect(() => {
@@ -615,7 +664,15 @@ export function App() {
     const onVis = () => {
       if (document.hidden) pause(false);
     };
-    const onBlur = () => pause(false);
+    const onBlur = () => {
+      // In-app browsers and mobile touch devices fire window.blur when tapping near edges
+      // or interacting with system bars without leaving the page. Only pause when the page
+      // is truly hidden or when running on a mouse-driven desktop window.
+      const isCoarse = window.matchMedia('(pointer: coarse)').matches;
+      if (document.hidden || !isCoarse) {
+        if (document.hidden) pause(false);
+      }
+    };
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('blur', onBlur);
     return () => {
@@ -625,7 +682,7 @@ export function App() {
   }, [pause]);
 
   return (
-    <div className="fixed inset-0 flex min-h-0 min-w-0 items-center justify-center overflow-hidden bg-[#08040f] font-pixel">
+    <div className="fixed inset-0 h-full h-[100dvh] w-full w-[100dvw] flex min-h-0 min-w-0 items-center justify-center overflow-hidden bg-[#08040f] font-pixel">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(62,242,200,0.10),transparent_60%)]" />
       <div className="relative h-full min-h-0 min-w-0 w-full">
         <GameCanvas
@@ -674,8 +731,11 @@ export function App() {
             questOnShare={handleShareQuests}
             onOpenSkins={() => {
               setLifetimeStats(loadLifetimeStats());
+              setUnlockedSkins(loadUnlockedSkins());
               setSkinsModalOpen(true);
             }}
+            onExportSave={handleExportSave}
+            onImportSave={handleImportSave}
           />
         )}
         {ui === 'paused' && (
@@ -712,8 +772,8 @@ export function App() {
         )}
         {questToast.length > 0 && <QuestCompletionToast quests={quests} completed={questToast} touch={touch} />}
         {skinToast && (
-          <div className="fixed top-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 border-2 border-[#ffd166] bg-[#140a26]/95 px-4 py-2 font-pixel text-[#ffd166] shadow-[4px_4px_0_#08040f]">
-            <span className="text-[8px] tablet:text-[10px]">★ NEW SKIN UNLOCKED: {skinToast} ★</span>
+          <div className="fixed top-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 border-2 border-[#3ef2c8] bg-[#0d0619]/95 px-4 py-2 font-pixel text-[#3ef2c8] shadow-[4px_4px_0_#08040f]">
+            <span className="text-[8px] tablet:text-[10px] uppercase">{skinToast}</span>
           </div>
         )}
         {unlockedSkinPopup && (
@@ -732,7 +792,11 @@ export function App() {
             equippedSkin={equippedSkin}
             unlockedSkins={unlockedSkins}
             lifetimeStats={lifetimeStats}
-            onEquip={(id) => setEquippedSkin(id)}
+            onEquip={(id) => {
+              setEquippedSkin(id);
+              saveEquippedSkin(id);
+              gameRef.current?.setSkin(id);
+            }}
             onUpdateUnlocked={(unlocked, nextStats) => {
               setUnlockedSkins(unlocked);
               setLifetimeStats(nextStats);

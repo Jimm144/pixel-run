@@ -18,11 +18,11 @@ export function PixelButton({
 }) {
   const styles = {
     primary:
-      'bg-[#3ef2c8] text-[#0b0616] hover:bg-[#7ef7ff] shadow-[4px_4px_0_#08040f] active:shadow-[1px_1px_0_#08040f]',
+      'border-[#08040f] bg-[#3ef2c8] text-[#0b0616] hover:bg-[#7ef7ff] shadow-[4px_4px_0_#08040f] active:shadow-[1px_1px_0_#08040f]',
     danger:
-      'bg-[#ff4d6d] text-[#180512] hover:bg-[#ff7a90] shadow-[4px_4px_0_#08040f] active:shadow-[1px_1px_0_#08040f]',
+      'border-[#08040f] bg-[#ff4d6d] text-[#180512] hover:bg-[#ff7a90] shadow-[4px_4px_0_#08040f] active:shadow-[1px_1px_0_#08040f]',
     ghost:
-      'bg-transparent text-[#3ef2c8] border-[#3ef2c8]/50 hover:bg-[#3ef2c8]/15 hover:border-[#3ef2c8] hover:text-[#7ef7ff] shadow-[4px_4px_0_#08040f] active:shadow-[1px_1px_0_#08040f]',
+      'border-[#3ef2c8]/60 bg-[#0d2822]/80 text-[#3ef2c8] hover:border-[#3ef2c8] hover:bg-[#165044] hover:text-[#7ef7ff] shadow-[4px_4px_0_#08040f] active:shadow-[1px_1px_0_#08040f]',
   }[variant];
   return (
     <button
@@ -30,7 +30,7 @@ export function PixelButton({
       onClick={onClick}
       style={style}
       className={cn(
-        'font-pixel border-2 border-[#08040f] uppercase leading-none tracking-wide transition-[transform,box-shadow,background-color] duration-75 active:translate-x-[3px] active:translate-y-[3px] focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3ef2c8] focus-visible:ring-offset-2 focus-visible:ring-offset-[#08040f]',
+        'font-pixel border-2 uppercase leading-none tracking-wide transition-[transform,box-shadow,background-color,border-color,color] duration-75 active:translate-x-[3px] active:translate-y-[3px]',
         small ? 'px-3 py-2 text-[8px]' : 'px-5 py-3.5 text-[11px]',
         styles,
         className,

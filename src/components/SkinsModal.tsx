@@ -28,15 +28,64 @@ interface SkinsModalProps {
 
 function GemIcon({ className = 'h-3.5 w-3.5' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 16 16" className={className} fill="none">
-      <path d="M4 2h8l4 5-8 8-8-8 4-5z" fill="#0a231f" stroke="#051310" strokeWidth="1" />
-      <path d="M5 3h6l3 4-6 7-6-7 3-4z" fill="#16987e" />
-      <path d="M5 3h6l-1 4H6L5 3z" fill="#7ef7ff" />
-      <path d="M2 7l4-4 0 4-4 0z" fill="#3ef2c8" />
-      <path d="M14 7l-4-4 0 4 4 0z" fill="#0f6856" />
-      <path d="M6 7l2 7 0-7-2 0z" fill="#3ef2c8" />
-      <path d="M8 7l2 0-2 7 0-7z" fill="#0f6856" />
+    <svg viewBox="0 0 16 16" className={className} fill="none" shapeRendering="crispEdges">
+      {/* 8-bit Dark Outline */}
+      <path d="M5 1h6v2h2v2h2v4h-2v2h-2v2H5v-2H3v-2H1V5h2V3h2V1z" fill="#08121e" />
+      {/* Radiant Vibrant Cyan Body */}
+      <path d="M6 2h4v2h3v2h1v2h-1v2h-3v2H6v-2H3V8H2V6h1V4h3V2z" fill="#3ef2c8" />
+      {/* Bright Highlight Facet */}
+      <path d="M6 2h4v2H6V2zM3 4h3v4H3V4z" fill="#7ef7ff" />
+      {/* Crisp White Sparkling Glint */}
       <rect x="6" y="3" width="2" height="2" fill="#ffffff" />
+    </svg>
+  );
+}
+
+function PixelArrow({ dir, className = '' }: { dir: 'up' | 'down' | 'left' | 'right'; className?: string }) {
+  if (dir === 'up') {
+    return (
+      <svg
+        viewBox="0 0 7 7"
+        className={`inline-block h-[7px] w-[7px] shrink-0 align-middle fill-current ${className}`}
+        shapeRendering="crispEdges"
+        aria-hidden="true"
+      >
+        <path d="M3 0h1v1H3V0z M2 1h3v1H2V1z M1 2h5v1H1V2z M0 3h7v1H0V3z M2 4h3v3H2V4z" />
+      </svg>
+    );
+  }
+  if (dir === 'down') {
+    return (
+      <svg
+        viewBox="0 0 7 7"
+        className={`inline-block h-[7px] w-[7px] shrink-0 align-middle fill-current ${className}`}
+        shapeRendering="crispEdges"
+        aria-hidden="true"
+      >
+        <path d="M2 0h3v3H2V0z M0 3h7v1H0V3z M1 4h5v1H1V4z M2 5h3v1H2V5z M3 6h1v1H3V6z" />
+      </svg>
+    );
+  }
+  if (dir === 'left') {
+    return (
+      <svg
+        viewBox="0 0 7 7"
+        className={`inline-block h-[7px] w-[7px] shrink-0 align-middle fill-current ${className}`}
+        shapeRendering="crispEdges"
+        aria-hidden="true"
+      >
+        <path d="M0 3h1v1H0V3z M1 2h1v3H1V2z M2 1h1v5H2V1z M3 0h1v7H3V0z M4 2h3v3H4V2z" />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      viewBox="0 0 7 7"
+      className={`inline-block h-[7px] w-[7px] shrink-0 align-middle fill-current ${className}`}
+      shapeRendering="crispEdges"
+      aria-hidden="true"
+    >
+      <path d="M6 3h1v1H6V3z M5 2h1v3H5V2z M4 1h1v5H4V1z M3 0h1v7H3V0z M0 2h3v3H0V2z" />
     </svg>
   );
 }
@@ -54,6 +103,7 @@ export function SkinsModal({
   const [focusSection, setFocusSection] = useState<'tabs' | 'grid'>('grid');
   const [selectedSkinId, setSelectedSkinId] = useState<SkinId>(equippedSkin);
   const [focusedIndex, setFocusedIndex] = useState(0);
+  const [hoveredTier, setHoveredTier] = useState<string | null>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const animFrameRef = useRef(0);
   const cardRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -128,6 +178,7 @@ export function SkinsModal({
   // Full 2D Keyboard & Gamepad Navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      document.body.classList.add('keyboard-active');
       if (e.key === 'Escape') {
         onClose();
         return;
@@ -384,14 +435,21 @@ export function SkinsModal({
     }
     if (skin.unlock.type === 'moon') {
       return (
-        <div className="w-full border border-[#ff4d6d]/40 bg-[#25050f] py-0.5 text-center font-pixel text-[6px] text-[#ff4d6d]">
+        <div className="flex h-[20px] sm:h-[22px] w-full items-center justify-center border border-[#ff4d6d]/40 bg-[#25050f] px-1 text-center font-pixel text-[6px] text-[#ff4d6d]">
           {skin.unlock.desc}
         </div>
       );
     }
     if (skin.unlock.type === 'konami') {
       return (
-        <div className="w-full border border-[#c98cff]/40 bg-[#1c0830] py-0.5 text-center font-pixel text-[6px] text-[#c98cff]">
+        <div className="flex h-[20px] sm:h-[22px] w-full items-center justify-center border border-[#c98cff]/40 bg-[#1c0830] px-1 text-center font-pixel text-[6px] text-[#c98cff]">
+          {skin.unlock.desc}
+        </div>
+      );
+    }
+    if (skin.unlock.type === 'save') {
+      return (
+        <div className="flex h-[20px] sm:h-[22px] w-full items-center justify-center border border-[#ffd166]/40 bg-[#2b2005] px-1 text-center font-pixel text-[6px] text-[#ffd166]">
           {skin.unlock.desc}
         </div>
       );
@@ -403,15 +461,15 @@ export function SkinsModal({
     <div
       className={
         touch
-          ? 'fixed inset-0 z-50 flex flex-col overflow-y-auto bg-[#0d0619] p-3 text-white tablet:items-center tablet:justify-center tablet:bg-[#08040f]/90 tablet:p-4'
+          ? 'fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#0d0619] p-3 text-white pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] tablet:items-center tablet:justify-center tablet:bg-[#08040f]/90 tablet:p-4'
           : 'fixed inset-0 z-50 flex items-center justify-center bg-[#08040f]/90 p-3'
       }
     >
       <div
         className={
           touch
-          ? 'flex min-h-full w-full flex-col bg-[#0d0619] p-0 text-white tablet:min-h-0 tablet:max-w-[840px] tablet:border-4 tablet:border-[#3ef2c8] tablet:p-4 tablet:shadow-[0_0_0_4px_#08040f,0_0_35px_rgba(62,242,200,0.25)]'
-             : 'flex max-h-[94vh] w-full max-w-[840px] flex-col border-4 border-[#3ef2c8] bg-[#0d0619] p-4 text-white shadow-[0_0_0_4px_#08040f,0_0_35px_rgba(62,242,200,0.25)] tablet:max-w-[min(840px,calc(100vw-32px))]'
+            ? 'flex h-full min-h-0 w-full flex-col bg-[#0d0619] p-0 text-white tablet:h-auto tablet:max-h-[92vh] tablet:max-w-[780px] tablet:border-4 tablet:border-[#3ef2c8] tablet:p-4 tablet:shadow-[0_0_0_4px_#08040f,0_0_35px_rgba(62,242,200,0.25)]'
+            : 'flex max-h-[94vh] w-full max-w-[840px] flex-col border-4 border-[#3ef2c8] bg-[#0d0619] p-4 text-white shadow-[0_0_0_4px_#08040f,0_0_35px_rgba(62,242,200,0.25)] tablet:max-w-[min(840px,calc(100vw-32px))]'
         }
       >
         {/* Header */}
@@ -438,11 +496,13 @@ export function SkinsModal({
           </button>
         </div>
 
-        {/* Tier Tabs (Colored only when selected, no glow) */}
+        {/* Tier Tabs (Colored when selected, rarity hover on unselected, no glow) */}
         <div className="mt-2.5 flex flex-wrap gap-1.5 border-b-2 border-[#251842] pb-2.5">
           {TIERS.map((tier, idx) => {
             const active = selectedTier === tier;
             const theme = TIER_COLORS[tier];
+            const isHovered = hoveredTier === tier && !active;
+            const isTabFocused = focusSection === 'tabs' && selectedTierIndex === idx;
             return (
               <button
                 key={tier}
@@ -452,12 +512,16 @@ export function SkinsModal({
                   setFocusSection('tabs');
                   setFocusedIndex(0);
                 }}
+                onMouseEnter={() => setHoveredTier(tier)}
+                onMouseLeave={() => setHoveredTier(null)}
                 style={{
-                  color: active ? '#0b0616' : '#9d8fd6',
-                  backgroundColor: active ? theme.text : '#140a26',
-                  borderColor: active ? theme.text : '#251842',
+                  color: active ? '#0b0616' : isHovered ? theme.text : '#9d8fd6',
+                  backgroundColor: active ? theme.text : isHovered ? theme.bg : '#140a26',
+                  borderColor: active ? theme.text : isHovered ? theme.border : '#251842',
                 }}
-                className="border-2 px-3 py-1 font-pixel text-[8px] uppercase tracking-wider shadow-[2px_2px_0_#08040f] sm:text-[9.5px] hover:border-[#4a3575]"
+                className={`cursor-pointer border-2 px-3 py-1 font-pixel text-[8px] uppercase tracking-wider shadow-[2px_2px_0_#08040f] transition-[color,background-color,border-color,transform] duration-75 hover:-translate-y-[1px] active:translate-x-[1px] active:translate-y-[1px] sm:text-[9.5px] ${
+                  isTabFocused ? 'nav-focus' : ''
+                }`}
               >
                 {tier}
               </button>
@@ -466,15 +530,16 @@ export function SkinsModal({
         </div>
 
         {/* Content Area */}
+        {/* Content Area */}
         <div
           className={
-              touch
-                ? 'mt-3 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden tablet:grid tablet:flex-none tablet:grid-cols-[230px_1fr] tablet:gap-4'
+            touch
+              ? 'mt-3 flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden tablet:grid tablet:grid-cols-[220px_1fr] tablet:gap-4'
               : 'mt-3 flex flex-col md:grid md:grid-cols-[230px_1fr] md:items-start gap-3 md:gap-4 overflow-hidden'
           }
         >
           {/* Left / Top: Stage Preview (h-fit, does not stretch to bottom) */}
-          <div className="flex flex-row md:flex-col items-center justify-between md:justify-start gap-2.5 md:gap-0 self-stretch md:self-start border-2 border-[#251842] bg-[#120722] p-2.5 md:p-3.5 shadow-[2px_2px_0_#08040f]">
+          <div className="flex shrink-0 flex-row md:flex-col items-center justify-between md:justify-start gap-2.5 md:gap-0 self-stretch md:self-start border-2 border-[#251842] bg-[#120722] p-2.5 md:p-3.5 shadow-[2px_2px_0_#08040f]">
             <div className="flex items-center gap-2.5 md:flex-col md:gap-0">
               <div className="relative flex items-center justify-center border-2 border-[#38225c] bg-[#1a0e2e] p-1.5 md:p-2.5 shadow-inner">
                 <canvas ref={previewCanvasRef} width={96} height={96} className="h-16 w-16 md:h-24 md:w-24 block" />
@@ -497,14 +562,14 @@ export function SkinsModal({
             {/* Action Button */}
             <div className="w-36 md:mt-3 md:w-full">
               {isEquipped ? (
-                <div className="w-full border-2 border-[#3ef2c8] bg-[#3ef2c8]/20 py-2 md:py-2.5 text-center font-pixel text-[8.5px] md:text-[9px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f]">
+                <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#3ef2c8] bg-[#3ef2c8]/20 px-2 font-pixel text-[8.5px] md:text-[9px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f]">
                   EQUIPPED
                 </div>
               ) : isUnlocked ? (
                 <button
                   type="button"
                   onClick={() => handleEquip(selectedSkinId)}
-                  className="w-full border-2 border-[#08040f] bg-[#3ef2c8] py-2 md:py-2.5 font-pixel text-[8.5px] md:text-[9px] text-[#0b0616] shadow-[3px_3px_0_#08040f] transition-all hover:bg-[#7ef7ff] active:translate-x-[2px] active:translate-y-[2px]"
+                  className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#08040f] bg-[#3ef2c8] px-2 font-pixel text-[8.5px] md:text-[9px] text-[#0b0616] shadow-[3px_3px_0_#08040f] transition-all hover:bg-[#7ef7ff] active:translate-x-[2px] active:translate-y-[2px]"
                 >
                   EQUIP
                 </button>
@@ -513,7 +578,7 @@ export function SkinsModal({
                   type="button"
                   disabled={stats.gems < (selectedSkin.unlock.cost || 0)}
                   onClick={() => handleBuy(selectedSkin)}
-                  className={`w-full border-2 py-2 md:py-2.5 font-pixel text-[8px] md:text-[8.5px] shadow-[3px_3px_0_#08040f] transition-all active:translate-x-[2px] active:translate-y-[2px] ${
+                  className={`flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 px-2 font-pixel text-[8px] md:text-[8.5px] shadow-[3px_3px_0_#08040f] transition-all active:translate-x-[2px] active:translate-y-[2px] ${
                     stats.gems >= (selectedSkin.unlock.cost || 0)
                       ? 'border-[#08040f] bg-[#ffd166] text-[#120820] hover:bg-[#ffe9a0]'
                       : 'cursor-not-allowed border-[#38225c] bg-[#160a2c] text-[#6f5fa8]'
@@ -522,7 +587,7 @@ export function SkinsModal({
                   BUY ({selectedSkin.unlock.cost} GEMS)
                 </button>
               ) : (
-                <div className="w-full border-2 border-[#38225c] bg-[#140a26] py-1.5 md:py-2 text-center font-pixel text-[7px] md:text-[7.5px] text-[#c4b8e8]">
+                <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#38225c] bg-[#140a26] px-2 text-center font-pixel text-[7.5px] md:text-[8px] text-[#c4b8e8] shadow-[2px_2px_0_#08040f]">
                   {selectedSkin.unlock.desc}
                 </div>
               )}
@@ -533,8 +598,8 @@ export function SkinsModal({
           <div
             className={
               touch
-                ? 'grid min-h-0 min-w-0 flex-1 grid-cols-2 gap-2 overflow-y-auto p-0 tablet:max-h-[600px] tablet:flex-none tablet:grid-cols-3'
-                : 'grid max-h-[340px] sm:max-h-[380px] md:max-h-[420px] grid-cols-2 md:grid-cols-3 gap-2 overflow-y-auto p-0'
+                ? 'grid min-h-0 min-w-0 flex-1 grid-cols-2 gap-2 overflow-y-auto p-1 pb-4 tablet:max-h-[580px] tablet:grid-cols-3'
+                : 'grid max-h-[340px] sm:max-h-[380px] md:max-h-[420px] grid-cols-2 md:grid-cols-3 gap-2 overflow-y-auto p-1'
             }
           >
             {filteredSkins.map((skin, idx) => {
@@ -553,12 +618,15 @@ export function SkinsModal({
                     setSelectedSkinId(skin.id);
                     setFocusedIndex(idx);
                     setFocusSection('grid');
+                    if (unlocked && !equipped) {
+                      handleEquip(skin.id);
+                    }
                   }}
                   className={`flex h-[104px] w-full flex-col justify-between border-2 p-3 text-left transition-all sm:h-[112px] ${
                     selected || isCardFocused
                       ? 'border-[#3ef2c8] bg-[#221038] shadow-[2px_2px_0_#3ef2c8]'
                       : 'border-[#2a1b49] bg-[#140a26] shadow-[2px_2px_0_#08040f] hover:border-[#4f3680]'
-                  }`}
+                  } ${isCardFocused ? 'nav-focus' : ''}`}
                 >
                   <div className="w-full">
                     <div className="flex w-full items-center justify-between leading-none">
@@ -601,12 +669,40 @@ export function SkinsModal({
           </div>
         </div>
 
-        {/* Footer */}
-        {!touch && (
-          <div className="mt-3 border-t-2 border-[#251842] pt-2 text-center font-pixel text-[7px] text-[#6f5fa8] sm:text-[8.5px]">
-            ARROWS / D-PAD: SELECT | ENTER / A: EQUIP | ESC / B: CLOSE
-          </div>
-        )}
+        {/* Footer with Controls (Konami code listed like standard controls) */}
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 border-t-2 border-[#251842] pt-1.5 text-center font-pixel text-[6px] text-[#6f5fa8] sm:mt-2.5 sm:pt-2 sm:text-[7.5px] tablet:text-[8px] md:text-[8.5px]">
+          {touch ? (
+            <>
+              <span>TAP: SELECT | DOUBLE TAP: EQUIP | SWIPE: BROWSE |</span>
+              <span className="inline-flex items-center gap-[1px]">
+                <PixelArrow dir="up" />
+                <PixelArrow dir="up" />
+                <PixelArrow dir="down" />
+                <PixelArrow dir="down" />
+                <PixelArrow dir="left" />
+                <PixelArrow dir="right" />
+                <PixelArrow dir="left" />
+                <PixelArrow dir="right" />
+                <span className="ml-[1px]">BA: KONAMI CODE</span>
+              </span>
+            </>
+          ) : (
+            <>
+              <span>ARROWS / D-PAD: SELECT | ENTER / A / X: EQUIP | ESC / B / O: CLOSE |</span>
+              <span className="inline-flex items-center gap-[1px]">
+                <PixelArrow dir="up" />
+                <PixelArrow dir="up" />
+                <PixelArrow dir="down" />
+                <PixelArrow dir="down" />
+                <PixelArrow dir="left" />
+                <PixelArrow dir="right" />
+                <PixelArrow dir="left" />
+                <PixelArrow dir="right" />
+                <span className="ml-[1px]">BA: KONAMI CODE</span>
+              </span>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
