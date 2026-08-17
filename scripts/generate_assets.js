@@ -130,11 +130,11 @@ function generateSquareAppIcon(size) {
   // Body
   f(2, 6, 7, 4, '#ff4d6d');   // Red suit torso
   f(2, 8, 7, 2, '#b32a4d');   // Dark red lower torso
-  // Legs (running stance)
-  f(3, 10, 3, 3, '#59427e');  // Purple leg
-  f(3, 13, 3, 2, '#2b1b45');  // Dark boot
-  f(7, 10, 3, 4, '#59427e');  // Back leg
-  f(7, 14, 3, 1, '#2b1b45');  // Back boot
+  // Legs shifted toward the rear for the favicon stance
+  f(1, 10, 3, 3, '#59427e');  // Rear-shifted leg
+  f(1, 13, 3, 2, '#2b1b45');  // Rear-shifted boot
+  f(5, 10, 3, 4, '#59427e');  // Rear-shifted leg
+  f(5, 14, 3, 1, '#2b1b45');  // Rear-shifted boot
 
   return createPNG(size, size, buf);
 }

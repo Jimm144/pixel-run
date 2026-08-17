@@ -38,12 +38,15 @@ export type SkinId =
   | 'easter_bunny'
   | 'beach_bob'
   | 'pumpkin_bob'
-  | 'witch';
+  | 'witch'
+  | 'poop_man'
+  | 'gladiator';
 
 export interface SkinUnlockInfo {
-  type: 'free' | 'gems' | 'coins' | 'distance' | 'score' | 'quests' | 'moon' | 'konami' | 'save' | 'holiday';
+  type: 'free' | 'gems' | 'coins' | 'distance' | 'score' | 'quests' | 'moon' | 'konami' | 'save' | 'holiday' | 'discord';
   cost?: number;
   threshold?: number;
+  rewardGems?: number;
   desc: string;
   /** ISO date windows for 'holiday' skins: [[mmdd_start, mmdd_end], ...] (wraps Dec->Jan) */
   holidayWindows?: [string, string][];
@@ -96,6 +99,9 @@ export function isSkinAvailable(skin: SkinDef): boolean {
   if (skin.id === 'easter_bunny') return isEasterSeason();
   return isHolidayActive(skin.unlock);
 }
+
+export const DISCORD_URL = 'https://discord.gg/3NMTamtvX';
+const DISCORD_REWARD_KEY = 'pixeldash.discord_reward_claimed';
 
 export interface SkinDef {
   id: SkinId;
@@ -267,6 +273,18 @@ export const SKINS: Record<SkinId, SkinDef> = {
     ghostTrail: '#c084fc',
     unlock: { type: 'gems', cost: 150, desc: '150 GEMS' },
   },
+  poop_man: {
+    id: 'poop_man',
+    name: 'POOP MAN',
+    tier: 'epic',
+    suit: '#7a4524',
+    suitDark: '#4a2412',
+    skin: '#8f5429',
+    boot: '#32160d',
+    scarf: '#7ae04a',
+    ghostTrail: '#b87333',
+    unlock: { type: 'gems', cost: 150, desc: '150 GEMS' },
+  },
   sun_man: {
     id: 'sun_man',
     name: 'SUN MAN',
@@ -302,6 +320,18 @@ export const SKINS: Record<SkinId, SkinDef> = {
     scarf: '#ffd166',
     ghostTrail: '#ffe9a0',
     unlock: { type: 'score', threshold: 50000, desc: '50,000 SCORE IN 1 RUN' },
+  },
+  gladiator: {
+    id: 'gladiator',
+    name: 'GLADIATOR',
+    tier: 'legendary',
+    suit: '#991b1b',
+    suitDark: '#4c0519',
+    skin: '#ffcf9e',
+    boot: '#3b1f0b',
+    scarf: '#d4af37',
+    ghostTrail: '#ffd166',
+    unlock: { type: 'discord', rewardGems: 100, desc: 'OPEN DISCORD + CLAIM' },
   },
   outline: {
     id: 'outline',
@@ -550,6 +580,9 @@ export function loadUnlockedSkins(): SkinId[] {
     if (stats.bloodMoonDone && !arr.includes('demon')) {
       arr.push('demon');
     }
+    if (isDiscordRewardClaimed() && !arr.includes('gladiator')) {
+      arr.push('gladiator');
+    }
 
     try {
       localStorage.setItem(UNLOCKED_KEY, JSON.stringify(arr));
@@ -559,6 +592,29 @@ export function loadUnlockedSkins(): SkinId[] {
   } catch {
     return ['bob', 'bobette'];
   }
+}
+
+export function isDiscordRewardClaimed(): boolean {
+  try {
+    return localStorage.getItem(DISCORD_REWARD_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function claimDiscordReward(): { unlockedSkins: SkinId[]; updatedStats: LifetimeStats } {
+  const unlockedSkins = loadUnlockedSkins();
+  const currentStats = loadLifetimeStats();
+  if (isDiscordRewardClaimed()) return { unlockedSkins, updatedStats: currentStats };
+
+  const updatedStats = { ...currentStats, gems: currentStats.gems + 100 };
+  const nextUnlocked: SkinId[] = unlockedSkins.includes('gladiator') ? unlockedSkins : [...unlockedSkins, 'gladiator'];
+  saveLifetimeStats(updatedStats);
+  saveUnlockedSkins(nextUnlocked);
+  try {
+    localStorage.setItem(DISCORD_REWARD_KEY, '1');
+  } catch {}
+  return { unlockedSkins: nextUnlocked, updatedStats };
 }
 
 export function saveUnlockedSkins(unlocked: SkinId[]) {

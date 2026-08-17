@@ -299,7 +299,12 @@ export function drawPlayerSprite(
     const SCARF = tint(skinDef.scarf);
 
     // --- WINGS / BACK ACCESSORIES (Drawn behind player) ---
-    if (skinId === 'demon') {
+    if (skinId === 'gladiator') {
+      // Bronze shield carried behind the gladiator.
+      f(-4, 5, 3, 6, tint('#7f1d1d'));
+      f(-5, 6, 1, 4, tint('#d4af37'));
+      f(-3, 7, 1, 2, '#fde68a');
+    } else if (skinId === 'demon') {
       const flap = air ? 0.4 : Math.sin(frame * 0.28) * 0.22;
       const wy = Math.round(flap * 3);
       f(-5, 3 - wy, 5, 3, tint('#4a0000'));
@@ -413,6 +418,17 @@ export function drawPlayerSprite(
       f(3, 8, 2, 2, '#70b25e');
       f(4, 10, 1, 2, '#70b25e');
       f(7, 10, 1, 2, '#70b25e');
+    } else if (skinId === 'poop_man') {
+      f(2, 5, 7, 6, SUIT);
+      f(2, 9, 7, 2, SUIT_D);
+      f(3, 6, 2, 1, '#a86a32');
+      f(6, 8, 2, 1, '#5b2e15');
+    } else if (skinId === 'gladiator') {
+      f(2, 5, 7, 6, SUIT);
+      f(2, 5, 7, 1, '#d4af37');
+      f(3, 6, 2, 4, '#d49b1a');
+      f(7, 6, 2, 3, '#d49b1a');
+      f(2, 9, 7, 2, SUIT_D);
     } else if (skinId === 'mr_soup') {
       f(2, 5, 7, 6, tint('#f8f9fa'));
       f(3, 6, 1, 1, '#1864ab');
@@ -754,6 +770,23 @@ export function drawPlayerSprite(
       f(5, 3, 1, 1, '#ffe066');
       f(6, 4, 1, 1, '#ffe066');
       f(7, 3, 1, 1, '#ffe066');
+    } else if (skinId === 'poop_man') {
+      // A compact pixel poop swirl with a tiny face.
+      f(2, 0, 7, 6, tint('#7a4524'));
+      f(3, -2, 5, 3, tint('#8f5429'));
+      f(4, -4, 3, 2, tint('#a86a32'));
+      f(5, -5, 1, 1, '#c0844b');
+      f(7, 2, 1, 2, '#241008');
+      f(8, 2, 1, 1, '#fff3bf');
+      f(7, 4, 2, 1, '#3b1e0b');
+    } else if (skinId === 'gladiator') {
+      // Bronze helmet, red plume, and a focused side-profile face.
+      f(1, -2, 9, 3, tint('#b45309'));
+      f(2, -4, 7, 2, tint('#d4af37'));
+      f(4, -6, 3, 2, '#dc2626');
+      f(2, 0, 7, 6, SKIN);
+      f(2, 0, 8, 1, tint('#d4af37'));
+      f(7, 2, 1, 2, '#20122e');
     } else {
       // Classic Bob / Bobette / Cob
       f(2, 0, 7, 6, SUIT);

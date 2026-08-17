@@ -124,7 +124,9 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       // Derive the buffer from the wrapper's actual aspect ratio. This keeps
       // desktop resizes and mobile browser-chrome changes in sync instead of
       // relying on a stale orientation bucket.
-      const portrait = r.height > r.width;
+      const portrait = typeof window.matchMedia === 'function'
+        ? window.matchMedia('(orientation: portrait)').matches
+        : r.height > r.width;
       const w = portrait ? 240 : BASE_VW;
       const ratio = portrait
         ? Math.min(2.38, Math.max(1.15, r.height / r.width))
@@ -161,11 +163,16 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       gameRef.current?.setMobileView(coarse);
     };
 
+    let settleTimer = 0;
     const scheduleFit = () => {
       window.cancelAnimationFrame(fitFrame);
+      window.clearTimeout(settleTimer);
       fitFrame = window.requestAnimationFrame(() => {
         fitFrame = 0;
-        fit();
+        settleTimer = window.setTimeout(() => {
+          settleTimer = 0;
+          fit();
+        }, 120);
       });
     };
     const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleFit) : null;
@@ -180,6 +187,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       window.removeEventListener('orientationchange', scheduleFit);
       window.visualViewport?.removeEventListener('resize', scheduleFit);
       window.cancelAnimationFrame(fitFrame);
+      window.clearTimeout(settleTimer);
     };
   }, [gameRef]);
 

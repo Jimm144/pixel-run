@@ -12,6 +12,9 @@ import {
   saveLifetimeStats,
   loadLifetimeStats,
   isSkinAvailable,
+  DISCORD_URL,
+  claimDiscordReward,
+  isDiscordRewardClaimed,
 } from '../game/skins';
 import { drawPlayerSprite } from '../game/playerSprite';
 import { inputManager, type GamepadAction } from '../game/input';
@@ -120,6 +123,7 @@ export function SkinsModal({
   const isEquipped = equippedSkin === selectedSkinId;
 
   const [stats, setStats] = useState<LifetimeStats>(() => loadLifetimeStats());
+  const [discordClaimed, setDiscordClaimed] = useState(() => isDiscordRewardClaimed());
 
   useEffect(() => {
     setStats(loadLifetimeStats());
@@ -165,6 +169,16 @@ export function SkinsModal({
     },
     [unlockedSkins, onUpdateUnlocked, onEquip],
   );
+
+  const handleDiscordClaim = useCallback(() => {
+    if (discordClaimed) return;
+    window.open(DISCORD_URL, '_blank', 'noopener,noreferrer');
+    const reward = claimDiscordReward();
+    setDiscordClaimed(true);
+    setStats(reward.updatedStats);
+    onUpdateUnlocked(reward.unlockedSkins, reward.updatedStats);
+    sfx.play('gem');
+  }, [discordClaimed, onUpdateUnlocked]);
 
   const handleEquip = useCallback(
     (id: SkinId) => {
@@ -473,6 +487,17 @@ export function SkinsModal({
         </div>
       );
     }
+    if (skin.unlock.type === 'discord') {
+      return (
+        <div className={`flex h-[20px] sm:h-[22px] w-full items-center justify-center border px-1 text-center font-pixel text-[6px] ${
+          discordClaimed
+            ? 'border-[#3ef2c8]/60 bg-[#092922] text-[#3ef2c8]'
+            : 'border-[#5865f2]/60 bg-[#151942] text-[#9da9ff]'
+        }`}>
+          {discordClaimed ? 'REWARD CLAIMED' : `${skin.unlock.rewardGems ?? 100} GEMS + DISCORD`}
+        </div>
+      );
+    }
     return null;
   };
 
@@ -601,6 +626,19 @@ export function SkinsModal({
                   className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#ffd166] bg-[#ffd166]/20 px-2 font-pixel text-[7.5px] md:text-[8px] text-[#ffd166] shadow-[2px_2px_0_#08040f] hover:bg-[#ffd166]/40 active:translate-x-[1px] active:translate-y-[1px]"
                 >
                   ???????
+                </button>
+              ) : selectedSkin.unlock.type === 'discord' ? (
+                <button
+                  type="button"
+                  onClick={handleDiscordClaim}
+                  disabled={discordClaimed}
+                  className={`flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 px-2 font-pixel text-[7px] md:text-[7.5px] shadow-[3px_3px_0_#08040f] transition-all active:translate-x-[2px] active:translate-y-[2px] ${
+                    discordClaimed
+                      ? 'cursor-not-allowed border-[#3ef2c8]/60 bg-[#092922] text-[#3ef2c8]'
+                      : 'border-[#08040f] bg-[#5865f2] text-white hover:bg-[#7289da]'
+                  }`}
+                >
+                  {discordClaimed ? 'REWARD CLAIMED' : 'OPEN DISCORD + CLAIM'}
                 </button>
               ) : selectedSkin.unlock.type === 'gems' ? (
                 <button
