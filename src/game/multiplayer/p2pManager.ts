@@ -38,12 +38,15 @@ const ICE_SERVERS = [
 // Public MQTT brokers over WSS (from @trystero-p2p/mqtt defaults). Used only as
 // a fallback signaling path when the WebTorrent trackers are unreachable —
 // some ISPs/corporate networks block torrent trackers while MQTT stays open.
+// ORDER MATTERS: trystero connects to brokers in order until one answers, and
+// captive networks usually only pass 443. Verified reachable endpoints come
+// first; mosquitto is dead on most networks and stays last.
 const MQTT_BROKERS = [
-  'wss://test.mosquitto.org:8081/mqtt',
-  'wss://broker.emqx.io:8084/mqtt',
   'wss://public:public@public.cloud.shiftr.io',
-  'wss://broker-cn.emqx.io:8084/mqtt',
   'wss://broker.hivemq.com:8884/mqtt',
+  'wss://broker.emqx.io:8084/mqtt',
+  'wss://broker-cn.emqx.io:8084/mqtt',
+  'wss://test.mosquitto.org:8081/mqtt',
 ];
 
 const TORRENT_CONFIG = {
@@ -75,6 +78,14 @@ const MQTT_CONFIG = {
 };
 
 type SignalStrategy = 'torrent' | 'mqtt';
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return url;
+  }
+}
 
 function roomConfigFor(strategy: SignalStrategy) {
   return strategy === 'mqtt' ? MQTT_CONFIG : TORRENT_CONFIG;
@@ -192,6 +203,11 @@ export class P2PManager {
   // blocked). Lets users report exactly where a join fails.
   public onDiag: ((diag: string) => void) | null = null;
   private diagInterval: number | null = null;
+  // Cached per-endpoint reachability probe (short WebSocket handshake to every
+  // tracker/broker) so a stuck joiner can show WHICH signaling servers the
+  // current network allows.
+  private probeResults: string[] | null = null;
+  private probeExpires = 0;
 
   private visibilityTimeout: number | null = null;
 
@@ -398,7 +414,10 @@ export class P2PManager {
       if (isHost) {
         this.hostFallbackTimeout = window.setTimeout(() => {
           this.hostFallbackTimeout = null;
-          if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size > 0) return;
+if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size > 0) return;
+      // Joiner still searching: probe every signaling endpoint from THIS
+      // browser so the user (or a report) can see what the network blocks.
+      if (!isHost) this.probeEndpoints();
           if (this.strategy === 'torrent') {
             if (this.room) {
               try {
@@ -891,6 +910,42 @@ export class P2PManager {
   private setState(next: MatchState) {
     this.state = next;
     if (this.onStateChange) this.onStateChange(next);
+  }
+
+  private async probeEndpoints() {
+    if (this.probeResults && Date.now() < this.probeExpires) return;
+    const targets = [
+      ...TRACKERS.map((u) => ['T ' + hostOf(u), u] as const),
+      ...MQTT_BROKERS.map((u) => ['M ' + hostOf(u), u] as const),
+    ];
+    const results = await Promise.all(
+      targets.map(async ([label, url]) => {
+        try {
+          const ok = await new Promise<boolean>((res) => {
+            const ws = new WebSocket(url);
+            const fail = () => {
+              try { ws.close(); } catch {}
+              res(false);
+            };
+            const t = window.setTimeout(fail, 4000);
+            ws.onopen = () => {
+              clearTimeout(t);
+              try { ws.close(); } catch {}
+              res(true);
+            };
+            ws.onerror = fail;
+          });
+          return `${ok ? 'OK' : 'XX'} ${label}`;
+        } catch {
+          return `XX ${label}`;
+        }
+      })
+    );
+    this.probeResults = results;
+    this.probeExpires = Date.now() + 15000;
+    if (this.onDiag) {
+      this.onDiag(`PROBE ${results.join(' · ')}`);
+    }
   }
 
   private startDiag() {
