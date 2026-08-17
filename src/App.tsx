@@ -549,8 +549,14 @@ export function App() {
         questShareBusyRef.current = false;
         return;
       }
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-      triggerSkinToast('SHARE CARD COPIED');
+      const link = window.location.origin + window.location.pathname;
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'image/png': blob,
+          'text/plain': new Blob([link], { type: 'text/plain' }),
+        }),
+      ]);
+      triggerSkinToast('SHARE CARD + LINK COPIED');
     } catch {
       // ignore clipboard failures
     } finally {
@@ -572,8 +578,14 @@ export function App() {
         setQuestToast(['IMAGE COPY FAILED']);
         return;
       }
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-      setQuestToast(['SCORE IMAGE COPIED']);
+      const link = window.location.origin + window.location.pathname;
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'image/png': blob,
+          'text/plain': new Blob([link], { type: 'text/plain' }),
+        }),
+      ]);
+      setQuestToast(['SCORE IMAGE + LINK COPIED']);
     } catch {
       setQuestToast(['IMAGE COPY FAILED']);
     } finally {
