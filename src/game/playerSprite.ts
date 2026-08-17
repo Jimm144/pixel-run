@@ -300,10 +300,12 @@ export function drawPlayerSprite(
 
     // --- WINGS / BACK ACCESSORIES (Drawn behind player) ---
     if (skinId === 'gladiator') {
-      // Bronze shield carried behind the gladiator.
-      f(-4, 5, 3, 6, tint('#7f1d1d'));
-      f(-5, 6, 1, 4, tint('#d4af37'));
-      f(-3, 7, 1, 2, '#fde68a');
+      // Layered bronze shield carried behind the gladiator.
+      f(-4, 6, 3, 6, tint('#7f1d1d'));
+      f(-5, 7, 1, 4, tint('#b45309'));
+      f(-3, 5, 1, 1, '#d4af37');
+      f(-3, 8, 1, 2, '#fde68a');
+      f(-3, 12, 1, 1, '#d4af37');
     } else if (skinId === 'demon') {
       const flap = air ? 0.4 : Math.sin(frame * 0.28) * 0.22;
       const wy = Math.round(flap * 3);
@@ -348,7 +350,21 @@ export function drawPlayerSprite(
     }
 
     // --- LEGS ---
-    if (skinId === 'angel') {
+    if (skinId === 'gladiator') {
+      const legs = PLAYER_RUN_LEGS[run >= 0 ? run : 0];
+      if (diving) {
+        f(1, 10, 4, 4, BOOT);
+        f(5, 9, 5, 3, BOOT);
+      } else if (air) {
+        f(2, 10, 3, 4, BOOT);
+        f(6, 9, 3, 4, BOOT);
+      } else {
+        f(legs[0], legs[1], legs[2], legs[3], BOOT);
+        f(legs[4], legs[5], legs[6], legs[7], BOOT);
+        f(legs[0], legs[1], legs[2], 1, '#d4af37');
+        f(legs[4], legs[5], legs[6], 1, '#d4af37');
+      }
+    } else if (skinId === 'angel') {
       // Golden Divine Greaves & Winged Sandals
       if (diving) {
         f(1, 10, 4, 4, tint('#ffd166'));
@@ -426,8 +442,9 @@ export function drawPlayerSprite(
     } else if (skinId === 'gladiator') {
       f(2, 5, 7, 6, SUIT);
       f(2, 5, 7, 1, '#d4af37');
-      f(3, 6, 2, 4, '#d49b1a');
-      f(7, 6, 2, 3, '#d49b1a');
+      f(3, 6, 5, 1, '#d49b1a');
+      f(3, 7, 4, 2, '#b45309');
+      f(8, 6, 1, 3, '#fbbf24');
       f(2, 9, 7, 2, SUIT_D);
     } else if (skinId === 'mr_soup') {
       f(2, 5, 7, 6, tint('#f8f9fa'));
@@ -462,7 +479,14 @@ export function drawPlayerSprite(
     }
 
     // --- ARM ---
-    if (air) {
+    if (skinId === 'gladiator') {
+      // Armored sword arm and a simple forward-pointing blade.
+      f(6, 6, 2, 3, tint('#d4af37'));
+      f(8, 6, 2, 2, SKIN);
+      f(8, 7, 3, 1, tint('#b45309'));
+      f(10, 2, 1, 6, '#e2e8f0');
+      f(11, 1, 1, 1, '#ffffff');
+    } else if (air) {
       f(6, 3, 2, 3, skinId === 'zeus' || skinId === 'angel' ? SKIN : skinId === 'mr_soup' ? tint('#dee2e6') : skinId === 'fmhy' ? tint('#080811') : SUIT_D);
       f(8, 3, 2, 2, skinId === 'zeus' || skinId === 'angel' ? tint('#ffd166') : skinId === 'fmhy' ? '#ffffff' : SKIN);
     } else {
@@ -780,13 +804,16 @@ export function drawPlayerSprite(
       f(8, 2, 1, 1, '#fff3bf');
       f(7, 4, 2, 1, '#3b1e0b');
     } else if (skinId === 'gladiator') {
-      // Bronze helmet, red plume, and a focused side-profile face.
-      f(1, -2, 9, 3, tint('#b45309'));
-      f(2, -4, 7, 2, tint('#d4af37'));
+      // Full helmet, narrow visor, cheek guards, and a red crest.
+      f(1, 0, 9, 6, tint('#374151'));
+      f(2, -2, 7, 2, tint('#6b7280'));
+      f(3, -4, 5, 2, tint('#d4af37'));
       f(4, -6, 3, 2, '#dc2626');
-      f(2, 0, 7, 6, SKIN);
-      f(2, 0, 8, 1, tint('#d4af37'));
-      f(7, 2, 1, 2, '#20122e');
+      f(2, 2, 7, 2, '#111827');
+      f(7, 2, 1, 1, '#ffd166');
+      f(2, 4, 2, 2, tint('#9ca3af'));
+      f(8, 4, 2, 2, tint('#9ca3af'));
+      f(4, 5, 4, 1, '#1f2937');
     } else {
       // Classic Bob / Bobette / Cob
       f(2, 0, 7, 6, SUIT);
