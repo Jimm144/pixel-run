@@ -35,7 +35,18 @@ const ICE_SERVERS = [
   { urls: 'stun:stun.cloudflare.com:3478' },
 ];
 
-const ROOM_CONFIG = {
+// Public MQTT brokers over WSS (from @trystero-p2p/mqtt defaults). Used only as
+// a fallback signaling path when the WebTorrent trackers are unreachable —
+// some ISPs/corporate networks block torrent trackers while MQTT stays open.
+const MQTT_BROKERS = [
+  'wss://test.mosquitto.org:8081/mqtt',
+  'wss://broker.emqx.io:8084/mqtt',
+  'wss://public:public@public.cloud.shiftr.io',
+  'wss://broker-cn.emqx.io:8084/mqtt',
+  'wss://broker.hivemq.com:8884/mqtt',
+];
+
+const TORRENT_CONFIG = {
   appId: APP_ID,
   // Joiners must announce promptly so hosts find them; never let a room go dormant.
   passive: false,
@@ -47,6 +58,36 @@ const ROOM_CONFIG = {
     redundancy: TRACKERS.length,
   },
 };
+
+// MQTT brokers are completely separate infrastructure from torrent trackers,
+// so the MQTT config must NOT reuse relayConfig.urls (torrent WSS URLs would
+// be handed to mqtt.js as if they were brokers).
+const MQTT_CONFIG = {
+  appId: APP_ID,
+  passive: false,
+  rtcConfig: {
+    iceServers: ICE_SERVERS,
+  },
+  relayConfig: {
+    urls: MQTT_BROKERS,
+    redundancy: MQTT_BROKERS.length,
+  },
+};
+
+type SignalStrategy = 'torrent' | 'mqtt';
+
+function roomConfigFor(strategy: SignalStrategy) {
+  return strategy === 'mqtt' ? MQTT_CONFIG : TORRENT_CONFIG;
+}
+
+// Literal specifiers so viteSingleFile can statically inline both strategies
+// into the single-file bundle; a runtime `import(dynamicString)` would dangle.
+async function loadStrategyModule(strategy: SignalStrategy) {
+  if (strategy === 'mqtt') {
+    return import('@trystero-p2p/mqtt');
+  }
+  return import('@trystero-p2p/torrent');
+}
 
 function registerMessageAction<T>(
   room: any,
@@ -116,6 +157,18 @@ export class P2PManager {
   private announceLeavePromise: Promise<void> | null = null;
   private browseLeavePromise: Promise<void> | null = null;
   private initTimeout: number | null = null;
+  private hostFallbackTimeout: number | null = null;
+  // Once a fallback actually fired, keep preferring the backup strategy for the
+  // rest of the session (retries go straight to MQTT instead of re-waiting 5s).
+  private fallbackUsed = false;
+  // Primary signaling path is WebTorrent. `#mqtt` (or `#battle=...&mqtt`)
+  // forces MQTT first when a user's ISP blocks the torrent trackers
+  // (auto-fallback still applies).
+  private readonly preferredStrategy: SignalStrategy =
+    typeof window !== 'undefined' && window.location.hash.includes('mqtt')
+      ? 'mqtt'
+      : 'torrent';
+  private strategy: SignalStrategy = this.preferredStrategy;
   private sendTickAction: ((data: PlayerTickPayload, targetPeerId?: string) => void) | null = null;
   private sendEventAction: ((data: NetEventPacket, targetPeerId?: string) => void) | null = null;
 
@@ -160,6 +213,9 @@ export class P2PManager {
     if (clean.includes('#BATTLE=')) {
       clean = clean.split('#BATTLE=')[1];
     }
+    // Strip trailing link params (e.g. #battle=ABCD&mqtt) so they never leak
+    // into the room code.
+    clean = clean.split('&')[0];
     if (clean.includes('-')) {
       clean = clean.split('-')[0];
     }
@@ -212,6 +268,10 @@ export class P2PManager {
       clearTimeout(this.initTimeout);
       this.initTimeout = null;
     }
+    if (this.hostFallbackTimeout !== null) {
+      clearTimeout(this.hostFallbackTimeout);
+      this.hostFallbackTimeout = null;
+    }
     this.setState('connecting');
     this.localOutgoingSeq = 0;
     this.peerSeqs.clear();
@@ -224,7 +284,7 @@ export class P2PManager {
     const isHost = this.role === 'host';
 
     try {
-      const { joinRoom, selfId } = await import('@trystero-p2p/torrent');
+      const { joinRoom, selfId } = await loadStrategyModule(this.strategy);
       if (seq !== this.initSeq) return; // superseded by a newer init
       if (this.pendingRoomLeave) {
         await this.pendingRoomLeave;
@@ -233,7 +293,7 @@ export class P2PManager {
       }
       this.localPeerId = selfId;
 
-      this.room = joinRoom(ROOM_CONFIG as any, this.roomId);
+      this.room = joinRoom(roomConfigFor(this.strategy) as any, this.roomId);
 
       // 1. Unreliable coordinates channel
       this.sendTickAction = registerMessageAction<PlayerTickPayload>(this.room, 'tick', (data, peerId) => {
@@ -289,6 +349,29 @@ export class P2PManager {
       this.initTimeout = window.setTimeout(() => {
         this.initTimeout = null;
         if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size > 0) return;
+
+        // A JOINER that can't reach its host has a genuine failure signal: the
+        // host exists (it has the room code) but no peer ever appeared, so the
+        // current signaling path is dead (blocked trackers / MQTT brokers).
+        // Fall back to the other strategy. The HOST does not switch here — a
+        // waiting host with no players is NORMAL; only a host that has waited a
+        // very long time (see the 25s timer below) concludes its announce is
+        // unreachable and mirrors onto the backup strategy.
+        if (!isHost && this.strategy === 'torrent') {
+          if (this.room) {
+            try {
+              this.pendingRoomLeave = Promise.resolve(this.room.leave()).catch(() => {});
+            } catch {}
+            this.room = null;
+          }
+          this.sendTickAction = null;
+          this.sendEventAction = null;
+          this.strategy = 'mqtt';
+          this.fallbackUsed = true;
+          this.initRoom();
+          return;
+        }
+
         if (this.onError) {
           if (isHost) {
             this.onError(`ROOM ${roomId} READY — WAITING FOR PLAYERS`);
@@ -297,6 +380,34 @@ export class P2PManager {
           }
         }
       }, 5000);
+
+      // Host-only backup: if a host has been waiting 10s with zero players AND
+      // zero successful joins, its trackers are likely unreachable from the
+      // joiners' networks. Mirror the room onto the backup strategy so blocked
+      // joiners (who switch at 5s) can still find it. A joiner that connects in
+      // the meantime (opponents.size > 0) cancels this via the seq guard and
+      // the opponents check. 10s keeps both-blocked peers converging before the
+      // modal's 15s TRY AGAIN; a slow-but-working torrent join also wins because
+      // a host that gains opponents never switches.
+      if (isHost) {
+        this.hostFallbackTimeout = window.setTimeout(() => {
+          this.hostFallbackTimeout = null;
+          if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size > 0) return;
+          if (this.strategy === 'torrent') {
+            if (this.room) {
+              try {
+                this.pendingRoomLeave = Promise.resolve(this.room.leave()).catch(() => {});
+              } catch {}
+              this.room = null;
+            }
+            this.sendTickAction = null;
+            this.sendEventAction = null;
+            this.strategy = 'mqtt';
+            this.fallbackUsed = true;
+            this.initRoom();
+          }
+        }, 10000);
+      }
 
     } catch (err: any) {
       if (seq !== this.initSeq) return;
@@ -316,7 +427,7 @@ export class P2PManager {
         this.browseLeavePromise = null;
         if (seq !== this.browseSeq) return;
       }
-      this.browseRoom = joinRoom(ROOM_CONFIG as any, DISCOVERY_ROOM);
+      this.browseRoom = joinRoom(TORRENT_CONFIG as any, DISCOVERY_ROOM);
 
       const sendRequest = registerMessageAction<{ ts: number }>(this.browseRoom, 'req_lobbies');
       registerMessageAction<PublicLobbyInfo>(this.browseRoom, 'public_lobby', (data) => {
@@ -367,7 +478,7 @@ export class P2PManager {
         this.announceLeavePromise = null;
         if (seq !== this.announceSeq) return;
       }
-      this.announceRoom = joinRoom(ROOM_CONFIG as any, DISCOVERY_ROOM);
+      this.announceRoom = joinRoom(TORRENT_CONFIG as any, DISCOVERY_ROOM);
 
       const sendLobby = registerMessageAction<PublicLobbyInfo>(this.announceRoom, 'public_lobby');
 
@@ -778,9 +889,14 @@ export class P2PManager {
 
   public leave() {
     this.initSeq++; // invalidate any in-flight initRoom
+    this.strategy = this.fallbackUsed ? 'mqtt' : this.preferredStrategy;
     if (this.initTimeout !== null) {
       clearTimeout(this.initTimeout);
       this.initTimeout = null;
+    }
+    if (this.hostFallbackTimeout !== null) {
+      clearTimeout(this.hostFallbackTimeout);
+      this.hostFallbackTimeout = null;
     }
     this.releaseWakeLock();
     this.stopMatchWatchdog();
