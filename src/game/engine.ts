@@ -54,8 +54,6 @@ import {
 } from './types';
 import { type SkinId, loadEquippedSkin, loadLifetimeStats, saveLifetimeStats, MILESTONES } from './skins';
 import { WorldGen } from './worldGen';
-import { p2p } from './multiplayer/p2pManager';
-import type { PlayerTickPayload } from './multiplayer/types';
 
 export { BASE_VW, BASE_VH, MAX_VH, VW, VH, worldOffsetY, setViewportSize } from './types';
 export type { Phase, Stats } from './types';
@@ -87,9 +85,7 @@ type GameState = {
     | 'texts'
     | 'stats'
     | 'rng'
-    | 'isMultiplayer'
     | 'matchSeed'
-    | 'opponentStates'
   >]: Game[K];
 };
 
@@ -204,11 +200,9 @@ export class Game implements GenHost, RenderHost {
   runGems = 0;
   moonPhase!: number;
 
-  /* ---- multiplayer & determinism */
+  /* ---- seeded determinism */
   rng: Mulberry32 = new Mulberry32();
-  isMultiplayer = false;
   matchSeed = 0;
-  opponentStates: PlayerTickPayload[] = [];
 
   /* ---- subsystems */
   private renderer!: Renderer;
@@ -318,9 +312,8 @@ export class Game implements GenHost, RenderHost {
   }
 
   /* ------------------------------------------------------------- lifecycle */
-  reset(seed?: number) {
-    this.isMultiplayer = seed !== undefined;
-    this.matchSeed = seed ?? (Math.random() * 0x7fffffff) >>> 0;
+  reset() {
+    this.matchSeed = (Math.random() * 0x7fffffff) >>> 0;
     this.rng = new Mulberry32(this.matchSeed);
 
     Object.assign(this, this.defaults());
@@ -346,18 +339,14 @@ export class Game implements GenHost, RenderHost {
     this.worldGen.generate(this.camX + VW * 2.2);
   }
 
-  startRun(seed?: number) {
-    this.reset(seed);
+  startRun() {
+    this.reset();
     this.phase = 'playing';
-    this.countdown = seed !== undefined ? 0 : 180;
-    this.countdownTicks = seed === undefined;
+    this.countdown = 180;
+    this.countdownTicks = true;
     this.flash = 0.35;
     this.flashCol = '#ffffff';
     sfx.startMusic(this.zone.bg, 0);
-  }
-
-  setOpponentStates(states: PlayerTickPayload[]) {
-    this.opponentStates = states || [];
   }
 
   /** Called when the canvas size changes — drops size-dependent art caches. */
@@ -1292,24 +1281,6 @@ export class Game implements GenHost, RenderHost {
       }
     }
 
-    if (this.isMultiplayer && this.phase === 'playing' && this.frame % 2 === 0) {
-      p2p.sendTick({
-        tick: this.frame,
-        x: this.px,
-        y: this.py,
-        vy: this.vy,
-        run: this.onGround ? Math.floor(this.animT) % 4 : -1,
-        air: !this.onGround,
-        diving: this.diving,
-        score: this.score,
-        meters: Math.floor(this.distance / 10),
-        dead: false,
-        kills: this.kills,
-        combo: this.combo,
-        skinId: this.activeSkin,
-      });
-    }
-
     return true;
   }
 
@@ -1460,10 +1431,6 @@ export class Game implements GenHost, RenderHost {
     this.breakCombo();
     sfx.stopMusic();
     sfx.play('death');
-
-    if (this.isMultiplayer) {
-      p2p.sendDeath(this.frame, this.score, Math.floor(this.distance / 10), this.kills);
-    }
 
     for (let i = 0; i < 40; i++) {
       const a = rnd(0, Math.PI * 2);

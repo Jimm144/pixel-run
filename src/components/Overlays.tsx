@@ -95,36 +95,6 @@ function PlayIcon({ className = 'h-[16px] w-[16px]' }: { className?: string }) {
   );
 }
 
-function PixelSwordsIcon({ className = 'h-5 w-5 sm:h-6 sm:w-6' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" className={className} fill="currentColor" shapeRendering="crispEdges" aria-hidden="true">
-      {/* Blade 1 (top-left to bottom-right, long) */}
-      <rect x="1" y="1" width="2" height="2" />
-      <rect x="3" y="3" width="2" height="2" />
-      <rect x="5" y="5" width="2" height="2" />
-      <rect x="7" y="7" width="2" height="2" />
-      <rect x="9" y="9" width="2" height="2" />
-      {/* Crossguard 1 (thin) */}
-      <rect x="11" y="7" width="2" height="2" />
-      {/* Hilt & Pommel 1 (short) */}
-      <rect x="11" y="11" width="2" height="2" />
-      <rect x="13" y="13" width="2" height="2" />
-
-      {/* Blade 2 (top-right to bottom-left, long) */}
-      <rect x="14" y="1" width="2" height="2" />
-      <rect x="12" y="3" width="2" height="2" />
-      <rect x="10" y="5" width="2" height="2" />
-      <rect x="8" y="7" width="2" height="2" />
-      <rect x="6" y="9" width="2" height="2" />
-      {/* Crossguard 2 (thin) */}
-      <rect x="4" y="7" width="2" height="2" />
-      {/* Hilt & Pommel 2 (short) */}
-      <rect x="4" y="11" width="2" height="2" />
-      <rect x="2" y="13" width="2" height="2" />
-    </svg>
-  );
-}
-
 function PixelShirtIcon({ className = 'h-5 w-5 sm:h-6 sm:w-6' }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" className={className} fill="currentColor" shapeRendering="crispEdges" aria-hidden="true">
@@ -182,7 +152,6 @@ export function StartScreen({
   questRun,
   questOnDayRollover,
   questOnShare,
-  onOpenBattles,
   onOpenSkins,
   onExportSave,
   onImportSave,
@@ -201,7 +170,6 @@ export function StartScreen({
   questRun: QuestRunStats;
   questOnDayRollover?: () => void;
   questOnShare?: () => void;
-  onOpenBattles?: () => void;
   onOpenSkins?: () => void;
   onExportSave?: () => void;
   onImportSave?: () => void;
@@ -304,17 +272,6 @@ export function StartScreen({
           </button>
         </div>
         <div className="flex w-full max-w-[420px] items-stretch gap-2 tablet:max-w-[500px]">
-          {onOpenBattles && (
-            <button
-              type="button"
-              onClick={onOpenBattles}
-              aria-label="Multiplayer Battles"
-              title="Multiplayer Battles"
-              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[#ff4d6d]/60 bg-[#160614] text-[#ff4d6d] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
-            >
-              <PixelSwordsIcon className="h-5 w-5 sm:h-6 sm:w-6" />
-            </button>
-          )}
           <PixelButton
             onClick={onStart}
             className="flex flex-1 items-center justify-center gap-3 py-3.5 text-[11px] tablet:py-4 tablet:text-[14px]"

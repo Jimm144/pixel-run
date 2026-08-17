@@ -88,9 +88,6 @@ export class Renderer {
   private hudComboKey = '';
   private hudComboStr = '';
 
-  // Ghost interpolation state for silky smooth 60fps multiplayer rendering (up to 5 players)
-  private oppGhosts: Map<string, { x: number; y: number }> = new Map();
-
   constructor(
     private g: RenderHost,
     private particles: ParticleSystem,
@@ -113,7 +110,6 @@ export class Renderer {
     this.platI = 0;
     this.platNI = 1;
     this.platformCaches.clear();
-    this.oppGhosts.clear();
   }
 
   /** Called when the canvas size changes — drops the size-dependent art
@@ -441,7 +437,6 @@ export class Renderer {
     this.drawWorld();
     this.particles.draw(c, this.g.camX);
     if (this.g.phase !== 'dead') this.drawPlayer();
-    this.drawOpponentGhosts();
     this.drawDeathShockwave();
     this.texts.draw(c, this.g.camX);
 
@@ -1744,76 +1739,6 @@ export class Renderer {
     }
   }
 
-  private drawOpponentGhosts() {
-    const opps = this.g.opponentStates;
-    if (!opps || opps.length === 0 || this.g.phase === 'ready') return;
-
-    const PLAYER_COLORS = ['#7ef7ff', '#ff70a6', '#ffd166', '#a78bfa'];
-    const c = this.ctx;
-    const cam = this.g.camX;
-
-    opps.forEach((opp, idx) => {
-      if (opp.dead) return;
-      const key = opp.peerId || `peer-${idx}`;
-      let pos = this.oppGhosts.get(key);
-      if (!pos) {
-        pos = { x: opp.x, y: opp.y };
-        this.oppGhosts.set(key, pos);
-      } else {
-        pos.x += (opp.x - pos.x) * 0.38;
-        pos.y += (opp.y - pos.y) * 0.45;
-      }
-
-      const color = PLAYER_COLORS[idx % PLAYER_COLORS.length];
-      const ox = Math.round(pos.x - cam + PLAYER_W / 2);
-      const oy = Math.round(pos.y + PLAYER_H / 2);
-
-      // Is opponent visible inside or near camera?
-      if (ox >= -40 && ox <= VW + 40) {
-        c.save();
-        c.translate(ox, oy);
-        c.globalAlpha = 0.72;
-
-        drawPlayerSprite(c, 0, 0, {
-          skinId: opp.skinId || 'bob',
-          frame: opp.tick || this.g.frame,
-          run: opp.run,
-          onGround: !opp.air,
-          diving: opp.diving,
-          vx: 2.1,
-        });
-
-        // Holographic glow outline around opponent
-        c.strokeStyle = color;
-        c.lineWidth = 1;
-        c.strokeRect(Math.round(-PLAYER_W / 2 - 1), Math.round(-PLAYER_H / 2 - 1), PLAYER_W + 2, PLAYER_H + 2);
-
-        // Opponent floating nametag & distance tag
-        c.globalAlpha = 0.92;
-        const tag = `P${idx + 2} ${opp.meters}M`;
-        drawTextCentered(c, tag, 0, -PLAYER_H / 2 - 8, 1, color, '#08121e');
-        c.restore();
-      } else {
-        // Off-screen indicator
-        c.save();
-        const isAhead = ox > VW;
-        const ptrX = isAhead ? VW - 22 : 22;
-        const ptrY = clamp(oy + idx * 14, 30, VH - 40);
-        const diffM = opp.meters - Math.floor(this.g.distance / 10);
-        const sign = diffM >= 0 ? '+' : '';
-        const label = `P${idx + 2} ${sign}${diffM}M`;
-
-        c.fillStyle = '#100722';
-        c.fillRect(ptrX - 20, ptrY - 6, 40, 12);
-        c.strokeStyle = color;
-        c.lineWidth = 1;
-        c.strokeRect(ptrX - 20, ptrY - 6, 40, 12);
-        drawTextCentered(c, label, ptrX, ptrY - 2, 1, color, '#08121e');
-        c.restore();
-      }
-    });
-  }
-
   private drawBiomeEvent() {
     if (this.g.phase !== 'playing' || this.g.eventTimer <= 0 || this.g.eventMax <= 0) return;
     const c = this.ctx;
@@ -2028,30 +1953,6 @@ export class Renderer {
       this.drawCombo(Math.round(W / 2), 44);
     } else {
       this.drawCombo(Math.round(W / 2), 8);
-    }
-
-    // 5. MULTIPLAYER BATTLE STATUS & LEADERBOARD (Up to 5 players)
-    if (this.g.isMultiplayer && this.g.opponentStates && this.g.opponentStates.length > 0) {
-      const midX = Math.round(W / 2);
-      const vsY = (mobile || isNarrow) ? 58 : 26;
-
-      const runners = [
-        { name: 'YOU', score: this.g.score, meters: Math.floor(this.g.distance / 10), isLocal: true },
-        ...this.g.opponentStates.map((o, idx) => ({
-          name: `P${idx + 2}`,
-          score: o.score,
-          meters: o.meters,
-          isLocal: false,
-        })),
-      ];
-      runners.sort((a, b) => b.score - a.score || b.meters - a.meters);
-      const myRank = runners.findIndex((r) => r.isLocal) + 1;
-
-      const rankTxt = `${myRank}/${runners.length} PLACE`;
-      const leadTxt = `1ST: ${runners[0].name} (${runners[0].score})`;
-      const hudTxt = `${rankTxt} | ${leadTxt}`;
-
-      drawTextCentered(c, hudTxt, midX, vsY, 1, myRank === 1 ? '#ffd166' : '#3ef2c8', '#150a24');
     }
 
     c.restore();

@@ -37,7 +37,7 @@ const TRAJECTORY_FRAMES = 150;
 /**
  * Procedural world builder: emits platforms, pickups, power-ups, enemies,
  * spikes and springs into the host's arrays. Uses GenHost's seeded PRNG
- * for 100% deterministic layout generation across multiplayer peers.
+ * for 100% deterministic layout generation.
  */
 export class WorldGen {
   private genX!: number;

@@ -314,6 +314,4 @@ export interface RenderHost {
   zone: Zone;
   zoneOrder: number[];
   moonPhase: number;
-  isMultiplayer: boolean;
-  opponentStates: any[];
 }

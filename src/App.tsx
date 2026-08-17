@@ -36,9 +36,6 @@ import { SkinsModal } from './components/SkinsModal';
 import { SkinUnlockModal } from './components/SkinUnlockModal';
 import { FeedbackModal } from './components/FeedbackModal';
 import { SaveLoadModal } from './components/SaveLoadModal';
-import { BattleModal } from './components/BattleModal';
-import { p2p } from './game/multiplayer/p2pManager';
-import type { MatchResult } from './game/multiplayer/types';
 import {
   loadEquippedSkin,
   loadUnlockedSkins,
@@ -259,8 +256,6 @@ export function App() {
   const [unlockedSkins, setUnlockedSkins] = useState<SkinId[]>(() => loadUnlockedSkins());
   const [lifetimeStats, setLifetimeStats] = useState<LifetimeStats>(() => loadLifetimeStats());
   const [skinsModalOpen, setSkinsModalOpen] = useState(false);
-  const [battleModalOpen, setBattleModalOpen] = useState(false);
-  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [saveLoadModal, setSaveLoadModal] = useState<'save' | 'load' | null>(null);
   const [skinToast, setSkinToast] = useState<string | null>(null);
@@ -626,55 +621,6 @@ export function App() {
     setUi('playing');
   }, [commitQuestRun, musicOn, sfxOn, questAnnouncement, volumes.music, volumes.sfx]);
 
-  const startMultiplayerBattle = useCallback((seed: number) => {
-    commitQuestRun();
-    questCommittedRef.current = false;
-    sfx.init();
-    sfx.setMusicMuted(!musicOn);
-    sfx.setSfxMuted(!sfxOn);
-    setMusicVolume(volumes.music);
-    setSfxVolume(volumes.sfx);
-    const g = gameRef.current;
-    if (!g) return;
-    setBattleModalOpen(false);
-    setMatchResult(null);
-    setRestartHint(false);
-    g.best = bestScore();
-    g.startRun(seed);
-    questToastSeenRef.current.clear();
-    setQuestToast([]);
-    setQuestRun(emptyQuestRunStats());
-    setNewBest(false);
-    setUi('playing');
-  }, [commitQuestRun, musicOn, sfxOn, volumes.music, volumes.sfx]);
-
-  useEffect(() => {
-    // Check if URL hash has #battle=... to auto open BattleModal
-    if (typeof window !== 'undefined' && window.location.hash.startsWith('#battle=')) {
-      setBattleModalOpen(true);
-    }
-
-    // App owns the in-match/result callbacks — they must survive BattleModal
-    // mount/unmount cycles. BattleModal owns onOpponentsUpdate/onCountdown/
-    // onMatchStart/onError/onStateChange. The two sets never overlap, so
-    // neither side's cleanup stomps the other's handlers.
-    p2p.onOpponentTicks = (ticks) => {
-      gameRef.current?.setOpponentStates(ticks);
-    };
-    p2p.onOpponentDeath = (death) => {
-      setQuestToast([`${death.name} ELIMINATED! (${death.finalScore} PTS)`]);
-    };
-    p2p.onMatchResult = (result) => {
-      setMatchResult(result);
-      setBattleModalOpen(true);
-    };
-    return () => {
-      p2p.onOpponentTicks = null;
-      p2p.onOpponentDeath = null;
-      p2p.onMatchResult = null;
-    };
-  }, []);
-
   const showRestartHint = useCallback(() => {
     setRestartHint(true);
     window.clearTimeout(restartHintTimer.current);
@@ -702,7 +648,6 @@ export function App() {
   const toMenu = useCallback(() => {
     const g = gameRef.current;
     if (g) g.toReady();
-    p2p.leave();
     commitQuestRun();
     setQuestRecord(loadQuestRecord());
     sfx.play('ui');
@@ -724,12 +669,6 @@ export function App() {
     const beatBest = s.score > 0 && (!previous || s.score > previous.score);
     if (beatBest) setBest(saveHighScore(entry, previous)?.score ?? s.score);
     setNewBest(beatBest);
-
-    // If active multiplayer battle, broadcast death to party and wait for final rankings
-    if (gameRef.current?.isMultiplayer && p2p.state === 'playing') {
-      p2p.sendDeath(gameRef.current.frame, s.score, s.meters, s.kills);
-      return;
-    }
 
     // Evaluate skin unlocks with fresh stats from storage
     const latestStats = loadLifetimeStats();
@@ -806,7 +745,7 @@ export function App() {
           }}
           onRestartHint={showRestartHint}
           onQuestProgress={handleQuestProgress}
-          modalOpen={showFeedbackModal || skinsModalOpen || !!unlockedSkinPopup || battleModalOpen}
+          modalOpen={showFeedbackModal || skinsModalOpen || !!unlockedSkinPopup}
         />
         {restartHint && (ui === 'playing' || ui === 'paused') && (
           <div className="pointer-events-none absolute inset-x-0 top-[36%] z-30 flex justify-center">
@@ -815,7 +754,7 @@ export function App() {
             </div>
           </div>
         )}
-        {ui === 'start' && !skinsModalOpen && !battleModalOpen && (
+        {ui === 'start' && !skinsModalOpen && (
           <StartScreen
             best={best}
             lastRun={lastRun?.score ?? 0}
@@ -830,7 +769,6 @@ export function App() {
             questRun={questRun}
             questOnDayRollover={handleQuestRollover}
             questOnShare={handleShareQuests}
-            onOpenBattles={() => setBattleModalOpen(true)}
             onOpenSkins={() => {
               setLifetimeStats(loadLifetimeStats());
               setUnlockedSkins(loadUnlockedSkins());
@@ -906,16 +844,6 @@ export function App() {
             }}
             onClose={() => setSkinsModalOpen(false)}
             touch={touch}
-          />
-        )}
-        {battleModalOpen && (
-          <BattleModal
-            onClose={() => setBattleModalOpen(false)}
-            onStartBattle={startMultiplayerBattle}
-            localName="PLAYER 1"
-            localSkin={equippedSkin}
-            matchResult={matchResult}
-            onClearMatchResult={() => setMatchResult(null)}
           />
         )}
         {showFeedbackModal && (
