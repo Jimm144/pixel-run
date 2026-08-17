@@ -187,6 +187,11 @@ export class P2PManager {
   public onMatchResult: ((result: MatchResult) => void) | null = null;
   public onPublicLobbiesUpdate: ((lobbies: PublicLobbyInfo[]) => void) | null = null;
   public onError: ((err: string) => void) | null = null;
+  // Diagnostic feed for the lobby: which signaling strategy is active and what
+  // the peer connection is doing (signaling found the host vs data channel
+  // blocked). Lets users report exactly where a join fails.
+  public onDiag: ((diag: string) => void) | null = null;
+  private diagInterval: number | null = null;
 
   private visibilityTimeout: number | null = null;
 
@@ -294,6 +299,7 @@ export class P2PManager {
       this.localPeerId = selfId;
 
       this.room = joinRoom(roomConfigFor(this.strategy) as any, this.roomId);
+      this.startDiag();
 
       // 1. Unreliable coordinates channel
       this.sendTickAction = registerMessageAction<PlayerTickPayload>(this.room, 'tick', (data, peerId) => {
@@ -887,6 +893,30 @@ export class P2PManager {
     if (this.onStateChange) this.onStateChange(next);
   }
 
+  private startDiag() {
+    this.stopDiag();
+    this.diagInterval = window.setInterval(() => {
+      if (!this.onDiag) return;
+      try {
+        const peers = this.room && typeof this.room.getPeers === 'function' ? this.room.getPeers() : null;
+        let peerInfo = 'NO PEERS FOUND';
+        if (peers && peers.size > 0) {
+          peerInfo = [...peers.values()]
+            .map((pc: any) => pc?.connectionState || pc?.iceConnectionState || 'PENDING')
+            .join(',');
+        }
+        this.onDiag(`${this.strategy.toUpperCase()} · ${peerInfo}`);
+      } catch {}
+    }, 2000);
+  }
+
+  private stopDiag() {
+    if (this.diagInterval !== null) {
+      clearInterval(this.diagInterval);
+      this.diagInterval = null;
+    }
+  }
+
   public leave() {
     this.initSeq++; // invalidate any in-flight initRoom
     this.strategy = this.fallbackUsed ? 'mqtt' : this.preferredStrategy;
@@ -901,6 +931,7 @@ export class P2PManager {
     this.releaseWakeLock();
     this.stopMatchWatchdog();
     this.stopPublicAnnounce();
+    this.stopDiag();
     this.stopBrowsingPublicLobbies();
     if (this.visibilityTimeout) clearTimeout(this.visibilityTimeout);
 

@@ -31,6 +31,7 @@ export function BattleModal({
   const [opponents, setOpponents] = useState<OpponentInfo[]>(() => Array.from(p2p.opponents.values()));
   const [publicLobbies, setPublicLobbies] = useState<PublicLobbyInfo[]>([]);
   const [statusMsg, setStatusMsg] = useState<string>('');
+  const [diagText, setDiagText] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [joined, setJoined] = useState(false);
@@ -139,6 +140,10 @@ export function BattleModal({
       }
     };
 
+    p2p.onDiag = (diag) => {
+      setDiagText(diag);
+    };
+
     p2p.onStateChange = (state) => {
       if (state === 'idle' && p2p.role === 'joiner') {
         setJoined(false);
@@ -151,6 +156,7 @@ export function BattleModal({
       p2p.onCountdown = null;
       p2p.onMatchStart = null;
       p2p.onError = null;
+      p2p.onDiag = null;
       p2p.onStateChange = null;
     };
   }, [onStartBattle, roomCode, joined]);
@@ -688,6 +694,11 @@ export function BattleModal({
                 </div>
               )}
             </div>
+            {diagText && opponents.length === 0 && (
+              <div className="mt-1 w-full max-w-xs text-center font-mono text-[6px] text-[#6b5c8a]">
+                {diagText}
+              </div>
+            )}
           </div>
         )}
       </div>
