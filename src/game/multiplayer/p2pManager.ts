@@ -9,10 +9,15 @@ import type {
   LeaderboardEntry,
   PublicLobbyInfo,
 } from './types';
+import { ManualRoom } from './manualRoom';
 
 const APP_ID = 'pixel-run-pvp-v1';
 const DISCOVERY_ROOM = 'pixel-run-discovery-v1';
-const PROTOCOL_VERSION = 1;
+// v2: MATCH_START.targetStartTime is wall-clock (Date.now()+delay, epoch ms)
+// instead of performance.now()+delay, which is per-tab and skews joiners'
+// countdowns by the difference in page-load times. Version-gates countdown
+// math: v1 peers using the old perf-relative payload are not mixed with v2.
+const PROTOCOL_VERSION = 2;
 export const MAX_PLAYERS = 5;
 
 const PLAYER_COLORS = ['#7ef7ff', '#ff70a6', '#ffd166', '#a78bfa'];
@@ -77,15 +82,7 @@ const MQTT_CONFIG = {
   },
 };
 
-type SignalStrategy = 'torrent' | 'mqtt';
-
-function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url;
-  }
-}
+type SignalStrategy = 'torrent' | 'mqtt' | 'manual';
 
 function roomConfigFor(strategy: SignalStrategy) {
   return strategy === 'mqtt' ? MQTT_CONFIG : TORRENT_CONFIG;
@@ -157,6 +154,17 @@ export class P2PManager {
   public publicLobbies: Map<string, PublicLobbyInfo> = new Map();
 
   private room: any = null;
+  // Signal rooms the manager actively sends/receives on. Normally one room;
+  // a host that mirrored onto the backup strategy after a 10s silent wait
+  // carries TWO rooms (torrent + mqtt) so peers converging on either strategy
+  // still find it. Each entry carries the room's own action senders, because a
+  // peer connected via torrent only exists inside the torrent room.
+  private signalRooms: { room: any; label: SignalStrategy; sendTick: (data: PlayerTickPayload, targetPeerId?: string) => void; sendEvent: (data: NetEventPacket, targetPeerId?: string) => void }[] = [];
+  // The mirrored (kept-alive) first room after a host fallback. Not replaced by
+  // initRoom's cleanup; torn down only in leave().
+  private mirrorRoom: any = null;
+  private mirrorLabel: SignalStrategy = 'torrent';
+  private mirrorActions: { sendTick: (data: PlayerTickPayload, targetPeerId?: string) => void; sendEvent: (data: NetEventPacket, targetPeerId?: string) => void } | null = null;
   // Guards against overlapping init/leave calls (React StrictMode double
   // effects, rapid re-join of the same code). trystero caches rooms per
   // appId+roomId until leave() fully settles (~100ms), so a re-join must wait
@@ -169,6 +177,7 @@ export class P2PManager {
   private browseLeavePromise: Promise<void> | null = null;
   private initTimeout: number | null = null;
   private hostFallbackTimeout: number | null = null;
+  private hostWatchdog: number | null = null;
   // Once a fallback actually fired, keep preferring the backup strategy for the
   // rest of the session (retries go straight to MQTT instead of re-waiting 5s).
   private fallbackUsed = false;
@@ -180,8 +189,6 @@ export class P2PManager {
       ? 'mqtt'
       : 'torrent';
   private strategy: SignalStrategy = this.preferredStrategy;
-  private sendTickAction: ((data: PlayerTickPayload, targetPeerId?: string) => void) | null = null;
-  private sendEventAction: ((data: NetEventPacket, targetPeerId?: string) => void) | null = null;
 
   // Stream state & packet ordering
   private localOutgoingSeq = 0;
@@ -203,13 +210,8 @@ export class P2PManager {
   // blocked). Lets users report exactly where a join fails.
   public onDiag: ((diag: string) => void) | null = null;
   private diagInterval: number | null = null;
-  // Cached per-endpoint reachability probe (short WebSocket handshake to every
-  // tracker/broker) so a stuck joiner can show WHICH signaling servers the
-  // current network allows.
-  private probeResults: string[] | null = null;
-  private probeExpires = 0;
-
   private visibilityTimeout: number | null = null;
+  private pendingResolveTimer: number | null = null;
 
   constructor() {
     this.handleVisibilityChange = this.handleVisibilityChange.bind(this);
@@ -283,6 +285,134 @@ export class P2PManager {
     return true;
   }
 
+  // ---- Zero-middleman (OFFLINE) mode ----
+  // Raw WebRTC with no ICE servers, no trackers, no brokers. The host and each
+  // joiner exchange compressed connection codes by hand. Only works on a shared
+  // local network (same Wi-Fi / LAN), but requires NOTHING else to exist.
+
+  public async hostOffline(name: string, skinId: SkinId): Promise<string> {
+    this.leave();
+    this.role = 'host';
+    this.localName = name || 'PLAYER 1';
+    this.localSkin = skinId;
+    this.isPublic = false;
+    this.roomId = 'OFFLINE';
+    this.strategy = 'manual';
+    await this.initRoom();
+    const room = this.room as ManualRoom | null;
+    if (!room) throw new Error('OFFLINE CONNECTION FAILED');
+    return room.createOfferCode();
+  }
+
+  public async joinOffline(code: string, name: string, skinId: SkinId): Promise<string> {
+    this.leave();
+    this.role = 'joiner';
+    this.localName = name || 'PLAYER 2';
+    this.localSkin = skinId;
+    this.roomId = 'OFFLINE';
+    this.strategy = 'manual';
+    await this.initRoom();
+    const room = this.room as ManualRoom | null;
+    if (!room) throw new Error('OFFLINE CONNECTION FAILED');
+    return room.applyOfferCode(code);
+  }
+
+  public async acceptOfflineAnswer(code: string): Promise<boolean> {
+    const room = this.room as ManualRoom | null;
+    if (!room || this.role !== 'host') return false;
+    await room.applyAnswerCode(code);
+    return true;
+  }
+
+  // Registers the tick/event action channels and peer lifecycle handlers on
+  // whatever room implementation is active (trystero or ManualRoom). Handlers
+  // are bound to THIS room's actions so a peer that joined via the mirror room
+  // gets its HANDSHAKE/ROOM_FULL replies through the same room it exists in.
+  private attachRoomActions(room: any): { sendTick: (data: PlayerTickPayload, targetPeerId?: string) => void; sendEvent: (data: NetEventPacket, targetPeerId?: string) => void } {
+    // 1. Unreliable coordinates channel
+    const sendTick = registerMessageAction<PlayerTickPayload>(room, 'tick', (data, peerId) => {
+      this.handleIncomingTick(data, peerId);
+    });
+
+    // 2. Reliable guaranteed events channel
+    const sendEvent = registerMessageAction<NetEventPacket>(room, 'event', (data, peerId) => {
+      this.handleIncomingEvent(data, peerId);
+    });
+
+    bindPeerEvent(room, 'onPeerJoin', (peerId: string) => {
+      if (this.opponents.size >= MAX_PLAYERS - 1) {
+        sendEvent({ type: 'ROOM_FULL' }, peerId);
+        return;
+      }
+
+      sendEvent({
+        type: 'HANDSHAKE',
+        name: this.localName,
+        skinId: this.localSkin,
+        protocolVersion: PROTOCOL_VERSION,
+        role: this.role,
+      }, peerId);
+    });
+
+    bindPeerEvent(room, 'onPeerLeave', (peerId: string) => {
+      if (this.opponents.has(peerId)) {
+        this.opponents.delete(peerId);
+        this.opponentTicks.delete(peerId);
+        if (this.onOpponentsUpdate) {
+          this.onOpponentsUpdate(Array.from(this.opponents.values()));
+        }
+
+        if (this.state === 'playing') {
+          this.checkAllPlayersFinished();
+        } else if (this.opponents.size === 0) {
+          this.setState('lobby');
+        }
+      }
+    });
+
+    return { sendTick, sendEvent };
+  }
+
+  // Broadcast to every live signal room (primary + mirror after a host
+  // fallback). Targetted sends are routed to the ONE room that actually holds
+  // that peer, so the other room never warns about an unknown peer id.
+  private emitTick(data: PlayerTickPayload) {
+    for (const s of this.signalRooms) {
+      try {
+        s.sendTick(data);
+      } catch {}
+    }
+  }
+
+  private emitEvent(data: NetEventPacket, targetPeerId?: string) {
+    if (!targetPeerId) {
+      for (const s of this.signalRooms) {
+        try {
+          s.sendEvent(data);
+        } catch {}
+      }
+      return;
+    }
+    for (const s of this.signalRooms) {
+      try {
+        if (s.room.getPeers && s.room.getPeers().has(targetPeerId)) {
+          s.sendEvent(data, targetPeerId);
+          return;
+        }
+      } catch {}
+    }
+    // No room holds the target peer anymore (it just left mid-session): drop
+    // the packet silently. Force-sending to the first room made trystero log
+    // "no peer with id" warnings and could throw for a peer that left while a
+    // PING/PONG round-trip was in flight. ManualRoom's sendEvent validates the
+    // target itself, so it also never needs the forced fallback.
+    if (this.signalRooms.length > 0 && this.signalRooms.every((s) => !s.room.getPeers)) {
+      try {
+        this.signalRooms[0].sendEvent(data, targetPeerId);
+      } catch {}
+    }
+  }
+
   private async initRoom() {
     const seq = ++this.initSeq;
     if (this.initTimeout !== null) {
@@ -292,6 +422,10 @@ export class P2PManager {
     if (this.hostFallbackTimeout !== null) {
       clearTimeout(this.hostFallbackTimeout);
       this.hostFallbackTimeout = null;
+    }
+    if (this.hostWatchdog !== null) {
+      clearTimeout(this.hostWatchdog);
+      this.hostWatchdog = null;
     }
     this.setState('connecting');
     this.localOutgoingSeq = 0;
@@ -305,65 +439,7 @@ export class P2PManager {
     const isHost = this.role === 'host';
 
     try {
-      const { joinRoom, selfId } = await loadStrategyModule(this.strategy);
-      if (seq !== this.initSeq) return; // superseded by a newer init
-      if (this.pendingRoomLeave) {
-        await this.pendingRoomLeave;
-        this.pendingRoomLeave = null;
-        if (seq !== this.initSeq) return;
-      }
-      this.localPeerId = selfId;
-
-      this.room = joinRoom(roomConfigFor(this.strategy) as any, this.roomId);
-      this.startDiag();
-
-      // 1. Unreliable coordinates channel
-      this.sendTickAction = registerMessageAction<PlayerTickPayload>(this.room, 'tick', (data, peerId) => {
-        this.handleIncomingTick(data, peerId);
-      });
-
-      // 2. Reliable guaranteed events channel
-      this.sendEventAction = registerMessageAction<NetEventPacket>(this.room, 'event', (data, peerId) => {
-        this.handleIncomingEvent(data, peerId);
-      });
-
-      bindPeerEvent(this.room, 'onPeerJoin', (peerId: string) => {
-        if (this.opponents.size >= MAX_PLAYERS - 1) {
-          if (this.sendEventAction) {
-            this.sendEventAction({ type: 'ROOM_FULL' }, peerId);
-          }
-          return;
-        }
-
-        if (this.sendEventAction) {
-          this.sendEventAction({
-            type: 'HANDSHAKE',
-            name: this.localName,
-            skinId: this.localSkin,
-            protocolVersion: PROTOCOL_VERSION,
-          }, peerId);
-        }
-      });
-
-      bindPeerEvent(this.room, 'onPeerLeave', (peerId: string) => {
-        if (this.opponents.has(peerId)) {
-          this.opponents.delete(peerId);
-          this.opponentTicks.delete(peerId);
-          if (this.onOpponentsUpdate) {
-            this.onOpponentsUpdate(Array.from(this.opponents.values()));
-          }
-
-          if (this.state === 'playing') {
-            this.checkAllPlayersFinished();
-          } else if (this.opponents.size === 0) {
-            this.setState('lobby');
-          }
-        }
-      });
-
-      if (this.role === 'host' && this.isPublic) {
-        this.startPublicAnnounce();
-      }
+      await this.createRoom(seq);
 
       // Non-terminal status hint after 5s of no peer. Captures the seq, roomId
       // and role at schedule time so a superseded init can never fire into the
@@ -377,20 +453,10 @@ export class P2PManager {
         // current signaling path is dead (blocked trackers / MQTT brokers).
         // Fall back to the other strategy. The HOST does not switch here — a
         // waiting host with no players is NORMAL; only a host that has waited a
-        // very long time (see the 25s timer below) concludes its announce is
-        // unreachable and mirrors onto the backup strategy.
+        // very long time (see the 10s mirror timer below) concludes its
+        // announce is unreachable and mirrors onto the backup strategy.
         if (!isHost && this.strategy === 'torrent') {
-          if (this.room) {
-            try {
-              this.pendingRoomLeave = Promise.resolve(this.room.leave()).catch(() => {});
-            } catch {}
-            this.room = null;
-          }
-          this.sendTickAction = null;
-          this.sendEventAction = null;
-          this.strategy = 'mqtt';
-          this.fallbackUsed = true;
-          this.initRoom();
+          this.switchToMqtt();
           return;
         }
 
@@ -403,35 +469,56 @@ export class P2PManager {
         }
       }, 5000);
 
-      // Host-only backup: if a host has been waiting 10s with zero players AND
-      // zero successful joins, its trackers are likely unreachable from the
-      // joiners' networks. Mirror the room onto the backup strategy so blocked
-      // joiners (who switch at 5s) can still find it. A joiner that connects in
-      // the meantime (opponents.size > 0) cancels this via the seq guard and
-      // the opponents check. 10s keeps both-blocked peers converging before the
-      // modal's 15s TRY AGAIN; a slow-but-working torrent join also wins because
-      // a host that gains opponents never switches.
+      // Host-only backup: if a host has been waiting 10s (connecting, or in the
+      // lobby with at least one peer — including a peer that connected while a
+      // second joiner stayed deadlocked), its trackers are likely unreachable
+      // from some joiners' networks. MIRROR the room onto the backup strategy
+      // instead of switching: the torrent room stays alive so joiners still
+      // converging there (their fallback timers are slower, or a slow-but-good
+      // torrent path) keep finding the host, while blocked joiners (who switch
+      // at 5s) find the mirror on MQTT. 10s keeps both-blocked peers converging
+      // before the modal's 15s TRY AGAIN.
       if (isHost) {
         this.hostFallbackTimeout = window.setTimeout(() => {
           this.hostFallbackTimeout = null;
-if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size > 0) return;
-      // Joiner still searching: probe every signaling endpoint from THIS
-      // browser so the user (or a report) can see what the network blocks.
-      if (!isHost) this.probeEndpoints();
-          if (this.strategy === 'torrent') {
-            if (this.room) {
-              try {
-                this.pendingRoomLeave = Promise.resolve(this.room.leave()).catch(() => {});
-              } catch {}
-              this.room = null;
+          if (seq !== this.initSeq) return;
+          if (this.state !== 'connecting' && this.state !== 'lobby') return;
+          if (this.strategy === 'torrent' && !this.mirrorRoom) {
+            if (this.signalRooms.length > 0) {
+              this.mirrorRoom = this.room;
+              this.mirrorLabel = 'torrent';
+              this.mirrorActions = {
+                sendTick: this.signalRooms[0].sendTick,
+                sendEvent: this.signalRooms[0].sendEvent,
+              };
             }
-            this.sendTickAction = null;
-            this.sendEventAction = null;
             this.strategy = 'mqtt';
             this.fallbackUsed = true;
-            this.initRoom();
+            // Non-destructive: joins the MQTT room and rebinds the registry
+            // with BOTH rooms; opponents/state are preserved.
+            this.createRoom(seq);
           }
         }, 10000);
+      }
+
+      // Joiner-only watchdog: connected to peers, but none of them is the host
+      // — the glare-election deadlock signature (smallest selfId bails on all
+      // incoming offers while its own offers go unanswered). The host's own
+      // offers may never have reached this joiner at all (torrent relay
+      // asymmetry), so it will never join the host's torrent room. Switch to
+      // MQTT, where a mirroring host is reachable. Kept at 12s so it can only
+      // fire once the 5s zero-peer switch already proved the torrent path works
+      // (we HAVE peers — just not the host).
+      if (!isHost) {
+        this.hostWatchdog = window.setTimeout(() => {
+          this.hostWatchdog = null;
+          if (seq !== this.initSeq) return;
+          if (this.state === 'playing' || this.state === 'countdown' || this.state === 'idle') return;
+          const hostPresent = Array.from(this.opponents.values()).some((o) => o.isHost);
+          if (this.strategy === 'torrent' && this.opponents.size > 0 && !hostPresent) {
+            this.switchToMqtt();
+          }
+        }, 12000);
       }
 
     } catch (err: any) {
@@ -439,6 +526,77 @@ if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size >
       if (this.onError) this.onError(err?.message || 'CONNECTION FAILED');
       this.setState('idle');
     }
+  }
+
+  // Creates (or re-creates) the primary signal room for this.strategy and binds
+  // its actions. Non-destructive: keeps opponents and state intact — only
+  // initRoom() clears those, so the host's mirror path can attach a second room
+  // mid-session without losing connected peers.
+  private async createRoom(seq: number) {
+    if (this.strategy === 'manual') {
+      this.room = new ManualRoom();
+      this.localPeerId = this.room.selfId;
+      this.room.onConnectionFailed = () => {
+        if (seq !== this.initSeq) return;
+        this.room = null;
+        this.signalRooms = [];
+        if (this.onError) {
+          this.onError(
+            this.role === 'host'
+              ? "CAN'T REACH THE JOINER — BOTH DEVICES MUST BE ON THE SAME NETWORK (WIFI/AP ISOLATION BLOCKS DIRECT CONNECTION)"
+              : "CAN'T REACH THE HOST — BOTH DEVICES MUST BE ON THE SAME NETWORK (WIFI/AP ISOLATION BLOCKS DIRECT CONNECTION)",
+          );
+        }
+        this.setState('idle');
+      };
+      this.bindRoom(this.room, 'manual');
+      this.startDiag();
+      return;
+    }
+    const { joinRoom, selfId } = await loadStrategyModule(this.strategy);
+    if (seq !== this.initSeq) return; // superseded by a newer init
+    if (this.pendingRoomLeave) {
+      await this.pendingRoomLeave;
+      this.pendingRoomLeave = null;
+      if (seq !== this.initSeq) return;
+    }
+    this.localPeerId = selfId;
+
+    this.room = joinRoom(roomConfigFor(this.strategy) as any, this.roomId);
+    this.bindRoom(this.room, this.strategy);
+    this.startDiag();
+
+    if (this.role === 'host' && this.isPublic) {
+      this.startPublicAnnounce();
+    }
+  }
+
+  // (Re)binds the signal-room registry around `room`. When a mirror room is
+  // kept alive, both rooms stay registered: broadcasts go to both, and
+  // targetted sends are routed to whichever room holds the peer.
+  private bindRoom(room: any, label: SignalStrategy) {
+    const actions = this.attachRoomActions(room);
+    const bindings = [{ room, label, sendTick: actions.sendTick, sendEvent: actions.sendEvent }];
+    if (this.mirrorRoom && this.mirrorRoom !== room && this.mirrorActions) {
+      bindings.push({ room: this.mirrorRoom, label: this.mirrorLabel, sendTick: this.mirrorActions.sendTick, sendEvent: this.mirrorActions.sendEvent });
+    }
+    this.signalRooms = bindings;
+  }
+
+  // Drops the current room and restarts the whole flow on MQTT. Used by
+  // joiners whose torrent path is dead (zero peers) or deadlocked (peers but
+  // no host).
+  private switchToMqtt() {
+    if (this.room) {
+      try {
+        this.pendingRoomLeave = Promise.resolve(this.room.leave()).catch(() => {});
+      } catch {}
+      this.room = null;
+    }
+    this.signalRooms = [];
+    this.strategy = 'mqtt';
+    this.fallbackUsed = true;
+    this.initRoom();
   }
 
   // Public Lobby Discovery Subsystem
@@ -568,6 +726,7 @@ if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size >
           ready: true,
           color,
           playerIndex: playerIdx,
+          isHost: packet.role === 'host',
         };
 
         this.opponents.set(peerId, oppInfo);
@@ -577,34 +736,31 @@ if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size >
         this.setState('lobby');
 
         // Mutual handshake reply: ensure both host and joiner always know each other
-        if (isNewPeer && this.sendEventAction) {
-          this.sendEventAction({
+        if (isNewPeer) {
+          this.emitEvent({
             type: 'HANDSHAKE',
             name: this.localName,
             skinId: this.localSkin,
             protocolVersion: PROTOCOL_VERSION,
+            role: this.role,
           }, peerId);
         }
 
-        if (this.sendEventAction) {
-          this.sendEventAction({
-            type: 'PING',
-            id: 1,
-            sentAt: performance.now(),
-          }, peerId);
-        }
+        this.emitEvent({
+          type: 'PING',
+          id: 1,
+          sentAt: performance.now(),
+        }, peerId);
         break;
       }
 
       case 'PING': {
-        if (this.sendEventAction) {
-          this.sendEventAction({
-            type: 'PONG',
-            id: packet.id,
-            sentAt: packet.sentAt,
-            receivedAt: performance.now(),
-          }, peerId);
-        }
+        this.emitEvent({
+          type: 'PONG',
+          id: packet.id,
+          sentAt: packet.sentAt,
+          receivedAt: performance.now(),
+        }, peerId);
         break;
       }
 
@@ -697,7 +853,7 @@ if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size >
   }
 
   public startMatch(): boolean {
-    if (this.role !== 'host' || this.opponents.size === 0 || !this.sendEventAction) return false;
+    if (this.role !== 'host' || this.opponents.size === 0 || this.signalRooms.length === 0) return false;
     this.matchSeed = (Math.random() * 0x7fffffff) >>> 0;
     this.localFinalStats = null;
     this.opponentDeaths.clear();
@@ -707,9 +863,13 @@ if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size >
     this.peerSeqs.clear();
     this.stopPublicAnnounce();
 
-    const targetStartTime = performance.now() + 3000;
+    // WALL-CLOCK time: Date.now() is shared across tabs/devices, whereas
+    // performance.now() is per-tab (each tab has its own page-load time
+    // origin), so a perf-relative target made joiners' countdowns skew by
+    // their tab's load-time offset from the host.
+    const targetStartTime = Date.now() + 3000;
 
-    this.sendEventAction({
+    this.emitEvent({
       type: 'MATCH_START',
       seed: this.matchSeed,
       targetStartTime,
@@ -726,7 +886,8 @@ if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size >
     this.startMatchWatchdog();
 
     const checkCountdown = () => {
-      const now = performance.now();
+      // Wall-clock: targetStartTime was sent as Date.now()+delay (epoch ms).
+      const now = Date.now();
       const remainingMs = targetStartTime - now;
 
       if (remainingMs <= 0) {
@@ -751,13 +912,18 @@ if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size >
         if (!this.opponentDeaths.has(peerId)) {
           const lastTs = this.peerLastTickTs.get(peerId);
           if (lastTs && now - lastTs > 7000) {
-            // Peer disconnected / tab closed mid-game
-            const lastTick = this.opponentTicks.get(peerId);
-            this.opponentDeaths.set(peerId, {
-              score: lastTick?.score ?? 0,
-              meters: lastTick?.meters ?? 0,
-              kills: lastTick?.kills ?? 0,
-            });
+            // Peer stopped ticking with no death/forfeit: its connection is
+            // gone — an abruptly closed tab is only detected late by ICE, so
+            // onPeerLeave can lag far beyond this window. Remove the peer from
+            // the roster entirely instead of recording a "death": a ghost
+            // entry with frozen stats pollutes the final leaderboard, and the
+            // late onPeerLeave would then have nothing left to clean up.
+            this.opponents.delete(peerId);
+            this.opponentTicks.delete(peerId);
+            this.peerLastTickTs.delete(peerId);
+            if (this.onOpponentsUpdate) {
+              this.onOpponentsUpdate(Array.from(this.opponents.values()));
+            }
             this.checkAllPlayersFinished();
           }
         }
@@ -773,28 +939,26 @@ if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size >
   }
 
   public sendTick(tickPayload: Omit<PlayerTickPayload, 'seq'>) {
-    if (!this.sendTickAction || this.state !== 'playing') return;
+    if (this.signalRooms.length === 0 || this.state !== 'playing') return;
     this.localOutgoingSeq++;
     const payload: PlayerTickPayload = {
       ...tickPayload,
       peerId: this.localPeerId,
       seq: this.localOutgoingSeq,
     };
-    this.sendTickAction(payload);
+    this.emitTick(payload);
   }
 
   public sendDeath(collisionTick: number, finalScore: number, finalMeters: number, kills: number) {
     this.localFinalStats = { score: finalScore, meters: finalMeters, kills };
 
-    if (this.sendEventAction) {
-      this.sendEventAction({
-        type: 'PLAYER_DEATH',
-        collisionTick,
-        finalScore,
-        finalMeters,
-        kills,
-      });
-    }
+    this.emitEvent({
+      type: 'PLAYER_DEATH',
+      collisionTick,
+      finalScore,
+      finalMeters,
+      kills,
+    });
 
     this.checkAllPlayersFinished();
   }
@@ -868,20 +1032,33 @@ if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size >
   public requestRematch() {
     if (this.role === 'host') {
       this.startMatch();
-    } else if (this.sendEventAction) {
-      this.sendEventAction({ type: 'REMATCH_REQUEST' });
+    } else if (this.signalRooms.length > 0) {
+      this.emitEvent({ type: 'REMATCH_REQUEST' });
     }
   }
 
   private handleVisibilityChange() {
-    if (document.hidden && this.state === 'playing') {
+    // Arm the forfeit during the countdown too: a player who tabs out between
+    // START and GO (or whose countdown stalls on a frozen background tab) must
+    // still forfeit, otherwise their match never resolves and peers wait on a
+    // ghost.
+    if (document.hidden && (this.state === 'playing' || this.state === 'countdown')) {
       this.visibilityTimeout = window.setTimeout(() => {
-        if (document.hidden && this.state === 'playing') {
-          if (this.sendEventAction) {
-            this.sendEventAction({ type: 'FORFEIT', reason: 'PLAYER TABBED OUT' });
-          }
+        this.visibilityTimeout = null;
+        if (document.hidden && (this.state === 'playing' || this.state === 'countdown')) {
+          this.emitEvent({ type: 'FORFEIT', reason: 'PLAYER TABBED OUT' });
           this.localFinalStats = { score: 0, meters: 0, kills: 0 };
-          this.resolveMultiplayerLeaderboard();
+          // Resolve AFTER the match watchdog's window (7s): peers whose tabs
+          // died abruptly are only detected late by ICE, and the watchdog
+          // removes them from the roster first. Resolving immediately could
+          // snapshot a ghost entry for a peer that actually left.
+          this.pendingResolveTimer = window.setTimeout(() => {
+            this.pendingResolveTimer = null;
+            // This player is OUT (forfeited) — don't wait for opponents to
+            // finish (checkAllPlayersFinished would never resolve if they keep
+            // playing). Resolve the leaderboard snapshot directly.
+            this.resolveMultiplayerLeaderboard();
+          }, 7000);
         }
       }, 4000);
     } else if (!document.hidden && this.visibilityTimeout) {
@@ -912,55 +1089,22 @@ if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size >
     if (this.onStateChange) this.onStateChange(next);
   }
 
-  private async probeEndpoints() {
-    if (this.probeResults && Date.now() < this.probeExpires) return;
-    const targets = [
-      ...TRACKERS.map((u) => ['T ' + hostOf(u), u] as const),
-      ...MQTT_BROKERS.map((u) => ['M ' + hostOf(u), u] as const),
-    ];
-    const results = await Promise.all(
-      targets.map(async ([label, url]) => {
-        try {
-          const ok = await new Promise<boolean>((res) => {
-            const ws = new WebSocket(url);
-            const fail = () => {
-              try { ws.close(); } catch {}
-              res(false);
-            };
-            const t = window.setTimeout(fail, 4000);
-            ws.onopen = () => {
-              clearTimeout(t);
-              try { ws.close(); } catch {}
-              res(true);
-            };
-            ws.onerror = fail;
-          });
-          return `${ok ? 'OK' : 'XX'} ${label}`;
-        } catch {
-          return `XX ${label}`;
-        }
-      })
-    );
-    this.probeResults = results;
-    this.probeExpires = Date.now() + 15000;
-    if (this.onDiag) {
-      this.onDiag(`PROBE ${results.join(' · ')}`);
-    }
-  }
-
   private startDiag() {
     this.stopDiag();
     this.diagInterval = window.setInterval(() => {
       if (!this.onDiag) return;
       try {
-        const peers = this.room && typeof this.room.getPeers === 'function' ? this.room.getPeers() : null;
-        let peerInfo = 'NO PEERS FOUND';
-        if (peers && peers.size > 0) {
-          peerInfo = [...peers.values()]
-            .map((pc: any) => pc?.connectionState || pc?.iceConnectionState || 'PENDING')
-            .join(',');
-        }
-        this.onDiag(`${this.strategy.toUpperCase()} · ${peerInfo}`);
+        const parts = this.signalRooms.map((s) => {
+          const peers = s.room && typeof s.room.getPeers === 'function' ? s.room.getPeers() : null;
+          let info = 'NO PEERS FOUND';
+          if (peers && peers.size > 0) {
+            info = [...peers.values()]
+              .map((pc: any) => pc?.connectionState || pc?.iceConnectionState || 'PENDING')
+              .join(',');
+          }
+          return `${s.label.toUpperCase()}·${info}`;
+        });
+        this.onDiag(parts.length > 0 ? parts.join(' | ') : `${this.strategy.toUpperCase()} · NO PEERS FOUND`);
       } catch {}
     }, 2000);
   }
@@ -983,12 +1127,20 @@ if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size >
       clearTimeout(this.hostFallbackTimeout);
       this.hostFallbackTimeout = null;
     }
+    if (this.hostWatchdog !== null) {
+      clearTimeout(this.hostWatchdog);
+      this.hostWatchdog = null;
+    }
     this.releaseWakeLock();
     this.stopMatchWatchdog();
     this.stopPublicAnnounce();
     this.stopDiag();
     this.stopBrowsingPublicLobbies();
     if (this.visibilityTimeout) clearTimeout(this.visibilityTimeout);
+    if (this.pendingResolveTimer) {
+      clearTimeout(this.pendingResolveTimer);
+      this.pendingResolveTimer = null;
+    }
 
     if (this.room) {
       try {
@@ -996,14 +1148,20 @@ if (seq !== this.initSeq || this.state !== 'connecting' || this.opponents.size >
       } catch {}
       this.room = null;
     }
+    if (this.mirrorRoom) {
+      try {
+        this.pendingRoomLeave = Promise.resolve(this.mirrorRoom.leave()).catch(() => {});
+      } catch {}
+      this.mirrorRoom = null;
+      this.mirrorActions = null;
+    }
+    this.signalRooms = [];
     this.opponents.clear();
     this.opponentTicks.clear();
     this.opponentDeaths.clear();
     this.peerSeqs.clear();
     this.localFinalStats = null;
     this.localOutgoingSeq = 0;
-    this.sendTickAction = null;
-    this.sendEventAction = null;
     this.setState('idle');
   }
 

@@ -23,10 +23,14 @@ export function BattleModal({
   matchResult,
   onClearMatchResult,
 }: BattleModalProps) {
-  const [tab, setTab] = useState<'host' | 'join'>('host');
+  const [tab, setTab] = useState<'host' | 'join' | 'offline'>('host');
   const [joinSubTab, setJoinSubTab] = useState<'code' | 'public'>('code');
   const [roomCode, setRoomCode] = useState<string>('');
   const [inputCode, setInputCode] = useState<string>('');
+  const [offlineMode, setOfflineMode] = useState<'idle' | 'host' | 'join'>('idle');
+  const [offlineOfferCode, setOfflineOfferCode] = useState<string>('');
+  const [offlineAnswerCode, setOfflineAnswerCode] = useState<string>('');
+  const [offlineInput, setOfflineInput] = useState<string>('');
   const [isPublicRoom, setIsPublicRoom] = useState<boolean>(false);
   const [opponents, setOpponents] = useState<OpponentInfo[]>(() => Array.from(p2p.opponents.values()));
   const [publicLobbies, setPublicLobbies] = useState<PublicLobbyInfo[]>([]);
@@ -67,7 +71,11 @@ export function BattleModal({
     if (p2p.state !== 'idle' && p2p.roomId) {
       setRoomCode(p2p.roomId);
       setOpponents(Array.from(p2p.opponents.values()));
-      if (p2p.role === 'joiner') {
+      if (p2p.roomId === 'OFFLINE') {
+        setTab('offline');
+        setOfflineMode(p2p.role === 'host' ? 'host' : 'join');
+        if (p2p.role === 'joiner') setJoined(true);
+      } else if (p2p.role === 'joiner') {
         setTab('join');
         setJoined(true);
       } else {
@@ -278,19 +286,113 @@ export function BattleModal({
     }
   };
 
+  // Clipboard copy with a legacy execCommand fallback: navigator.clipboard
+  // requires a secure context (https / localhost) and async permission checks —
+  // on file://, plain-LAN IPs or iOS in-app webviews it can fail or be missing,
+  // so degrade to the synchronous document.execCommand('copy') path. Both are
+  // attempted inside the user gesture (the click handler).
+  const copyTextToClipboard = async (text: string): Promise<boolean> => {
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {}
+    }
+    try {
+      const el = document.createElement('textarea');
+      el.value = text;
+      el.style.position = 'fixed';
+      el.style.top = '0';
+      el.style.left = '0';
+      el.style.width = '100px';
+      el.style.height = '100px';
+      el.style.opacity = '0.01';
+      el.style.pointerEvents = 'none';
+      document.body.appendChild(el);
+      el.focus({ preventScroll: true });
+      el.setSelectionRange(0, text.length);
+      const ok = document.execCommand('copy');
+      document.body.removeChild(el);
+      return ok;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleCopyText = async (text: string) => {
+    const ok = await copyTextToClipboard(text);
+    if (ok) {
+      setCopied(true);
+      sfx.play('ui');
+      setTimeout(() => setCopied(false), 2200);
+    } else {
+      // Clipboard unavailable (e.g. file:// or insecure LAN IP): the code
+      // textareas stay selectable, so the user can long-press to copy.
+      setStatusMsg('COPY BLOCKED — TAP THE CODE TO SELECT IT, THEN COPY MANUALLY');
+    }
+  };
+
   const handleCopyLink = async () => {
     const code = roomCode || p2p.roomId;
     if (!code) return;
     const base = window.location.origin + window.location.pathname;
     const url = `${base}#battle=${code}`;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
-      }
+    const ok = await copyTextToClipboard(url);
+    if (ok) {
       setCopied(true);
       sfx.play('ui');
       setTimeout(() => setCopied(false), 2200);
-    } catch {}
+    } else {
+      setStatusMsg('COPY BLOCKED — SELECT THE CODE MANUALLY');
+    }
+  };
+
+  const handleOfflineHost = async () => {
+    setStatusMsg('CREATING OFFLINE CONNECTION...');
+    try {
+      const code = await p2p.hostOffline(localName, localSkin);
+      setOfflineOfferCode(code);
+      setOfflineMode('host');
+      setStatusMsg('OFFLINE ROOM READY — SEND THIS CODE TO THE OTHER PLAYER');
+    } catch {
+      setStatusMsg('OFFLINE CONNECTION FAILED');
+    }
+  };
+
+  const handleOfflineJoin = async () => {
+    const code = offlineInput.trim();
+    if (!code) {
+      setStatusMsg('PASTE THE HOST CODE FIRST');
+      return;
+    }
+    setStatusMsg('CONNECTING...');
+    try {
+      const answer = await p2p.joinOffline(code, localName, localSkin);
+      setOfflineAnswerCode(answer);
+      setJoined(true);
+      setStatusMsg('CONNECTED — SEND THIS REPLY CODE BACK TO THE HOST');
+    } catch (err) {
+      setStatusMsg(err instanceof Error ? err.message : 'INVALID OR EXPIRED HOST CODE');
+      sfx.play('death');
+    }
+  };
+
+  const handleOfflineAccept = async () => {
+    const code = offlineInput.trim();
+    if (!code) {
+      setStatusMsg('PASTE THE PLAYER REPLY CODE FIRST');
+      return;
+    }
+    try {
+      const ok = await p2p.acceptOfflineAnswer(code);
+      if (ok) {
+        setJoined(true);
+        setStatusMsg('PLAYER REPLY ACCEPTED — CONNECTING...');
+      }
+    } catch (err) {
+      setStatusMsg(err instanceof Error ? err.message : 'INVALID REPLY CODE');
+      sfx.play('death');
+    }
   };
 
   const handleStartRun = () => {
@@ -334,7 +436,7 @@ export function BattleModal({
             type="button"
             onClick={handleExit}
             aria-label="Close Battles"
-            className="flex h-6 w-6 items-center justify-center border border-[#ff4d6d]/40 bg-[#ff4d6d]/10 text-[9px] text-[#ff4d6d] transition-colors hover:bg-[#ff4d6d]/30"
+            className="flex h-10 w-10 items-center justify-center border border-[#ff4d6d]/40 bg-[#ff4d6d]/10 text-[9px] text-[#ff4d6d] transition-colors hover:bg-[#ff4d6d]/30"
           >
             ✕
           </button>
@@ -420,7 +522,7 @@ export function BattleModal({
                     initHost();
                   }
                 }}
-                className={`flex-1 py-1.5 text-[8px] transition-colors ${
+                className={`flex-1 min-h-[40px] py-1.5 text-[8px] transition-colors ${
                   tab === 'host'
                     ? 'bg-[#ff4d6d] text-[#100424] font-bold'
                     : 'text-[#a090c0] hover:text-[#ffffff]'
@@ -441,13 +543,31 @@ export function BattleModal({
                     setStatusMsg('ENTER 4-LETTER CODE OR PICK PUBLIC ROOM');
                   }
                 }}
-                className={`flex-1 py-1.5 text-[8px] transition-colors ${
+                className={`flex-1 min-h-[40px] py-1.5 text-[8px] transition-colors ${
                   tab === 'join'
                     ? 'bg-[#ff4d6d] text-[#100424] font-bold'
                     : 'text-[#a090c0] hover:text-[#ffffff]'
                 }`}
               >
                 JOIN ROOM
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTab('offline');
+                  setJoined(false);
+                  setJoinFailed(false);
+                  if (p2p.role !== 'host' && p2p.state !== 'idle') {
+                    p2p.leave();
+                  }
+                }}
+                className={`flex-1 min-h-[40px] py-1.5 text-[8px] transition-colors ${
+                  tab === 'offline'
+                    ? 'bg-[#ffd166] text-[#100424] font-bold'
+                    : 'text-[#a090c0] hover:text-[#ffffff]'
+                }`}
+              >
+                OFFLINE
               </button>
             </div>
 
@@ -462,7 +582,7 @@ export function BattleModal({
                   <button
                     type="button"
                     onClick={handleCopyLink}
-                    className="border border-[#3ef2c8] bg-[#3ef2c8]/10 px-2 py-1 text-[7px] text-[#3ef2c8] hover:bg-[#3ef2c8]/30 active:scale-95"
+                    className="border border-[#3ef2c8] bg-[#3ef2c8]/10 min-h-[40px] px-2 py-1 text-[7px] text-[#3ef2c8] hover:bg-[#3ef2c8]/30 active:scale-95"
                   >
                     {copied ? 'COPIED' : 'COPY LINK'}
                   </button>
@@ -472,7 +592,7 @@ export function BattleModal({
                 <button
                   type="button"
                   onClick={handleTogglePrivacy}
-                  className={`border px-2.5 py-0.5 text-[7px] transition-colors ${
+                  className={`border min-h-[40px] px-2.5 py-0.5 text-[7px] transition-colors ${
                     isPublicRoom
                       ? 'border-[#ffd166] bg-[#ffd166]/10 text-[#ffd166]'
                       : 'border-[#3ef2c8]/60 bg-[#3ef2c8]/10 text-[#3ef2c8]'
@@ -489,7 +609,7 @@ export function BattleModal({
                   <button
                     type="button"
                     onClick={() => setJoinSubTab('code')}
-                    className={`flex-1 py-1 text-[7px] ${
+                    className={`flex-1 min-h-[40px] py-1 text-[7px] ${
                       joinSubTab === 'code' ? 'bg-[#ff4d6d]/30 text-[#ff4d6d] font-bold' : 'text-[#a090c0]'
                     }`}
                   >
@@ -498,7 +618,7 @@ export function BattleModal({
                   <button
                     type="button"
                     onClick={() => setJoinSubTab('public')}
-                    className={`flex-1 py-1 text-[7px] ${
+                    className={`flex-1 min-h-[40px] py-1 text-[7px] ${
                       joinSubTab === 'public' ? 'bg-[#ff4d6d]/30 text-[#ff4d6d] font-bold' : 'text-[#a090c0]'
                     }`}
                   >
@@ -526,12 +646,12 @@ export function BattleModal({
                       placeholder="CODE (E.G. R9K2)"
                       maxLength={8}
                       autoFocus
-                      className="flex-1 border border-[#ff4d6d]/60 bg-[#080312] px-2.5 py-1.5 text-center font-pixel text-[10px] text-[#ffffff] uppercase focus:border-[#3ef2c8] focus:outline-none"
+                      className="flex-1 min-h-[40px] select-text border border-[#ff4d6d]/60 bg-[#080312] px-2.5 py-1.5 text-center font-pixel text-[10px] text-[#ffffff] uppercase focus:border-[#3ef2c8] focus:outline-none"
                     />
                     <button
                       type="button"
                       onClick={() => handleJoinCode()}
-                      className="border border-[#3ef2c8] bg-[#3ef2c8] px-3 py-1.5 text-[8px] font-bold text-[#08040f] hover:bg-[#6ef5d6] active:scale-95"
+                      className="border border-[#3ef2c8] bg-[#3ef2c8] min-h-[40px] px-3 py-1.5 text-[8px] font-bold text-[#08040f] hover:bg-[#6ef5d6] active:scale-95"
                     >
                       JOIN
                     </button>
@@ -567,7 +687,7 @@ export function BattleModal({
                           <button
                             type="button"
                             onClick={() => handleJoinCode(lobby.roomId)}
-                            className="border border-[#3ef2c8] bg-[#3ef2c8]/20 px-2 py-0.5 text-[7px] text-[#3ef2c8] hover:bg-[#3ef2c8]/40 active:scale-95"
+                            className="border border-[#3ef2c8] bg-[#3ef2c8]/20 min-h-[40px] px-2 py-0.5 text-[7px] text-[#3ef2c8] hover:bg-[#3ef2c8]/40 active:scale-95"
                           >
                             JOIN
                           </button>
@@ -579,9 +699,138 @@ export function BattleModal({
               </div>
             )}
 
+            {/* Offline Section: zero-middleman connection via manual code exchange */}
+            {tab === 'offline' ? (
+              <div className="flex flex-col items-center gap-2 mb-3 w-full max-w-xs">
+                <div className="w-full text-center text-[6px] leading-relaxed text-[#6b5880]">
+                  NO SERVERS, NO TRACKERS, NO INTERNET NEEDED — CONNECTS TWO
+                  BROWSERS DIRECTLY ON THE SAME NETWORK (WORKS OFFLINE)
+                </div>
+
+                {offlineMode === 'idle' && (
+                  <div className="flex w-full flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={handleOfflineHost}
+                      className="border border-[#ffd166] bg-[#ffd166]/10 min-h-[40px] px-3 py-2 text-[8px] font-bold text-[#ffd166] hover:bg-[#ffd166]/30 active:scale-95"
+                    >
+                      HOST OFFLINE ROOM
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOfflineMode('join');
+                        setStatusMsg('PASTE THE HOST CODE');
+                      }}
+                      className="border border-[#3ef2c8] bg-[#3ef2c8]/10 min-h-[40px] px-3 py-2 text-[8px] font-bold text-[#3ef2c8] hover:bg-[#3ef2c8]/30 active:scale-95"
+                    >
+                      JOIN OFFLINE ROOM
+                    </button>
+                  </div>
+                )}
+
+                {offlineMode === 'host' && (
+                  <div className="flex w-full flex-col gap-2">
+                    <div className="border border-[#ffd166]/40 bg-[#0c0a1e] p-2">
+                      <div className="mb-1 text-center text-[6px] text-[#a090c0]">
+                        SEND THIS CODE TO THE OTHER PLAYER
+                      </div>
+                      <textarea
+                        readOnly
+                        value={offlineOfferCode}
+                        onClick={(e) => {
+                          (e.target as HTMLTextAreaElement).select();
+                        }}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        rows={5}
+                        className="w-full resize-none select-text break-all bg-transparent font-mono text-[6px] leading-tight text-[#ffd166] focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleCopyText(offlineOfferCode)}
+                        className="mt-1 w-full border border-[#3ef2c8] bg-[#3ef2c8]/10 min-h-[40px] py-1 text-[7px] text-[#3ef2c8] hover:bg-[#3ef2c8]/30 active:scale-95"
+                      >
+                        {copied ? 'COPIED' : 'COPY CODE'}
+                      </button>
+                    </div>
+                    <div className="border border-[#3ef2c8]/40 bg-[#0c0a1e] p-2">
+                      <div className="mb-1 text-center text-[6px] text-[#a090c0]">
+                        PASTE THE PLAYER'S REPLY CODE HERE
+                      </div>
+                      <textarea
+                        value={offlineInput}
+                        onChange={(e) => setOfflineInput(e.target.value)}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        rows={5}
+                        className="w-full resize-none select-text break-all bg-transparent font-mono text-[6px] leading-tight text-[#7ef7ff] focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleOfflineAccept}
+                        disabled={!offlineInput.trim()}
+                        className="mt-1 w-full border border-[#3ef2c8] bg-[#3ef2c8] min-h-[40px] py-1 text-[7px] font-bold text-[#08040f] hover:bg-[#6ef5d6] active:scale-95 disabled:opacity-40"
+                      >
+                        CONNECT
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {offlineMode === 'join' && (
+                  <div className="flex w-full flex-col gap-2">
+                    {!offlineAnswerCode ? (
+                      <div className="border border-[#3ef2c8]/40 bg-[#0c0a1e] p-2">
+                        <div className="mb-1 text-center text-[6px] text-[#a090c0]">
+                          PASTE THE HOST CODE
+                        </div>
+                        <textarea
+                          value={offlineInput}
+                          onChange={(e) => setOfflineInput(e.target.value)}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          rows={5}
+                        className="w-full resize-none select-text break-all bg-transparent font-mono text-[6px] leading-tight text-[#7ef7ff] focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleOfflineJoin}
+                          disabled={!offlineInput.trim()}
+                          className="mt-1 w-full border border-[#3ef2c8] bg-[#3ef2c8] min-h-[40px] py-1 text-[7px] font-bold text-[#08040f] hover:bg-[#6ef5d6] active:scale-95 disabled:opacity-40"
+                        >
+                          CONNECT
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="border border-[#ffd166]/40 bg-[#0c0a1e] p-2">
+                        <div className="mb-1 text-center text-[6px] text-[#a090c0]">
+                          SEND THIS REPLY CODE BACK TO THE HOST
+                        </div>
+                        <textarea
+                          readOnly
+                          value={offlineAnswerCode}
+                          onClick={(e) => {
+                            (e.target as HTMLTextAreaElement).select();
+                          }}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          rows={5}
+                        className="w-full resize-none select-text break-all bg-transparent font-mono text-[6px] leading-tight text-[#ffd166] focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleCopyText(offlineAnswerCode)}
+                          className="mt-1 w-full border border-[#3ef2c8] bg-[#3ef2c8]/10 min-h-[40px] py-1 text-[7px] text-[#3ef2c8] hover:bg-[#3ef2c8]/30 active:scale-95"
+                        >
+                          {copied ? 'COPIED' : 'COPY REPLY CODE'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
             {/* Status Line */}
             {statusMsg && (
-              <div className="mb-2 text-center text-[7px] text-[#ffd166]">
+              <div className="mb-2 text-center break-words text-[7px] text-[#ffd166]">
                 {statusMsg}
               </div>
             )}
@@ -591,7 +840,7 @@ export function BattleModal({
               <button
                 type="button"
                 onClick={() => handleJoinCode(roomCode)}
-                className="mb-2 border border-[#ff4d6d] bg-[#ff4d6d]/20 px-3 py-1 text-[7px] font-bold text-[#ff4d6d] transition-colors hover:bg-[#ff4d6d]/40 active:scale-95"
+                className="mb-2 min-h-[40px] border border-[#ff4d6d] bg-[#ff4d6d]/20 px-3 py-1 text-[7px] font-bold text-[#ff4d6d] transition-colors hover:bg-[#ff4d6d]/40 active:scale-95"
               >
                 TRY AGAIN ({roomCode || 'SEARCH'})
               </button>
@@ -609,7 +858,7 @@ export function BattleModal({
               <div className="text-[7px] text-[#a090c0] mb-1.5 text-center">
                 ROSTER ({totalPlayers}/{MAX_PLAYERS})
               </div>
-              <div className="flex items-center justify-center gap-2">
+              <div className="flex flex-wrap items-center justify-center gap-2">
                 {/* Slot 1: You */}
                 <div className="flex flex-col items-center border border-[#3ef2c8] bg-[#0c1824] p-1 w-16 h-20 justify-between">
                   <canvas ref={localCanvasRef} width={60} height={60} className="w-9 h-9 pixelated" />
@@ -617,7 +866,13 @@ export function BattleModal({
                     YOU
                   </span>
                   <span className="border border-[#3ef2c8] bg-[#3ef2c8]/20 px-1 text-[5px] text-[#3ef2c8]">
-                    {tab === 'host' ? 'HOST' : opponents.length > 0 ? 'READY' : joined ? 'SEARCHING' : 'JOINING...'}
+                    {tab === 'host' || (tab === 'offline' && p2p.role === 'host')
+                      ? 'HOST'
+                      : opponents.length > 0
+                        ? 'READY'
+                        : joined
+                          ? 'SEARCHING'
+                          : 'JOINING...'}
                   </span>
                 </div>
 
@@ -667,12 +922,12 @@ export function BattleModal({
 
             {/* Launch / Status Button */}
             <div className="flex w-full max-w-xs justify-center">
-              {tab === 'host' ? (
+              {tab === 'host' || (tab === 'offline' && p2p.role === 'host') ? (
                 <button
                   type="button"
                   onClick={handleStartRun}
                   disabled={opponents.length === 0}
-                  className="w-full border-2 border-[#ffd166] bg-[#ffd166] py-2 text-[9px] font-bold text-[#120726] transition-colors hover:bg-[#ffe082] disabled:opacity-40 disabled:hover:bg-[#ffd166]"
+                  className="w-full border-2 border-[#ffd166] bg-[#ffd166] min-h-[40px] py-2 text-[9px] font-bold text-[#120726] transition-colors hover:bg-[#ffe082] disabled:opacity-40 disabled:hover:bg-[#ffd166]"
                 >
                   {opponents.length === 0
                     ? 'WAITING FOR PLAYERS...'
@@ -686,16 +941,20 @@ export function BattleModal({
                 }`}>
                   {opponents.length > 0
                     ? 'CONNECTED - WAITING FOR HOST TO START'
-                    : joined
-                      ? 'SEARCHING FOR HOST...'
-                      : roomCode
-                        ? `CONNECTING TO ${roomCode}...`
-                        : 'ENTER CODE TO JOIN HOST'}
+                    : tab === 'offline'
+                      ? joined
+                        ? 'WAITING FOR HOST TO ACCEPT REPLY...'
+                        : 'OFFLINE CONNECTION PENDING'
+                      : joined
+                        ? 'SEARCHING FOR HOST...'
+                        : roomCode
+                          ? `CONNECTING TO ${roomCode}...`
+                          : 'ENTER CODE TO JOIN HOST'}
                 </div>
               )}
             </div>
             {diagText && opponents.length === 0 && (
-              <div className="mt-1 w-full max-w-xs text-center font-mono text-[6px] text-[#6b5c8a]">
+              <div className="mt-1 w-full max-w-xs break-all text-center font-mono text-[6px] text-[#6b5c8a]">
                 {diagText}
               </div>
             )}

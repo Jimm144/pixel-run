@@ -19,6 +19,7 @@ export interface OpponentInfo {
   ready: boolean;
   color: string;
   playerIndex: number; // 2..5
+  isHost: boolean;
 }
 
 export interface PlayerTickPayload {
@@ -45,6 +46,7 @@ export type NetEventPacket =
       name: string;
       skinId: SkinId;
       protocolVersion: number;
+      role: MatchRole;
     }
   | {
       type: 'PING';

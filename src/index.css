@@ -52,6 +52,15 @@ canvas {
   image-rendering: pixelated;
 }
 
+/* The global user-select:none above must not leak into form fields: code
+   boxes and save inputs need text selection (and long-press copy on iOS),
+   especially on readOnly textareas where there is no caret to fall back on. */
+textarea,
+input {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 .font-pixel {
   font-family: "Press Start 2P", ui-monospace, "Courier New", monospace;
   letter-spacing: 0.02em;
