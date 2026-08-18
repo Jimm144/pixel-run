@@ -46,11 +46,15 @@ import {
   type SkinId,
   type LifetimeStats,
   SKINS,
+  DISCORD_URL,
+  claimDiscordReward,
+  isDiscordRewardClaimed,
 } from './game/skins';
 import { inputManager } from './game/input';
 
 const QUEST_SHARE_WIDTH = 1200;
 const QUEST_SHARE_HEIGHT = 500;
+const DISCORD_PROMO_DISMISSED_KEY = 'pixeldash.discord_promo_dismissed';
 
 function shareInteger(value: number, fallback = 0) {
   if (!Number.isFinite(value)) return fallback;
@@ -260,6 +264,13 @@ export function App() {
   const [saveLoadModal, setSaveLoadModal] = useState<'save' | 'load' | null>(null);
   const [skinToast, setSkinToast] = useState<string | null>(null);
   const [unlockedSkinPopup, setUnlockedSkinPopup] = useState<SkinId | null>(null);
+  const [discordPromoVisible, setDiscordPromoVisible] = useState(() => {
+    try {
+      return localStorage.getItem(DISCORD_PROMO_DISMISSED_KEY) !== '1' && !isDiscordRewardClaimed();
+    } catch {
+      return !isDiscordRewardClaimed();
+    }
+  });
   const skinToastTimer = useRef(0);
 
   const triggerSkinToast = useCallback((name: string, skinId?: SkinId) => {
@@ -269,6 +280,29 @@ export function App() {
     window.clearTimeout(skinToastTimer.current);
     skinToastTimer.current = window.setTimeout(() => setSkinToast(null), 3500);
   }, []);
+
+  const handleDiscordClaim = useCallback(() => {
+    window.open(DISCORD_URL, '_blank', 'noopener,noreferrer');
+    const reward = claimDiscordReward();
+    setDiscordPromoVisible(false);
+    setUnlockedSkins(reward.unlockedSkins);
+    setLifetimeStats(reward.updatedStats);
+    if (reward.newlyClaimed) {
+      triggerSkinToast('GLADIATOR', 'gladiator');
+      sfx.play('gem');
+    }
+  }, [triggerSkinToast]);
+
+  const dismissDiscordPromo = useCallback(() => {
+    setDiscordPromoVisible(false);
+    try {
+      localStorage.setItem(DISCORD_PROMO_DISMISSED_KEY, '1');
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (unlockedSkins.includes('gladiator')) setDiscordPromoVisible(false);
+  }, [unlockedSkins]);
 
   const handleExportSave = useCallback(() => {
     const currentUnlocked = loadUnlockedSkins();
@@ -769,6 +803,9 @@ export function App() {
             questRun={questRun}
             questOnDayRollover={handleQuestRollover}
             questOnShare={handleShareQuests}
+            showDiscordPromo={discordPromoVisible}
+            onDiscordPromoClaim={handleDiscordClaim}
+            onDiscordPromoDismiss={dismissDiscordPromo}
             onOpenSkins={() => {
               setLifetimeStats(loadLifetimeStats());
               setUnlockedSkins(loadUnlockedSkins());

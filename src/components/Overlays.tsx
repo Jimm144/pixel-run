@@ -1,5 +1,6 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Stats } from '../game/engine';
+import { drawPlayerSprite } from '../game/playerSprite';
 import { DailyQuestPanel } from './QuestPanels';
 import { PauseIcon, PixelButton, Panel, Stat } from './ui';
 import type { QuestDefinition, QuestRecord, QuestRunStats } from '../game/quests';
@@ -114,6 +115,53 @@ function PixelShirtIcon({ className = 'h-5 w-5 sm:h-6 sm:w-6' }: { className?: s
   );
 }
 
+function GladiatorPreview() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.imageSmoothingEnabled = false;
+    drawPlayerSprite(ctx, 48, 58, { skinId: 'gladiator', frame: 0, run: 0, onGround: true, scale: 4 });
+  }, []);
+
+  return <canvas ref={canvasRef} width={96} height={112} className="h-20 w-[68px] shrink-0 [image-rendering:pixelated]" aria-hidden="true" />;
+}
+
+function DiscordPromo({ onClaim, onDismiss }: { onClaim: () => void; onDismiss: () => void }) {
+  return (
+    <div className="relative flex w-full items-center gap-2 border-2 border-[#5865f2] bg-[#151942] p-2 shadow-[3px_3px_0_#08040f] tablet:gap-3 tablet:p-2.5">
+      <button
+        type="button"
+        aria-label="Dismiss Discord reward"
+        onClick={onDismiss}
+        className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center text-[#9da9ff] hover:text-white"
+      >
+        <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
+          <path d="M3 3l10 10M13 3L3 13" />
+        </svg>
+      </button>
+      <div className="flex h-[76px] w-[68px] shrink-0 items-center justify-center border border-[#5865f2]/50 bg-[#0d102b]">
+        <GladiatorPreview />
+      </div>
+      <div className="min-w-0 flex-1 pr-3">
+        <p className="font-pixel text-[7px] leading-[1.6] text-[#ffd166] tablet:text-[8px]">
+          JOIN THE DISCORD TO GET THE LEGENDARY GLADIATOR SKIN
+        </p>
+        <button
+          type="button"
+          onClick={onClaim}
+          className="mt-2 border-2 border-[#08040f] bg-[#5865f2] px-2 py-1 font-pixel text-[7px] text-white shadow-[2px_2px_0_#08040f] hover:bg-[#7289da] active:translate-x-[1px] active:translate-y-[1px]"
+        >
+          JOIN DISCORD
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function RetryIcon({ className = 'h-[16px] w-[16px]' }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="currentColor">
@@ -153,6 +201,9 @@ export function StartScreen({
   questOnDayRollover,
   questOnShare,
   onOpenSkins,
+  showDiscordPromo,
+  onDiscordPromoClaim,
+  onDiscordPromoDismiss,
   onExportSave,
   onImportSave,
   onCheckUpdate,
@@ -171,6 +222,9 @@ export function StartScreen({
   questOnDayRollover?: () => void;
   questOnShare?: () => void;
   onOpenSkins?: () => void;
+  showDiscordPromo?: boolean;
+  onDiscordPromoClaim?: () => void;
+  onDiscordPromoDismiss?: () => void;
   onExportSave?: () => void;
   onImportSave?: () => void;
   onCheckUpdate?: () => void;
@@ -218,6 +272,9 @@ export function StartScreen({
           </div>
         </Panel>
         <DailyQuestPanel quests={quests} record={questRecord} run={questRun} compact decorated={false} onDayRollover={questOnDayRollover} onShare={questOnShare} />
+        {showDiscordPromo && onDiscordPromoClaim && onDiscordPromoDismiss && (
+          <DiscordPromo onClaim={onDiscordPromoClaim} onDismiss={onDiscordPromoDismiss} />
+        )}
         <div className="flex w-full max-w-[420px] gap-2 tablet:max-w-[500px]">
           <button
             onClick={(e) => { e.stopPropagation(); onToggleMusic(); }}

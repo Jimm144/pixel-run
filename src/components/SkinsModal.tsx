@@ -129,6 +129,12 @@ export function SkinsModal({
     setStats(loadLifetimeStats());
   }, [lifetimeStats]);
 
+  useEffect(() => {
+    setSelectedSkinId(equippedSkin);
+    const equippedIndex = filteredSkins.findIndex((skin) => skin.id === equippedSkin);
+    setFocusedIndex(equippedIndex >= 0 ? equippedIndex : 0);
+  }, [equippedSkin]);
+
   const [windowWidth, setWindowWidth] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth : 1000,
   );
@@ -177,7 +183,7 @@ export function SkinsModal({
     setDiscordClaimed(true);
     setStats(reward.updatedStats);
     onUpdateUnlocked(reward.unlockedSkins, reward.updatedStats);
-    sfx.play('gem');
+    if (reward.newlyClaimed) sfx.play('gem');
   }, [discordClaimed, onUpdateUnlocked]);
 
   const handleEquip = useCallback(
@@ -478,12 +484,15 @@ export function SkinsModal({
     if (skin.unlock.type === 'holiday') {
       const active = isSkinAvailable(skin);
       return (
-        <div className={`flex h-[20px] sm:h-[22px] w-full items-center justify-center border px-1 text-center font-pixel text-[6px] ${
+        <div
+          title={skin.unlock.desc}
+          className={`flex min-h-[20px] w-full items-center justify-center border px-1 py-1 text-center font-pixel text-[6px] leading-tight ${
           active
             ? 'border-[#ff70a6]/60 bg-[#33081e] text-[#ff70a6]'
             : 'border-[#453c60] bg-[#1c162e] text-[#6f5fa8]'
-        }`}>
-          {active ? `EVENT LIVE: ${skin.unlock.desc}` : skin.unlock.desc}
+        }`}
+        >
+          {active ? 'EVENT LIVE' : 'LIMITED EVENT'}
         </div>
       );
     }
@@ -494,7 +503,7 @@ export function SkinsModal({
             ? 'border-[#3ef2c8]/60 bg-[#092922] text-[#3ef2c8]'
             : 'border-[#5865f2]/60 bg-[#151942] text-[#9da9ff]'
         }`}>
-          {discordClaimed ? 'REWARD CLAIMED' : `${skin.unlock.rewardGems ?? 100} GEMS + DISCORD`}
+          {discordClaimed ? 'REWARD CLAIMED' : 'JOIN THE DISCORD'}
         </div>
       );
     }
@@ -537,7 +546,9 @@ export function SkinsModal({
             onClick={onClose}
             className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center border border-[#ff4d6d] bg-[#ff4d6d]/20 font-pixel text-[10px] sm:text-[11px] text-[#ff4d6d] shadow-[1px_1px_0_#08040f] hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px]"
           >
-            ✕
+            <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
+              <path d="M3 3l10 10M13 3L3 13" />
+            </svg>
           </button>
         </div>
 
@@ -627,6 +638,13 @@ export function SkinsModal({
                 >
                   ???????
                 </button>
+              ) : selectedSkin.unlock.type === 'holiday' ? (
+                <div
+                  title={selectedSkin.unlock.desc}
+                  className="flex min-h-[32px] md:min-h-[36px] w-full items-center justify-center border-2 border-[#453c60] bg-[#140a26] px-2 py-1 text-center font-pixel text-[7.5px] leading-tight text-[#c4b8e8] shadow-[2px_2px_0_#08040f]"
+                >
+                  {isSkinAvailable(selectedSkin) ? 'EVENT LIVE' : 'LIMITED EVENT'}
+                </div>
               ) : selectedSkin.unlock.type === 'discord' ? (
                 <button
                   type="button"
@@ -638,7 +656,7 @@ export function SkinsModal({
                       : 'border-[#08040f] bg-[#5865f2] text-white hover:bg-[#7289da]'
                   }`}
                 >
-                  {discordClaimed ? 'REWARD CLAIMED' : 'OPEN DISCORD + CLAIM'}
+                  {discordClaimed ? 'REWARD CLAIMED' : 'JOIN THE DISCORD'}
                 </button>
               ) : selectedSkin.unlock.type === 'gems' ? (
                 <button

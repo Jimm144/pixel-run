@@ -46,7 +46,6 @@ export interface SkinUnlockInfo {
   type: 'free' | 'gems' | 'coins' | 'distance' | 'score' | 'quests' | 'moon' | 'konami' | 'save' | 'holiday' | 'discord';
   cost?: number;
   threshold?: number;
-  rewardGems?: number;
   desc: string;
   /** ISO date windows for 'holiday' skins: [[mmdd_start, mmdd_end], ...] (wraps Dec->Jan) */
   holidayWindows?: [string, string][];
@@ -156,26 +155,26 @@ export const SKINS: Record<SkinId, SkinDef> = {
   rob: {
     id: 'rob',
     name: 'ROB',
-    tier: 'rare',
+    tier: 'common',
     suit: '#e6e6e6',
     suitDark: '#202020',
     skin: '#ffcf9e',
     boot: '#181818',
     scarf: '#303030',
     ghostTrail: '#909090',
-    unlock: { type: 'gems', cost: 50, desc: '50 GEMS' },
+    unlock: { type: 'gems', cost: 10, desc: '10 GEMS' },
   },
   cob: {
     id: 'cob',
     name: 'COB',
-    tier: 'rare',
+    tier: 'common',
     suit: '#ffd166',
     suitDark: '#d49b1a',
     skin: '#ffe9a0',
     boot: '#2d6a4f',
     scarf: '#52b788',
     ghostTrail: '#ffd166',
-    unlock: { type: 'gems', cost: 50, desc: '50 GEMS' },
+    unlock: { type: 'gems', cost: 10, desc: '10 GEMS' },
   },
   mob: {
     id: 'mob',
@@ -192,26 +191,26 @@ export const SKINS: Record<SkinId, SkinDef> = {
   panda: {
     id: 'panda',
     name: 'PANDA',
-    tier: 'epic',
+    tier: 'rare',
     suit: '#1a1a1a',
     suitDark: '#0d0d0d',
     skin: '#ffffff',
     boot: '#1a1a1a',
     scarf: '#52b788',
     ghostTrail: '#ffffff',
-    unlock: { type: 'gems', cost: 150, desc: '150 GEMS' },
+    unlock: { type: 'gems', cost: 50, desc: '50 GEMS' },
   },
   pig: {
     id: 'pig',
     name: 'PIG',
-    tier: 'epic',
+    tier: 'rare',
     suit: '#ff9ebb',
     suitDark: '#d9688b',
     skin: '#ffb8ce',
     boot: '#9e3b5e',
     scarf: '#ff5c8a',
     ghostTrail: '#ff9ebb',
-    unlock: { type: 'gems', cost: 150, desc: '150 GEMS' },
+    unlock: { type: 'gems', cost: 50, desc: '50 GEMS' },
   },
   goat: {
     id: 'goat',
@@ -331,7 +330,7 @@ export const SKINS: Record<SkinId, SkinDef> = {
     boot: '#111827',
     scarf: '#d4af37',
     ghostTrail: '#ffd166',
-    unlock: { type: 'discord', rewardGems: 100, desc: 'OPEN DISCORD + CLAIM' },
+    unlock: { type: 'discord', desc: 'JOIN THE DISCORD' },
   },
   outline: {
     id: 'outline',
@@ -602,19 +601,18 @@ export function isDiscordRewardClaimed(): boolean {
   }
 }
 
-export function claimDiscordReward(): { unlockedSkins: SkinId[]; updatedStats: LifetimeStats } {
+export function claimDiscordReward(): { unlockedSkins: SkinId[]; updatedStats: LifetimeStats; newlyClaimed: boolean } {
   const unlockedSkins = loadUnlockedSkins();
   const currentStats = loadLifetimeStats();
-  if (isDiscordRewardClaimed()) return { unlockedSkins, updatedStats: currentStats };
+  if (isDiscordRewardClaimed()) return { unlockedSkins, updatedStats: currentStats, newlyClaimed: false };
 
-  const updatedStats = { ...currentStats, gems: currentStats.gems + 100 };
+  const updatedStats = currentStats;
   const nextUnlocked: SkinId[] = unlockedSkins.includes('gladiator') ? unlockedSkins : [...unlockedSkins, 'gladiator'];
-  saveLifetimeStats(updatedStats);
   saveUnlockedSkins(nextUnlocked);
   try {
     localStorage.setItem(DISCORD_REWARD_KEY, '1');
   } catch {}
-  return { unlockedSkins: nextUnlocked, updatedStats };
+  return { unlockedSkins: nextUnlocked, updatedStats, newlyClaimed: true };
 }
 
 export function saveUnlockedSkins(unlocked: SkinId[]) {
