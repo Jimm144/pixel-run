@@ -36,9 +36,6 @@ import { SkinsModal } from './components/SkinsModal';
 import { SkinUnlockModal } from './components/SkinUnlockModal';
 import { FeedbackModal } from './components/FeedbackModal';
 import { SaveLoadModal } from './components/SaveLoadModal';
-import { BattleModal } from './components/BattleModal';
-import { party } from './game/multiplayer/partyManager';
-import type { MatchResult } from './game/multiplayer/types';
 import {
   loadEquippedSkin,
   loadUnlockedSkins,
@@ -264,8 +261,6 @@ export function App() {
   const [unlockedSkins, setUnlockedSkins] = useState<SkinId[]>(() => loadUnlockedSkins());
   const [lifetimeStats, setLifetimeStats] = useState<LifetimeStats>(() => loadLifetimeStats());
   const [skinsModalOpen, setSkinsModalOpen] = useState(false);
-  const [battleModalOpen, setBattleModalOpen] = useState(false);
-  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [saveLoadModal, setSaveLoadModal] = useState<'save' | 'load' | null>(null);
   const [skinToast, setSkinToast] = useState<string | null>(null);
@@ -278,24 +273,6 @@ export function App() {
     }
   });
   const skinToastTimer = useRef(0);
-
-  // Auto-open battle modal if #battle= in URL hash
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.location.hash.startsWith('#battle=')) {
-      setBattleModalOpen(true);
-    }
-  }, []);
-
-  // Listen for match results from party
-  useEffect(() => {
-    party.onMatchEnd = (result) => {
-      setMatchResult(result);
-      setBattleModalOpen(true);
-    };
-    return () => {
-      party.onMatchEnd = undefined;
-    };
-  }, []);
 
   const triggerSkinToast = useCallback((name: string, skinId?: SkinId) => {
     const text = skinId ? `NEW SKIN UNLOCKED: ${name}` : name;
@@ -646,7 +623,7 @@ export function App() {
     }
   }, [stats, best, newBest]);
 
-  const start = useCallback((seed?: number) => {
+  const start = useCallback(() => {
     commitQuestRun();
     questCommittedRef.current = false;
     sfx.init();
@@ -671,7 +648,7 @@ export function App() {
     setRestartHint(false);
     window.clearTimeout(restartHintTimer.current);
     g.best = bestScore();
-    g.startRun(seed);
+    g.startRun();
     questToastSeenRef.current.clear();
     setQuestToast([]);
     setQuestRun(emptyQuestRunStats());
@@ -706,9 +683,6 @@ export function App() {
   const toMenu = useCallback(() => {
     const g = gameRef.current;
     if (g) g.toReady();
-    if (party.isMultiplayer) {
-      party.leave();
-    }
     commitQuestRun();
     setQuestRecord(loadQuestRecord());
     sfx.play('ui');
@@ -838,7 +812,6 @@ export function App() {
               setUnlockedSkins(loadUnlockedSkins());
               setSkinsModalOpen(true);
             }}
-            onOpenBattle={() => setBattleModalOpen(true)}
             onExportSave={handleExportSave}
             onImportSave={handleImportSave}
             onCheckUpdate={handleCheckUpdate}
@@ -881,19 +854,6 @@ export function App() {
           <div className="fixed top-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 border-2 border-[#3ef2c8] bg-[#0d0619]/95 px-4 py-2 font-pixel text-[#3ef2c8] shadow-[4px_4px_0_#08040f]">
             <span className="text-[8px] tablet:text-[10px] uppercase">{skinToast}</span>
           </div>
-        )}
-        {battleModalOpen && (
-          <BattleModal
-            onClose={() => setBattleModalOpen(false)}
-            onStartBattle={(seed) => {
-              setBattleModalOpen(false);
-              start(seed);
-            }}
-            localName="Runner"
-            localSkin={equippedSkin}
-            matchResult={matchResult}
-            onClearMatchResult={() => setMatchResult(null)}
-          />
         )}
         {unlockedSkinPopup && (
           <SkinUnlockModal

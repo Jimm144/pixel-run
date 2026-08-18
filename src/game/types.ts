@@ -1,6 +1,5 @@
 import type { BgKind, Zone } from './palette';
 import type { SkinId } from './skins';
-import type { OpponentInfo } from './multiplayer/types';
 
 /** Gameplay is authored against this size; physics never changes. */
 export const BASE_VW = 400;
@@ -315,6 +314,4 @@ export interface RenderHost {
   zone: Zone;
   zoneOrder: number[];
   moonPhase: number;
-  isMultiplayer?: boolean;
-  opponentStates?: Map<string, OpponentInfo>;
 }

@@ -1,6 +1,0 @@
-{
-  "$schema": "https://www.partykit.io/schema.json",
-  "name": "pixel-run",
-  "main": "party/server.ts",
-  "compatibilityDate": "2026-08-18"
-}

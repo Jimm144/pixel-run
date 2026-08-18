@@ -197,10 +197,10 @@ export function StartScreen({
   onToggleSfx,
   quests,
   questRecord,
+  questRun,
   questOnDayRollover,
   questOnShare,
   onOpenSkins,
-  onOpenBattle,
   showDiscordPromo,
   onDiscordPromoClaim,
   onDiscordPromoDismiss,
@@ -222,7 +222,6 @@ export function StartScreen({
   questOnDayRollover?: () => void;
   questOnShare?: () => void;
   onOpenSkins?: () => void;
-  onOpenBattle?: () => void;
   showDiscordPromo?: boolean;
   onDiscordPromoClaim?: () => void;
   onDiscordPromoDismiss?: () => void;
@@ -337,17 +336,6 @@ export function StartScreen({
             <PlayIcon />
             <span>START RUN</span>
           </PixelButton>
-          {onOpenBattle && (
-            <button
-              type="button"
-              onClick={onOpenBattle}
-              aria-label="Multiplayer Battle"
-              title="Multiplayer Battle"
-              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[#ffd166]/60 bg-[#1c1404] text-[#ffd166] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
-            >
-              <span className="text-base sm:text-lg select-none">⚔️</span>
-            </button>
-          )}
           {onOpenSkins && (
             <button
               type="button"
