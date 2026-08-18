@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://jimm144.github.io/pixel-run/sitemap.xml
+Sitemap: https://pixelrun.localplayer.dev/sitemap.xml
