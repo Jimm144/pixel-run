@@ -606,8 +606,9 @@ export function claimDiscordReward(): { unlockedSkins: SkinId[]; updatedStats: L
   const currentStats = loadLifetimeStats();
   if (isDiscordRewardClaimed()) return { unlockedSkins, updatedStats: currentStats, newlyClaimed: false };
 
-  const updatedStats = currentStats;
+  const updatedStats = { ...currentStats, gems: currentStats.gems + 100 };
   const nextUnlocked: SkinId[] = unlockedSkins.includes('gladiator') ? unlockedSkins : [...unlockedSkins, 'gladiator'];
+  saveLifetimeStats(updatedStats);
   saveUnlockedSkins(nextUnlocked);
   try {
     localStorage.setItem(DISCORD_REWARD_KEY, '1');

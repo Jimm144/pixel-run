@@ -156,95 +156,212 @@ function generatePreviewCard() {
     buf[idx + 3] = a;
   }
 
-  function fillRect(x, y, w, h, hex) {
-    const [r, g, b, a] = hexToRgba(hex);
+  function fillRect(x, y, w, h, hex, alpha = 255) {
+    const [r, g, b] = hexToRgba(hex);
     for (let py = Math.floor(y); py < Math.floor(y + h); py++) {
       for (let px = Math.floor(x); px < Math.floor(x + w); px++) {
-        setPixel(px, py, r, g, b, a);
+        if (alpha >= 255) {
+          setPixel(px, py, r, g, b, 255);
+        } else if (px >= 0 && px < W && py >= 0 && py < H) {
+          const idx = (py * W + px) * 4;
+          const blend = alpha / 255;
+          buf[idx] = Math.round(buf[idx] * (1 - blend) + r * blend);
+          buf[idx + 1] = Math.round(buf[idx + 1] * (1 - blend) + g * blend);
+          buf[idx + 2] = Math.round(buf[idx + 2] * (1 - blend) + b * blend);
+          buf[idx + 3] = 255;
+        }
       }
     }
   }
 
-  // Background gradient
+  // Synthwave sunset sky gradient
   for (let y = 0; y < H; y++) {
     const t = y / H;
-    const r = Math.floor(13 + (26 - 13) * t);
-    const g = Math.floor(6 + (10 - 6) * t);
-    const b = Math.floor(25 + (45 - 25) * t);
+    let r;
+    let g;
+    let b;
+    if (t < 0.5) {
+      const st = t / 0.5;
+      r = Math.floor(18 + (55 - 18) * st);
+      g = Math.floor(10 + (16 - 10) * st);
+      b = Math.floor(42 + (65 - 42) * st);
+    } else {
+      const st = (t - 0.5) / 0.5;
+      r = Math.floor(55 + (180 - 55) * st * 0.5);
+      g = Math.floor(16 + (60 - 16) * st * 0.4);
+      b = Math.floor(65 + (35 - 65) * st);
+    }
     for (let x = 0; x < W; x++) {
       setPixel(x, y, r, g, b, 255);
     }
   }
 
-  // Skyline
-  const buildings = [
-    { x: 80,  w: 90,  h: 220 },
-    { x: 190, w: 140, h: 280 },
-    { x: 350, w: 80,  h: 180 },
-    { x: 450, w: 120, h: 320 },
-    { x: 590, w: 100, h: 240 },
-    { x: 710, w: 130, h: 290 },
-    { x: 860, w: 90,  h: 200 },
-    { x: 970, w: 140, h: 260 },
+  // Distant stars
+  const stars = [
+    [100, 40], [250, 70], [420, 30], [580, 85], [750, 50], [920, 65], [1080, 35],
+    [180, 120], [340, 150], [680, 130], [840, 110], [1020, 140], [50, 180],
   ];
+  stars.forEach(([sx, sy]) => {
+    fillRect(sx, sy, 3, 3, '#ffd166', 200);
+    fillRect(sx + 1, sy - 1, 1, 5, '#ffffff', 240);
+    fillRect(sx - 1, sy + 1, 5, 1, '#ffffff', 240);
+  });
+
+  // Segmented synthwave sun
+  const sunX = 380;
+  const sunY = 250;
+  const sunR = 120;
+  for (let dy = -sunR; dy <= sunR; dy++) {
+    const py = sunY + dy;
+    if (py < 0 || py >= H) continue;
+    const dxMax = Math.floor(Math.sqrt(sunR * sunR - dy * dy));
+    const stripe = (dy + sunR) % 18;
+    if (stripe > 13 && dy > 0) continue;
+    const sunT = (dy + sunR) / (2 * sunR);
+    const sr = Math.floor(255 - sunT * 20);
+    const sg = Math.floor(209 - sunT * 120);
+    const sb = Math.floor(102 - sunT * 80);
+    const hex = `#${sr.toString(16).padStart(2, '0')}${sg.toString(16).padStart(2, '0')}${sb.toString(16).padStart(2, '0')}`;
+    fillRect(sunX - dxMax, py, dxMax * 2, 1, hex);
+  }
+
+  // Skyline silhouette
+  const buildings = [
+    { x: 0, w: 90, h: 140 },
+    { x: 70, w: 110, h: 190 },
+    { x: 160, w: 70, h: 130 },
+    { x: 210, w: 90, h: 220 },
+    { x: 290, w: 80, h: 170 },
+    { x: 350, w: 100, h: 140 },
+    { x: 440, w: 80, h: 200 },
+    { x: 500, w: 120, h: 160 },
+    { x: 600, w: 90, h: 230 },
+    { x: 670, w: 110, h: 180 },
+    { x: 770, w: 90, h: 240 },
+    { x: 840, w: 130, h: 200 },
+    { x: 950, w: 100, h: 260 },
+    { x: 1030, w: 90, h: 170 },
+    { x: 1100, w: 100, h: 210 },
+  ];
+  const horizonY = 470;
   buildings.forEach((b) => {
-    fillRect(b.x, 480 - b.h, b.w, b.h, '#1a0d33');
-    for (let wy = 480 - b.h + 20; wy < 460; wy += 30) {
-      for (let wx = b.x + 15; wx < b.x + b.w - 15; wx += 25) {
-        if ((wx + wy) % 5 === 0) {
-          fillRect(wx, wy, 12, 16, '#ffd166');
-        }
+    fillRect(b.x, horizonY - b.h, b.w, b.h, '#130826');
+    for (let wy = horizonY - b.h + 20; wy < horizonY - 20; wy += 26) {
+      for (let wx = b.x + 12; wx < b.x + b.w - 12; wx += 20) {
+        if ((wx * 3 + wy) % 5 === 0) fillRect(wx, wy, 8, 12, '#ffd166', 160);
+        else if ((wx + wy * 2) % 7 === 0) fillRect(wx, wy, 8, 12, '#3ef2c8', 140);
       }
     }
   });
 
-  // Ground Platform Layer (clean in-game platform)
-  fillRect(0, 480, W, 150, '#120824');
-  fillRect(0, 480, W, 8, '#3ef2c8');
-  fillRect(0, 488, W, 6, '#1da88a');
+  // Ground platform and floating islands
+  fillRect(0, horizonY, W, H - horizonY, '#0d051c');
+  fillRect(0, horizonY, W, 8, '#3ef2c8');
+  fillRect(0, horizonY + 8, W, 6, '#1da88a');
 
   // Floating platform left
-  fillRect(120, 360, 240, 10, '#3ef2c8');
-  fillRect(120, 370, 240, 6, '#1da88a');
+  fillRect(120, 360, 260, 10, '#3ef2c8');
+  fillRect(120, 370, 260, 6, '#1da88a');
+  fillRect(120, 376, 260, 4, '#130826');
 
   // Floating platform right
-  fillRect(760, 370, 260, 10, '#3ef2c8');
-  fillRect(760, 380, 260, 6, '#1da88a');
+  fillRect(780, 380, 280, 10, '#3ef2c8');
+  fillRect(780, 390, 280, 6, '#1da88a');
+  fillRect(780, 396, 280, 4, '#130826');
 
-  // Coins
+  // Glowing gold coins on the left platform
   [160, 210, 260, 310].forEach((cx) => {
     fillRect(cx - 10, 320, 20, 26, '#ffd166');
+    fillRect(cx - 12, 324, 24, 18, '#ffd166');
     fillRect(cx - 6, 324, 12, 18, '#ffe9a0');
     fillRect(cx - 4, 326, 4, 8, '#ffffff');
   });
 
-  // Gem
-  const gx = 880, gy = 320;
+  // Gem on the right platform
+  const gx = 910;
+  const gy = 330;
   fillRect(gx - 8, gy + 4, 32, 24, '#3ef2c8');
   fillRect(gx - 4, gy, 24, 32, '#3ef2c8');
   fillRect(gx, gy + 4, 16, 16, '#7ef7ff');
   fillRect(gx + 2, gy + 6, 6, 6, '#ffffff');
 
-  // Draw in-game Bob on the platform (exact in-game sprite, NO outlines)
-  const bobScale = 14;
+  // Bob running in heroic stride
+  const bobScale = 16;
   const bobX = 220;
-  const bobY = 360 - 15 * bobScale;
+  const bobY = 360 - 20 * bobScale;
 
-  function f(x, y, w, h, hex) {
-    fillRect(bobX + x * bobScale, bobY + y * bobScale, w * bobScale, h * bobScale, hex);
+  function bfill(x, y, w, h, col) {
+    fillRect(bobX + x * bobScale, bobY + y * bobScale, w * bobScale, h * bobScale, col);
   }
 
-  f(2, 0, 7, 6, '#ff4d6d');   // SUIT
-  f(2, 0, 8, 2, '#b32a4d');   // SUIT_D
-  f(5, 2, 4, 4, '#ffcf9e');   // Peach face
-  f(7, 3, 1, 2, '#20122e');   // Eye
-  f(1, 5, 3, 2, '#3ef2c8');   // Scarf
-  f(2, 6, 7, 4, '#ff4d6d');   // Torso
-  f(2, 8, 7, 2, '#b32a4d');   // Lower torso
-  f(3, 10, 3, 3, '#59427e');  // Left leg
-  f(3, 13, 3, 2, '#2b1b45');  // Left boot
-  f(7, 10, 3, 4, '#59427e');  // Right leg
-  f(7, 14, 3, 1, '#2b1b45');  // Right boot
+  bfill(2, 0, 7, 6, '#ff4d6d');
+  bfill(5, 2, 4, 4, '#ffcf9e');
+  bfill(2, 0, 8, 2, '#b32a4d');
+  bfill(7, 3, 1, 2, '#20122e');
+  bfill(-3, 5, 4, 2, '#3ef2c8');
+  bfill(-5, 6, 3, 2, '#3ef2c8');
+  bfill(1, 5, 3, 2, '#3ef2c8');
+  bfill(2, 6, 7, 5, '#ff4d6d');
+  bfill(2, 6, 7, 2, '#b32a4d');
+  bfill(8, 7, 2, 3, '#ff4d6d');
+  bfill(9, 9, 2, 2, '#ffcf9e');
+  bfill(-1, 7, 2, 3, '#ff4d6d');
+  bfill(-1, 9, 2, 2, '#ffcf9e');
+  bfill(4, 11, 3, 4, '#59427e');
+  bfill(3, 15, 4, 2, '#2b1b45');
+  bfill(8, 10, 3, 4, '#59427e');
+  bfill(9, 14, 4, 2, '#2b1b45');
+
+  // PIXEL RUN arcade title logo
+  const font7x9 = {
+    P: ['1111110', '1000001', '1000001', '1111110', '1000000', '1000000', '1000000', '1000000', '1000000'],
+    I: ['1111111', '0001000', '0001000', '0001000', '0001000', '0001000', '0001000', '0001000', '1111111'],
+    X: ['1000001', '1000001', '0100010', '0010100', '0001000', '0010100', '0100010', '1000001', '1000001'],
+    E: ['1111111', '1000000', '1000000', '1111110', '1000000', '1000000', '1000000', '1000000', '1111111'],
+    L: ['1000000', '1000000', '1000000', '1000000', '1000000', '1000000', '1000000', '1000000', '1111111'],
+    T: ['1111111', '0001000', '0001000', '0001000', '0001000', '0001000', '0001000', '0001000', '0001000'],
+    O: ['0111110', '1000001', '1000001', '1000001', '1000001', '1000001', '1000001', '1000001', '0111110'],
+    F: ['1111111', '1000000', '1000000', '1111110', '1000000', '1000000', '1000000', '1000000', '1000000'],
+    A: ['0111110', '1000001', '1000001', '1000001', '1111111', '1000001', '1000001', '1000001', '1000001'],
+    M: ['1000001', '1100011', '1010101', '1001001', '1000001', '1000001', '1000001', '1000001', '1000001'],
+    R: ['1111110', '1000001', '1000001', '1111110', '1000100', '1000010', '1000001', '1000001', '1000001'],
+    U: ['1000001', '1000001', '1000001', '1000001', '1000001', '1000001', '1000001', '1000001', '0111110'],
+    N: ['1000001', '1100001', '1010001', '1001001', '1000101', '1000011', '1000001', '1000001', '1000001'],
+    ' ': ['0000000', '0000000', '0000000', '0000000', '0000000', '0000000', '0000000', '0000000', '0000000'],
+  };
+
+  function drawGlyph(ch, gx, gy, sc, color) {
+    const rows = font7x9[ch] || font7x9[' '];
+    rows.forEach((row, r) => {
+      for (let c = 0; c < row.length; c++) {
+        if (row[c] === '1') fillRect(gx + c * sc, gy + r * sc, sc, sc, color);
+      }
+    });
+  }
+
+  function drawWord(text, wx, wy, sc, color, shadowCol) {
+    const gw = 7 * sc + 2 * sc;
+    if (shadowCol) text.split('').forEach((ch, i) => drawGlyph(ch, wx + i * gw + sc, wy + sc, sc, shadowCol));
+    text.split('').forEach((ch, i) => drawGlyph(ch, wx + i * gw, wy, sc, color));
+  }
+
+  const titleScale = 8;
+  const titleX = 570;
+  const titleY = 100;
+  drawWord('PIXEL', titleX, titleY, titleScale, '#3ef2c8', '#081d19');
+  drawWord('RUN', titleX + (5 * 9 * titleScale + 20), titleY, titleScale, '#ffd166', '#261b04');
+
+  const subY = titleY + 9 * titleScale + 30;
+  fillRect(titleX - 10, subY - 6, 610, 36, '#180a30');
+  fillRect(titleX - 10, subY - 6, 610, 2, '#3ef2c8');
+  fillRect(titleX - 10, subY + 28, 610, 2, '#3ef2c8');
+  drawWord('RETRO INFINITE PLATFORMER', titleX + 20, subY + 4, 2, '#ffffff', '#0a0418');
+
+  // Frame borders
+  fillRect(0, 0, W, 8, '#3ef2c8');
+  fillRect(0, H - 8, W, 8, '#3ef2c8');
+  fillRect(0, 0, 8, H, '#3ef2c8');
+  fillRect(W - 8, 0, 8, H, '#3ef2c8');
 
   return createPNG(W, H, buf);
 }
