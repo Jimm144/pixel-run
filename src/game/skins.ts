@@ -99,7 +99,7 @@ export function isSkinAvailable(skin: SkinDef): boolean {
   return isHolidayActive(skin.unlock);
 }
 
-export const DISCORD_URL = 'https://discord.gg/3NMTamtvX';
+export const DISCORD_URL = 'https://discord.gg/QZKEVEuFbh';
 const DISCORD_REWARD_KEY = 'pixeldash.discord_reward_claimed';
 
 export interface SkinDef {
