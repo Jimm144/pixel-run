@@ -55,6 +55,7 @@ import { inputManager } from './game/input';
 const QUEST_SHARE_WIDTH = 1200;
 const QUEST_SHARE_HEIGHT = 500;
 const DISCORD_PROMO_DISMISSED_KEY = 'pixeldash.discord_promo_dismissed';
+const SHARE_URL = 'https://pixelrun.localplayer.dev/';
 
 function shareInteger(value: number, fallback = 0) {
   if (!Number.isFinite(value)) return fallback;
@@ -126,7 +127,7 @@ function createQuestShareCard(record: QuestRecord, best: number): Promise<Blob |
     });
   }
 
-  drawTextCentered(context, 'jimm144.github.io/pixel-run', QUEST_SHARE_WIDTH / 2, 416, 3, '#9d8fd6', '#08040f', false);
+  drawTextCentered(context, 'pixelrun.localplayer.dev', QUEST_SHARE_WIDTH / 2, 416, 3, '#9d8fd6', '#08040f', false);
 
   return new Promise((resolve) => {
     canvas.toBlob((blob) => resolve(blob), 'image/png');
@@ -181,7 +182,7 @@ function createScoreShareCard(stats: Stats, isNewBest: boolean): Promise<Blob | 
   drawMetric(616, 'KILLS', String(stats.kills), '#ff4d6d');
   drawMetric(880, 'MAX COMBO', `X${stats.combo}`, '#c98cff');
 
-  drawTextCentered(context, 'jimm144.github.io/pixel-run', QUEST_SHARE_WIDTH / 2, 416, 3, '#9d8fd6', '#08040f', false);
+  drawTextCentered(context, 'pixelrun.localplayer.dev', QUEST_SHARE_WIDTH / 2, 416, 3, '#9d8fd6', '#08040f', false);
 
   return new Promise((resolve) => {
     canvas.toBlob((blob) => resolve(blob), 'image/png');
@@ -578,7 +579,7 @@ export function App() {
         questShareBusyRef.current = false;
         return;
       }
-      const link = window.location.origin + window.location.pathname;
+      const link = SHARE_URL;
       await navigator.clipboard.write([
         new ClipboardItem({
           'image/png': blob,
@@ -607,7 +608,7 @@ export function App() {
         setQuestToast(['IMAGE COPY FAILED']);
         return;
       }
-      const link = window.location.origin + window.location.pathname;
+      const link = SHARE_URL;
       await navigator.clipboard.write([
         new ClipboardItem({
           'image/png': blob,

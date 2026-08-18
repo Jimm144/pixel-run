@@ -2,7 +2,8 @@
 
 PIXEL RUN is a fast-paced, browser-based endless runner and 2D platformer built with TypeScript, React, Vite, and HTML5 Canvas.
 
-- **Play in your browser**: [https://jimm144.github.io/pixel-run/](https://jimm144.github.io/pixel-run/)
+- **Play in your browser**: [https://pixelrun.localplayer.dev/](https://pixelrun.localplayer.dev/)
+- **Legacy GitHub Pages URL**: [https://jimm144.github.io/pixel-run/](https://jimm144.github.io/pixel-run/)
 - **Play on itch.io**: [https://jimm144.itch.io/pixel-run](https://jimm144.itch.io/pixel-run)
 
 ---

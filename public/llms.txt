@@ -4,7 +4,7 @@
 
 ## Play
 
-- Game: https://jimm144.github.io/pixel-run/
+- Game: https://pixelrun.localplayer.dev/
 - Source code: https://github.com/Jimm144/pixel-run
 
 ## Game facts
