@@ -55,6 +55,9 @@ import {
 import { type SkinId, loadEquippedSkin, loadLifetimeStats, saveLifetimeStats, MILESTONES } from './skins';
 import { WorldGen } from './worldGen';
 
+import { party } from './multiplayer/partyManager';
+import type { OpponentInfo } from './multiplayer/types';
+
 export { BASE_VW, BASE_VH, MAX_VH, VW, VH, worldOffsetY, setViewportSize } from './types';
 export type { Phase, Stats } from './types';
 
@@ -86,6 +89,8 @@ type GameState = {
     | 'stats'
     | 'rng'
     | 'matchSeed'
+    | 'isMultiplayer'
+    | 'opponentStates'
   >]: Game[K];
 };
 
@@ -100,6 +105,8 @@ export class Game implements GenHost, RenderHost {
   phase!: Phase;
   onDeath: ((s: Stats) => void) | null = null;
   best = 0;
+  isMultiplayer = false;
+  opponentStates = new Map<string, OpponentInfo>();
 
   /* ---- input */
   jumpHeld!: boolean;
@@ -312,8 +319,8 @@ export class Game implements GenHost, RenderHost {
   }
 
   /* ------------------------------------------------------------- lifecycle */
-  reset() {
-    this.matchSeed = (Math.random() * 0x7fffffff) >>> 0;
+  reset(seed?: number) {
+    this.matchSeed = seed !== undefined ? seed : (Math.random() * 0x7fffffff) >>> 0;
     this.rng = new Mulberry32(this.matchSeed);
 
     Object.assign(this, this.defaults());
@@ -339,8 +346,10 @@ export class Game implements GenHost, RenderHost {
     this.worldGen.generate(this.camX + VW * 2.2);
   }
 
-  startRun() {
-    this.reset();
+  startRun(seed?: number) {
+    this.reset(seed);
+    this.isMultiplayer = party.isMultiplayer;
+    this.opponentStates = party.opponents;
     this.phase = 'playing';
     this.countdown = 180;
     this.countdownTicks = true;
@@ -803,6 +812,22 @@ export class Game implements GenHost, RenderHost {
 
     /* ---- death by pit */
     if (this.py > PIT_DEATH_Y) this.die('pit');
+
+    if (this.isMultiplayer && (this.frame % 2 === 0 || this.phase === 'dead')) {
+      party.sendTick({
+        px: Math.round(this.px),
+        py: Math.round(this.py),
+        vx: Number(this.vx.toFixed(2)),
+        vy: Number(this.vy.toFixed(2)),
+        diving: this.diving,
+        frame: this.frame,
+        run: this.onGround ? Math.floor(this.frame / 6) % 4 : -1,
+        meters: Math.floor(this.distance / 10),
+        score: this.score,
+        skinId: this.activeSkin,
+        alive: this.phase !== 'dead',
+      });
+    }
   }
 
   private doJump(dbl: boolean) {
@@ -1424,6 +1449,9 @@ export class Game implements GenHost, RenderHost {
     this.phase = 'dead';
     this.deathTimer = 0;
     this.deathReported = false;
+    if (this.isMultiplayer) {
+      party.sendDeath(Math.floor(this.distance / 10), this.score);
+    }
     this.addShake(1);
     this.freeze = 8;
     this.flash = 0.95;

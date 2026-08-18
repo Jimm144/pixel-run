@@ -1737,6 +1737,34 @@ export class Renderer {
       c.fillRect(ix - 2, 2, 5, 2);
       c.fillRect(ix - 1, 0, 3, 2);
     }
+
+    /* multiplayer opponent ghosts */
+    if (this.g.isMultiplayer && this.g.opponentStates) {
+      for (const opp of this.g.opponentStates.values()) {
+        if (!opp.isAlive || opp.px === undefined || opp.py === undefined) continue;
+        const oppCx = Math.round(opp.px - cam + PLAYER_W / 2);
+        const oppCy = Math.round(opp.py + PLAYER_H / 2);
+
+        c.save();
+        c.translate(oppCx, oppCy);
+        c.globalAlpha = 0.75;
+
+        drawPlayerSprite(c, 0, 0, {
+          skinId: opp.skinId || 'bob',
+          frame: opp.frame ?? this.g.frame,
+          run: opp.run ?? -1,
+          onGround: opp.run !== -1,
+          diving: Boolean(opp.diving),
+          vx: opp.vx ?? 0,
+        });
+
+        // Floating name tag above opponent head
+        c.globalAlpha = 0.9;
+        drawTextCentered(c, opp.name, 0, -PLAYER_H / 2 - 8, 1, '#ffd166', '#150a24');
+
+        c.restore();
+      }
+    }
   }
 
   private drawBiomeEvent() {
@@ -1953,6 +1981,33 @@ export class Renderer {
       this.drawCombo(Math.round(W / 2), 44);
     } else {
       this.drawCombo(Math.round(W / 2), 8);
+    }
+
+    // 5. MULTIPLAYER BATTLE STATUS
+    if (this.g.isMultiplayer && this.g.opponentStates && this.g.opponentStates.size > 0) {
+      const midX = Math.round(W / 2);
+      const vsY = (mobile || isNarrow) ? 58 : 26;
+      const p1Score = this.g.score;
+      const firstOpp = this.g.opponentStates.values().next().value;
+      if (firstOpp) {
+        const p2Score = firstOpp.score;
+        const p1Ahead = p1Score >= p2Score;
+        const p1Col = p1Ahead ? '#3ef2c8' : '#ffd166';
+        const p2Col = !p1Ahead ? '#3ef2c8' : '#ff70a6';
+
+        const p1Txt = `YOU:${p1Score}`;
+        const vsTxt = ` ⚔️ `;
+        const p2Txt = `${firstOpp.name.slice(0, 6)}:${p2Score}`;
+
+        const totalW = textWidth(p1Txt, 1) + textWidth(vsTxt, 1) + textWidth(p2Txt, 1);
+        const startX = midX - Math.floor(totalW / 2);
+
+        drawText(c, p1Txt, startX, vsY, 1, p1Col, '#150a24');
+        const vsX = startX + textWidth(p1Txt, 1);
+        drawText(c, vsTxt, vsX, vsY, 1, '#ffffff', '#150a24');
+        const p2X = vsX + textWidth(vsTxt, 1);
+        drawText(c, p2Txt, p2X, vsY, 1, p2Col, '#150a24');
+      }
     }
 
     c.restore();
