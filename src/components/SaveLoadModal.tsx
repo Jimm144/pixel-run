@@ -225,7 +225,7 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
             <input
               ref={fileInputRef}
               type="file"
-              accept=".save,.dat,.txt,text/plain"
+              accept="*/*"
               aria-hidden="true"
               tabIndex={-1}
               onChange={handleFileChange}

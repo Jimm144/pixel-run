@@ -343,7 +343,7 @@ export async function restoreSaveFromString(raw: string): Promise<{ success: boo
 export function triggerImportSaveDialog(onResult: (res: { success: boolean; error?: string }) => void): void {
   const input = document.createElement('input');
   input.type = 'file';
-  input.accept = '.save,.dat,.txt,text/plain';
+  input.accept = '*/*';
   input.style.display = 'none';
 
   input.addEventListener('change', async () => {
