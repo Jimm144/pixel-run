@@ -98,6 +98,7 @@ export type PartyClientMessage =
   | { type: 'tick'; payload: PlayerTickPayload }
   | { type: 'death'; meters: number; score: number }
   | { type: 'visibility'; isPublic: boolean }
+  | { type: 'rename'; name: string }
   | { type: 'rematch' }
   | { type: 'leave' };
 

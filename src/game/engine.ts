@@ -1552,6 +1552,20 @@ export class Game implements GenHost, RenderHost {
             ly + ph > e.y + hPadTop &&
             ly < e.y + e.h - hPadBottom
           ) {
+            // Battle players stomp exactly like the main runner: falling onto
+            // an enemy (or diving) kills it and bounces, otherwise it's fatal.
+            const landingStomp = e.kind !== 'spiker' && lp.vy > 0 && ly + ph - lp.vy <= e.y + e.h;
+            const smash = e.kind === 'spiker' && lp.diving;
+            if (landingStomp || smash) {
+              e.dead = true;
+              lp.score += smash ? SLAM_PTS : STOMP_PTS;
+              lp.vy = -(lp.jumpHeld ? 8.2 : 6.4);
+              lp.diving = false;
+              this.particles.burst(e.x + e.w / 2, e.y + e.h / 2, 14, [this.zone.slimeBody, this.zone.accent, '#ffffff'], 2.6, 0.16);
+              sfx.play(e.kind === 'spiker' ? 'slam' : 'stomp');
+              this.addShake(0.2);
+              break;
+            }
             this.killLocalPlayer(i, e.kind === 'spiker' ? 'spike' : 'hit');
             dead = true;
             break;
@@ -1999,13 +2013,14 @@ export class Game implements GenHost, RenderHost {
     }));
 
     const winner = leaderboard[0];
+    const localEntry = leaderboard.find((e) => e.isLocal);
 
     const result: MatchResult = {
       winnerName: winner ? winner.name : 'Nobody',
-      isWinner: true,
+      isWinner: winner ? winner.isLocal : false,
       finalMeters: winner ? winner.meters : 0,
       finalScore: winner ? winner.score : 0,
-      rank: 1,
+      rank: localEntry ? localEntry.rank : leaderboard.length,
       totalPlayers: this.localPlayers.length,
       mode: 'local',
       leaderboard,

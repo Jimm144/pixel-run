@@ -32,6 +32,12 @@ interface PublicLobbyEntry {
 const MAX_PLAYERS = 8;
 const LOBBY_TTL_MS = 120_000;
 
+// Coerce only well-formed numbers; anything else falls back so garbage from a
+// buggy or malicious client never propagates through the relay.
+function asNum(v: unknown, fallback: number | undefined): number | undefined {
+  return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+}
+
 // All rooms of one party run in the same process (both `partykit dev` and a
 // real deploy), so a module-level registry lets any room answer GET /lobby
 // with every public room on the server.
@@ -46,6 +52,7 @@ export default class PixelRunPartyServer implements Party.Server {
   hostPeerId: string | null = null;
   pendingTicks: Record<string, any> = {};
   tickInterval: ReturnType<typeof setInterval> | null = null;
+  lobbyHeartbeat: ReturnType<typeof setInterval> | null = null;
 
   constructor(readonly room: Party.Room) {}
 
@@ -103,9 +110,29 @@ export default class PixelRunPartyServer implements Party.Server {
               ? data.clientId
               : sender.id;
           const existing = this.players.get(clientId);
+
+          // Hard cap: a reconnect with a known peerId is always allowed, but
+          // new players must not overflow the advertised MAX_PLAYERS.
+          if (!existing && this.players.size >= MAX_PLAYERS) {
+            sender.send(
+              JSON.stringify({
+                type: 'error',
+                message: 'ROOM IS FULL',
+              })
+            );
+            break;
+          }
+
           const isFirst = this.players.size === 0 && !existing;
           const isHost = existing ? existing.isHost : isFirst;
           if (isHost) this.hostPeerId = clientId;
+
+          // Joining a room that is already past the lobby (countdown, match or
+          // ended) makes the player a spectator: they missed match_start so
+          // they cannot run, and an alive 0/0 player would falsely end the
+          // match (and "win" it) once the real racers die. The next rematch
+          // resets everyone back to alive.
+          const spectator = !existing && this.status !== 'lobby';
 
           const player: PlayerState = {
             peerId: clientId,
@@ -113,7 +140,7 @@ export default class PixelRunPartyServer implements Party.Server {
             skinId: data.skinId || 'bob',
             ready: existing ? existing.ready : isFirst,
             isHost,
-            isAlive: true,
+            isAlive: !spectator,
             meters: 0,
             score: 0,
             ts: Date.now(),
@@ -147,6 +174,7 @@ export default class PixelRunPartyServer implements Party.Server {
           const peerId = this.peerIdFor(sender);
           if (peerId === this.hostPeerId && this.status === 'lobby') {
             this.status = 'in_game';
+            this.pendingTicks = {};
             this.seed =
               typeof data.seed === 'number'
                 ? data.seed
@@ -181,21 +209,38 @@ export default class PixelRunPartyServer implements Party.Server {
             const peerId = this.peerIdFor(sender);
             if (!peerId) break;
             const p = this.players.get(peerId);
-            if (p && data.payload) {
-              p.meters = data.payload.meters ?? p.meters;
-              p.score = data.payload.score ?? p.score;
-              // Never resurrect from ticks: the client hardcodes alive:true in
-              // its tick payload, and death is only ever reported via 'death'.
-              p.px = data.payload.px;
-              p.py = data.payload.py;
-              p.vx = data.payload.vx;
-              p.vy = data.payload.vy;
-              p.frame = data.payload.frame;
-              p.run = data.payload.run;
-              p.diving = data.payload.diving;
+            // Dead is final: a post-death restart (R replays the seed as a
+            // practice run) keeps sending ticks, but they must never
+            // overwrite the death meters/score the leaderboard is built from.
+            if (!p || !p.isAlive) break;
+            const pay = data.payload;
+            if (p && pay && typeof pay === 'object') {
+              p.meters = asNum(pay.meters, p.meters) ?? p.meters;
+              p.score = asNum(pay.score, p.score) ?? p.score;
+              p.px = asNum(pay.px, p.px);
+              p.py = asNum(pay.py, p.py);
+              p.vx = asNum(pay.vx, p.vx);
+              p.vy = asNum(pay.vy, p.vy);
+              p.frame = asNum(pay.frame, p.frame);
+              p.run = asNum(pay.run, p.run);
+              p.diving = typeof pay.diving === 'boolean' ? pay.diving : p.diving;
               p.ts = Date.now();
 
-              this.pendingTicks[peerId] = data.payload;
+              // Relay only server-sanitized numbers. The client-controlled
+              // `alive` field is deliberately dropped: death is terminal and
+              // is reported exclusively via the 'death' message, so a tick can
+              // never resurrect anyone.
+              this.pendingTicks[peerId] = {
+                px: p.px,
+                py: p.py,
+                vx: p.vx,
+                vy: p.vy,
+                meters: p.meters,
+                score: p.score,
+                diving: p.diving,
+                frame: p.frame,
+                run: p.run,
+              };
             }
           }
           break;
@@ -207,8 +252,10 @@ export default class PixelRunPartyServer implements Party.Server {
             const p = peerId ? this.players.get(peerId) : undefined;
             if (p && p.isAlive) {
               p.isAlive = false;
-              p.meters = data.meters ?? p.meters;
-              p.score = data.score ?? p.score;
+              const meters = asNum(data.meters, undefined);
+              const score = asNum(data.score, undefined);
+              if (meters !== undefined) p.meters = meters;
+              if (score !== undefined) p.score = score;
 
               this.room.broadcast(
                 JSON.stringify({
@@ -226,7 +273,15 @@ export default class PixelRunPartyServer implements Party.Server {
         }
 
         case 'rematch': {
+          // Only the host may reset the room; a stray rematch from a joiner
+          // must not yank everyone back to the lobby mid-match.
+          if (this.peerIdFor(sender) !== this.hostPeerId) break;
           this.status = 'lobby';
+          this.pendingTicks = {};
+          if (this.tickInterval) {
+            clearInterval(this.tickInterval);
+            this.tickInterval = null;
+          }
           for (const p of this.players.values()) {
             p.ready = p.isHost;
             p.isAlive = true;
@@ -235,6 +290,20 @@ export default class PixelRunPartyServer implements Party.Server {
             p.rank = undefined;
           }
           this.broadcastRoomState();
+          break;
+        }
+
+        case 'rename': {
+          const peerId = this.peerIdFor(sender);
+          if (!peerId) break;
+          const p = this.players.get(peerId);
+          if (p && typeof data.name === 'string') {
+            const name = data.name.trim().slice(0, 16);
+            if (name) {
+              p.name = name;
+              this.broadcastRoomState();
+            }
+          }
           break;
         }
 
@@ -278,7 +347,10 @@ export default class PixelRunPartyServer implements Party.Server {
   }
 
   private syncLobby() {
-    if (this.isPublic && this.status !== 'in_game' && this.hostPeerId) {
+    // Public rooms stay discoverable even mid-match: joiners land as
+    // spectators, so hiding a room while a match is running made public
+    // lobbies "randomly disappear" for minutes at a time.
+    if (this.isPublic && this.hostPeerId) {
       const host = this.players.get(this.hostPeerId);
       globalLobbies.set(this.room.id, {
         code: this.room.id,
@@ -288,8 +360,18 @@ export default class PixelRunPartyServer implements Party.Server {
         isPublic: true,
         ts: Date.now(),
       });
+      // Idle lobbies must stay discoverable: refresh the entry even when
+      // nobody joins, so GET /lobby never silently drops an open room after
+      // LOBBY_TTL_MS of silence.
+      if (!this.lobbyHeartbeat) {
+        this.lobbyHeartbeat = setInterval(() => this.syncLobby(), 30_000);
+      }
     } else {
       globalLobbies.delete(this.room.id);
+      if (this.lobbyHeartbeat) {
+        clearInterval(this.lobbyHeartbeat);
+        this.lobbyHeartbeat = null;
+      }
     }
   }
 
@@ -301,6 +383,15 @@ export default class PixelRunPartyServer implements Party.Server {
 
     if (aliveCount === 0 || (aliveCount === 1 && players.length > 1)) {
       this.status = 'ended';
+
+      // Stop the tick relay: no new ticks will arrive while ended, and the
+      // stale ones must not keep being rebroadcast (or leak into the next
+      // match after a rematch).
+      this.pendingTicks = {};
+      if (this.tickInterval) {
+        clearInterval(this.tickInterval);
+        this.tickInterval = null;
+      }
 
       const sorted = [...players].sort((a, b) => {
         if (b.score !== a.score) return b.score - a.score;

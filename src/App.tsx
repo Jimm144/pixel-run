@@ -671,6 +671,16 @@ export function App() {
     setUi('playing');
   }, [commitQuestRun, musicOn, sfxOn, questAnnouncement, volumes.music, volumes.sfx]);
 
+  const startOnlineBattle = useCallback((seed: number) => {
+    const g = gameRef.current;
+    if (!g) return;
+    setBattleModalOpen(false);
+    setMatchResult(null);
+    g.best = bestScore();
+    g.startRun(seed);
+    setUi('playing');
+  }, []);
+
   const startLocalBattle = useCallback((skins: SkinId[], names?: string[], controls?: string[]) => {
     const g = gameRef.current;
     if (!g) return;
@@ -985,7 +995,9 @@ export function App() {
               // restarts the attract demo (engine is in phase 'over').
               if (ui === 'results') toMenu();
             }}
+            onStartOnlineBattle={startOnlineBattle}
             onStartLocalBattle={startLocalBattle}
+            localName="Runner"
             localSkin={equippedSkin}
             unlockedSkins={unlockedSkins}
             matchResult={matchResult}

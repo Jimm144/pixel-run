@@ -58,16 +58,25 @@ export class PartyManager {
   serverOnline = true;
 
   // Local tab party tracking for zero-latency multi-tab testing
-  private localTabPlayers = new Map<string, { peerId: string; name: string; skinId: SkinId; isHost: boolean; meters: number; score: number; isAlive: boolean }>();
+  private localTabPlayers = new Map<string, { peerId: string; name: string; skinId: SkinId; isHost: boolean; meters: number; score: number; isAlive: boolean; ready: boolean }>();
   // WebRTC conn.peer -> joiner's self-generated peerId (host side), so a
   // dropped DataConnection can remove the right localTabPlayers entry.
   private peerConnToSelfId = new Map<string, string>();
   // Mirror of the local player's live state for the BC-only match-end path.
   private localTick: PlayerTickPayload | null = null;
   private localAlive = true;
+  /** Local player's ready flag, mirrored over BC so same-browser tabs see it
+   *  even when the WebSocket is down (the server remains authoritative). */
+  private localReady = false;
   private syncTimer: number | null = null;
   private lobbyTimer: number | null = null;
   private storageListener: ((e: StorageEvent) => void) | null = null;
+  private lobbyVisibilityListener: (() => void) | null = null;
+  private reconnectTimer: number | null = null;
+  private reconnectAttempts = 0;
+  // Storage-fallback tick coalescing (bc_tick is ~30x/s; cap storage writes).
+  private lastTickStorageWrite = 0;
+  private pendingTickStorage: Record<string, unknown> | null = null;
   /** True until the first room_state after join() — used to detect a dead
    *  room (host gone) so the joiner can bail out gracefully. */
   private awaitingFirstRoomState = false;
@@ -98,6 +107,7 @@ export class PartyManager {
 
     const code = generateRoomCode();
     this.roomId = code;
+    this.localReady = true;
 
     // Register local host
     this.localTabPlayers.clear();
@@ -109,6 +119,7 @@ export class PartyManager {
       meters: 0,
       score: 0,
       isAlive: true,
+      ready: true,
     });
     this.localAlive = true;
     this.localTick = null;
@@ -140,6 +151,7 @@ export class PartyManager {
     this.roomId = cleanCode;
     this.peerId = `p_join_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     this.localAlive = true;
+    this.localReady = false;
     this.localTick = null;
     this.awaitingFirstRoomState = true;
 
@@ -287,18 +299,23 @@ export class PartyManager {
   private publishLobbyHeartbeat() {
     if (this.lobbyTimer) clearInterval(this.lobbyTimer);
     const update = () => {
-      if (this.role === 'host' && this.state === 'in_room' && this.roomId) {
+      if (this.role === 'host' && (this.state === 'in_room' || this.state === 'in_game') && this.roomId) {
         try {
           const raw = localStorage.getItem('pixelrun_active_lobbies_v2');
           const map = raw ? JSON.parse(raw) : {};
-          map[this.roomId] = {
-            code: this.roomId,
-            hostName: this.localName,
-            playerCount: this.opponents.size + 1,
-            maxPlayers: MAX_PLAYERS,
-            isPublic: this.isPublic,
-            ts: Date.now(),
-          };
+          if (!this.isPublic) {
+            // A room flipped to private must not linger in the local lobby.
+            delete map[this.roomId];
+          } else {
+            map[this.roomId] = {
+              code: this.roomId,
+              hostName: this.localName,
+              playerCount: this.opponents.size + 1,
+              maxPlayers: MAX_PLAYERS,
+              isPublic: this.isPublic,
+              ts: Date.now(),
+            };
+          }
           localStorage.setItem('pixelrun_active_lobbies_v2', JSON.stringify(map));
           this.globalLobbiesBc?.postMessage({ type: 'lobbies_update' });
         } catch {
@@ -310,7 +327,13 @@ export class PartyManager {
     this.lobbyTimer = window.setInterval(update, 500);
 
     if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', update);
+      // Replace, never stack: publishLobbyHeartbeat runs again on every
+      // visibility toggle and would otherwise leak one listener per call.
+      if (this.lobbyVisibilityListener) {
+        document.removeEventListener('visibilitychange', this.lobbyVisibilityListener);
+      }
+      this.lobbyVisibilityListener = () => update();
+      document.addEventListener('visibilitychange', this.lobbyVisibilityListener);
     }
   }
 
@@ -425,6 +448,7 @@ export class PartyManager {
               peerId: this.peerId,
               name: this.localName,
               skinId: this.localSkin,
+              ready: this.localReady,
             });
           });
 
@@ -455,18 +479,30 @@ export class PartyManager {
     // 2. Storage Event fallback (only needed when BroadcastChannel is
     // unavailable — sendTick broadcasts ~30x/s, so skip the writes otherwise)
     if (!this.bc && typeof window !== 'undefined' && this.roomId) {
+      let out = data;
+      if (data.type === 'bc_tick') {
+        // Coalesce the tick stream to at most ~10 writes/s (latest wins).
+        // Ticks self-supersede, so dropping intermediate ones is safe, and
+        // the next non-tick message (bc_death etc.) always writes fresh.
+        this.pendingTickStorage = data;
+        const now = Date.now();
+        if (now - this.lastTickStorageWrite < 100) return;
+        out = this.pendingTickStorage;
+        this.pendingTickStorage = null;
+        this.lastTickStorageWrite = now;
+      }
+      const key = `pixelrun_sync_${this.roomId.toLowerCase()}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       try {
-        const key = `pixelrun_sync_${this.roomId.toLowerCase()}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-        const payload = JSON.stringify({ ...data, _ts: Date.now(), _nonce: Math.random() });
+        const payload = JSON.stringify({ ...out, _ts: Date.now(), _nonce: Math.random() });
         localStorage.setItem(key, payload);
-        setTimeout(() => {
-          try {
-            localStorage.removeItem(key);
-          } catch {}
-        }, 1500);
       } catch {
         // Ignore
       }
+      setTimeout(() => {
+        try {
+          localStorage.removeItem(key);
+        } catch {}
+      }, 1500);
     }
 
     // 3. WebRTC DataConnections
@@ -505,6 +541,7 @@ export class PartyManager {
           peerId: this.peerId,
           name: this.localName,
           skinId: this.localSkin,
+          ready: this.localReady,
         });
       }
     };
@@ -520,17 +557,28 @@ export class PartyManager {
       const joinerId = data.peerId as string;
       const joinerName = (data.name as string) || 'Runner';
       const joinerSkin = (data.skinId as SkinId) || 'bob';
+      const joinerReady = data.ready === true;
 
       if (joinerId && joinerId !== this.peerId) {
-        this.localTabPlayers.set(joinerId, {
-          peerId: joinerId,
-          name: joinerName,
-          skinId: joinerSkin,
-          isHost: false,
-          meters: 0,
-          score: 0,
-          isAlive: true,
-        });
+        const existing = this.localTabPlayers.get(joinerId);
+        if (existing) {
+          // Re-ping of an already-known tab: refresh identity only, keep
+          // live meters/score/alive state (pings repeat every 300ms).
+          existing.name = joinerName;
+          existing.skinId = joinerSkin;
+          existing.ready = joinerReady;
+        } else {
+          this.localTabPlayers.set(joinerId, {
+            peerId: joinerId,
+            name: joinerName,
+            skinId: joinerSkin,
+            isHost: false,
+            meters: 0,
+            score: 0,
+            isAlive: true,
+            ready: joinerReady,
+          });
+        }
 
         // Broadcast updated room state immediately
         const playersList = Array.from(this.localTabPlayers.values());
@@ -544,20 +592,38 @@ export class PartyManager {
     } else if (type === 'bc_leave') {
       const leaverId = data.peerId as string;
       if (leaverId && leaverId !== this.peerId) {
-        if (this.role === 'host' && this.localTabPlayers.has(leaverId)) {
-          this.localTabPlayers.delete(leaverId);
-          const playersList = Array.from(this.localTabPlayers.values());
-          this.broadcast({ type: 'bc_room_state', players: playersList });
-          this.updateOpponentsFromList(playersList);
-        } else {
-          this.opponents.delete(leaverId);
+        if (this.role === 'host') {
+          if (this.localTabPlayers.delete(leaverId)) {
+            const playersList = Array.from(this.localTabPlayers.values());
+            this.broadcast({ type: 'bc_room_state', players: playersList });
+            this.updateOpponentsFromList(playersList);
+          }
+        } else if (this.opponents.delete(leaverId)) {
           this.onRoomStateChange?.(Array.from(this.opponents.values()));
         }
       }
     } else if (type === 'bc_room_state') {
-      const players = data.players as Array<{ peerId: string; name: string; skinId: SkinId; isHost: boolean }>;
+      const players = data.players as Array<{ peerId: string; name: string; skinId: SkinId; isHost: boolean; ready?: boolean }>;
       if (Array.isArray(players)) {
         this.updateOpponentsFromList(players);
+      }
+    } else if (type === 'bc_ready') {
+      const senderId = data.peerId as string;
+      const ready = Boolean(data.ready);
+      if (senderId && senderId !== this.peerId) {
+        if (this.role === 'host') {
+          const entry = this.localTabPlayers.get(senderId);
+          if (entry) entry.ready = ready;
+          const playersList = Array.from(this.localTabPlayers.values());
+          this.broadcast({ type: 'bc_room_state', players: playersList });
+          this.updateOpponentsFromList(playersList);
+        } else {
+          const opp = this.opponents.get(senderId);
+          if (opp && opp.ready !== ready) {
+            opp.ready = ready;
+            this.onRoomStateChange?.(Array.from(this.opponents.values()));
+          }
+        }
       }
     } else if (type === 'bc_start') {
       const seed = (data.seed as number) || Math.floor(Math.random() * 1000000);
@@ -567,6 +633,7 @@ export class PartyManager {
         this.matchResult = null;
         this.localAlive = true;
         this.localTick = null;
+        this.localReady = false;
         this.onMatchStart?.(seed, startAt);
       }
     } else if (type === 'bc_tick' && this.state === 'in_game') {
@@ -600,24 +667,33 @@ export class PartyManager {
           opp.meters = meters;
           opp.score = score;
         }
+      }
 
-        // Check if all players dead in host tab (host's own death included)
-        if (this.role === 'host') {
-          const allOpponents = Array.from(this.opponents.values());
-          const allDead = allOpponents.every((o) => !o.isAlive) && !this.localAlive;
-          if (allDead) {
-            this.finishBcMatch();
-          }
+      // The host owns BC-only match ending, and must run the check for EVERY
+      // death — including its own (senderId === this.peerId is skipped
+      // above), or a match where the host dies last would never finish.
+      // Mirrors the server rule: the match ends once all opponents are dead
+      // (host alive or not).
+      if (this.role === 'host' && this.state === 'in_game') {
+        const allOpponents = Array.from(this.opponents.values());
+        if (allOpponents.length > 0 && allOpponents.every((o) => !o.isAlive)) {
+          this.finishBcMatch();
         }
       }
     } else if (type === 'bc_match_end') {
       const result = data.result as MatchResult;
-      // Guard against double end (BC and WebSocket both deliver match_end).
-      if (result && !this.matchResult) {
+      // Guard against double end (BC and WebSocket both deliver match_end),
+      // and against results that arrive after we left the room (handleExit
+      // during the countdown) — the results modal must not pop over the menu.
+      if (result && this.state === 'in_game' && !this.matchResult) {
         this.state = 'ended';
         const localEntry = result.leaderboard.find((e) => e.peerId === this.peerId);
         result.isWinner = localEntry ? localEntry.rank === 1 : false;
         result.rank = localEntry ? localEntry.rank : result.totalPlayers;
+        // Mirror the WS handler: the leaderboard was built by the HOST with
+        // its own peerId, so joiner entries are never flagged — without this
+        // the "(YOU)" highlight is missing for BC-only joiners.
+        if (localEntry) localEntry.isLocal = true;
         this.matchResult = result;
         this.onMatchEnd?.(result);
       }
@@ -635,28 +711,70 @@ export class PartyManager {
         this.matchResult = null;
         this.localAlive = true;
         this.localTick = null;
+        this.localReady = false;
       }
     }
   }
 
-  private updateOpponentsFromList(players: Array<{ peerId: string; name: string; skinId: SkinId; isHost: boolean }>) {
-    this.opponents.clear();
+  private updateOpponentsFromList(players: Array<{ peerId: string; name: string; skinId: SkinId; isHost: boolean; ready?: boolean }>) {
+    const next = new Map<string, OpponentInfo>();
     for (const p of players) {
-      if (p.peerId !== this.peerId) {
-        this.opponents.set(p.peerId, {
-          peerId: p.peerId,
-          name: p.name,
-          skinId: p.skinId,
-          isHost: p.isHost,
-          ready: false,
-          meters: 0,
-          score: 0,
-          isAlive: true,
-          ts: Date.now(),
-        });
+      if (p.peerId === this.peerId) continue;
+      const existing = this.opponents.get(p.peerId);
+      next.set(
+        p.peerId,
+        existing
+          ? { ...existing, name: p.name, skinId: p.skinId, isHost: p.isHost, ready: p.ready ?? existing.ready }
+          : {
+              peerId: p.peerId,
+              name: p.name,
+              skinId: p.skinId,
+              isHost: p.isHost,
+              ready: p.ready ?? false,
+              meters: 0,
+              score: 0,
+              isAlive: true,
+              ts: Date.now(),
+            }
+      );
+    }
+
+    // Only notify when the roster actually changed (player joined/left, name,
+    // skin, host flag or ready). The host rebroadcasts bc_room_state every
+    // 300ms (and on every bc_join ping), so without this check the modal
+    // would re-fire its join sound/status message ~3x/s. Keeping known
+    // entries intact also stops the rebuild from wiping live meters/score/
+    // alive/ready state mid-match (dead players would resurrect, ready
+    // indicators would reset to NOT READY on every broadcast).
+    let changed = next.size !== this.opponents.size;
+    if (!changed) {
+      for (const [id, opp] of next) {
+        const cur = this.opponents.get(id);
+        if (!cur || cur.name !== opp.name || cur.skinId !== opp.skinId || cur.isHost !== opp.isHost || cur.ready !== opp.ready) {
+          changed = true;
+          break;
+        }
       }
     }
+    if (!changed) return;
+
+    this.opponents.clear();
+    for (const [id, opp] of next) this.opponents.set(id, opp);
     this.onRoomStateChange?.(Array.from(this.opponents.values()));
+  }
+
+  /**
+   * BC-only match end: fire when every player on the board is dead. Runs on
+   * the host tab for foreign bc_death messages AND for the host's own death —
+   * the host's own bc_death never comes back (self messages are skipped), so
+   * without this a host who dies last would leave every tab hanging in
+   * 'in_game' with no results modal.
+   */
+  private checkBcMatchEnd() {
+    if (this.role !== 'host' || this.state !== 'in_game') return;
+    const allOpponents = Array.from(this.opponents.values());
+    const allDead = allOpponents.every((o) => !o.isAlive) && !this.localAlive;
+    if (allDead) this.finishBcMatch();
   }
 
   private finishBcMatch() {
@@ -724,10 +842,12 @@ export class PartyManager {
   private connectWebSocket(roomId: string) {
     try {
       const wsUrl = getPartyWebSocketUrl(roomId);
-      this.socket = new WebSocket(wsUrl);
+      const socket = new WebSocket(wsUrl);
+      this.socket = socket;
 
-      this.socket.onopen = () => {
+      socket.onopen = () => {
         this.serverOnline = true;
+        this.reconnectAttempts = 0;
         this.send({
           type: 'join',
           clientId: this.peerId ?? '',
@@ -740,20 +860,42 @@ export class PartyManager {
         }
       };
 
-      this.socket.onmessage = (event) => {
+      socket.onmessage = (event) => {
         this.handleServerMessage(event.data);
       };
 
-      this.socket.onerror = () => {
+      socket.onerror = () => {
         this.serverOnline = false;
       };
 
-      this.socket.onclose = () => {
-        // Handled gracefully by BroadcastChannel fallback
+      socket.onclose = () => {
+        this.serverOnline = false;
+        // Survive a dev-server restart / network blip: reconnect with
+        // backoff as long as we are still in this room. leave() nulls the
+        // socket and sets state 'idle', so a deliberate exit never
+        // reconnects (guarded by socket identity + roomId below).
+        if (this.socket === socket && this.roomId === roomId && this.state !== 'idle') {
+          this.scheduleReconnect(roomId, socket);
+        }
       };
     } catch {
       this.serverOnline = false;
     }
+  }
+
+  private scheduleReconnect(roomId: string, socket: WebSocket) {
+    if (this.reconnectTimer !== null) return;
+    const delay = Math.min(1000 * 2 ** this.reconnectAttempts, 15000);
+    this.reconnectAttempts++;
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectTimer = null;
+      // Still in the same room with the same (dead) socket? A leave() or a
+      // re-host creates a new socket and/or roomId — a stale reconnect must
+      // never spawn a second socket.
+      if (this.socket === socket && this.roomId === roomId && this.state !== 'idle') {
+        this.connectWebSocket(roomId);
+      }
+    }, delay);
   }
 
   private handleServerMessage(raw: string) {
@@ -784,6 +926,40 @@ export class PartyManager {
           // The server echoes back OUR identity per connection (selfId);
           // everything else in the list is an opponent.
           const selfId = msg.selfId ?? this.peerId ?? '';
+
+          // The server is the source of truth for room membership. The host
+          // reconciles its BC/WebRTC player list against it so a joiner whose
+          // tab died without a bc_leave (or whose WS dropped) stops haunting
+          // the lobby — otherwise the ghost keeps being rebroadcast forever.
+          if (this.role === 'host') {
+            const serverIds = new Set<string>();
+            for (const p of msg.players) {
+              if (p.peerId === this.peerId) continue;
+              serverIds.add(p.peerId);
+              const existing = this.localTabPlayers.get(p.peerId);
+              this.localTabPlayers.set(
+                p.peerId,
+                existing
+                  ? { ...existing, name: p.name, skinId: p.skinId, isHost: p.isHost, meters: p.meters, score: p.score, isAlive: p.isAlive }
+                  : {
+                      peerId: p.peerId,
+                      name: p.name,
+                      skinId: p.skinId,
+                      isHost: p.isHost,
+                      meters: p.meters,
+                      score: p.score,
+                      isAlive: p.isAlive,
+                      ready: false,
+                    }
+              );
+            }
+            for (const id of Array.from(this.localTabPlayers.keys())) {
+              if (id !== this.peerId && !serverIds.has(id)) {
+                this.localTabPlayers.delete(id);
+              }
+            }
+          }
+
           for (const p of msg.players) {
             if (p.peerId !== selfId) {
               this.opponents.set(p.peerId, p);
@@ -802,6 +978,7 @@ export class PartyManager {
             this.matchResult = null;
             this.localAlive = true;
             this.localTick = null;
+            this.localReady = false;
             this.onMatchStart?.(msg.seed, msg.startAt);
           }
           break;
@@ -843,7 +1020,9 @@ export class PartyManager {
 
         case 'match_end': {
           // Guard against double end (BC and WebSocket both deliver match_end).
-          if (this.matchResult) break;
+          // Also ignore results that arrive after we left the room (handleExit
+          // during the countdown) — the results modal must not pop over the menu.
+          if (this.state !== 'in_game' || this.matchResult) break;
           this.state = 'ended';
           const result = msg.result;
           result.mode = 'online';
@@ -859,6 +1038,14 @@ export class PartyManager {
           this.onMatchEnd?.(result);
           break;
         }
+
+        case 'error': {
+          // Server rejected us (e.g. ROOM IS FULL): back out cleanly instead
+          // of waiting forever for a room_state that will never arrive.
+          this.leave();
+          this.onStatusMsg?.(msg.message || 'SERVER ERROR');
+          break;
+        }
       }
     } catch {
       // Ignore
@@ -866,6 +1053,10 @@ export class PartyManager {
   }
 
   setReady(ready: boolean) {
+    this.localReady = ready;
+    // BC mirror so same-browser tabs see the ready flip even if the
+    // WebSocket is down (the server room_state stays authoritative).
+    this.broadcast({ type: 'bc_ready', peerId: this.peerId, ready });
     this.send({ type: 'ready', ready });
   }
 
@@ -906,7 +1097,11 @@ export class PartyManager {
 
   sendTick(payload: PlayerTickPayload) {
     if (this.state === 'in_game') {
-      this.localTick = payload;
+      // Freeze the local board entry at the death values: a post-death
+      // restart (R replays the seed as a practice run) sends fresh ticks,
+      // but they must never overwrite the death meters/score used by
+      // finishBcMatch to build the leaderboard.
+      if (this.localAlive) this.localTick = payload;
       this.broadcast({
         type: 'bc_tick',
         peerId: this.peerId,
@@ -919,6 +1114,23 @@ export class PartyManager {
   sendDeath(meters: number, score: number) {
     if (this.state === 'in_game') {
       this.localAlive = false;
+      const tick = this.localTick ?? {
+        px: 0,
+        py: 0,
+        vx: 0,
+        vy: 0,
+        diving: false,
+        frame: 0,
+        run: -1,
+        skinId: this.localSkin,
+        alive: false,
+        meters: 0,
+        score: 0,
+      };
+      tick.meters = meters;
+      tick.score = score;
+      tick.alive = false;
+      this.localTick = tick;
       this.broadcast({
         type: 'bc_death',
         peerId: this.peerId,
@@ -926,6 +1138,8 @@ export class PartyManager {
         score,
       });
       this.send({ type: 'death', meters, score });
+      // Host dies last: no foreign bc_death will arrive to end the match.
+      this.checkBcMatchEnd();
     }
   }
 
@@ -945,6 +1159,14 @@ export class PartyManager {
     if (this.lobbyTimer) {
       clearInterval(this.lobbyTimer);
       this.lobbyTimer = null;
+    }
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.lobbyVisibilityListener && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.lobbyVisibilityListener);
+      this.lobbyVisibilityListener = null;
     }
     if (this.storageListener && typeof window !== 'undefined') {
       window.removeEventListener('storage', this.storageListener);
@@ -1003,10 +1225,22 @@ export class PartyManager {
     this.role = null;
     this.state = 'idle';
     this.awaitingFirstRoomState = false;
+    this.localReady = false;
     this.opponents.clear();
     this.localTabPlayers.clear();
     this.matchResult = null;
     this.onRoomStateChange?.([]);
+  }
+
+  rename(name: string) {
+    const trimmed = name.trim().slice(0, 16);
+    if (!trimmed) return;
+    if (trimmed === this.localName) return;
+    this.localName = trimmed;
+    if (this.role) {
+      this.send({ type: 'rename', name: trimmed });
+      if (this.role === 'host') this.publishLobbyHeartbeat();
+    }
   }
 
   private send(msg: PartyClientMessage) {

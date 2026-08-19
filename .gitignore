@@ -3,4 +3,5 @@ dist/
 vite.log
 vite.dev.log
 
-# PartyKit local dev state.partykit/
+# PartyKit local dev state
+.partykit/
