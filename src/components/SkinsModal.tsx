@@ -462,7 +462,7 @@ export function SkinsModal({
     }
     if (skin.unlock.type === 'moon') {
       return (
-        <div className="flex h-[20px] sm:h-[22px] w-full items-center justify-center border border-[#ff4d6d]/40 bg-[#25050f] px-1 text-center font-pixel text-[8px] text-[#ff4d6d]">
+        <div className="flex min-h-[20px] sm:min-h-[24px] w-full items-center justify-center border border-[#ff4d6d]/40 bg-[#25050f] px-1 py-1 text-center font-pixel text-[8px] leading-tight text-[#ff4d6d]">
           {skin.unlock.desc}
         </div>
       );
@@ -522,7 +522,7 @@ export function SkinsModal({
         className={
           touch
             ? 'flex h-full min-h-0 w-full flex-col bg-[#0e071e] p-0 text-white tablet:h-auto tablet:max-h-[92vh] tablet:max-w-[780px] tablet:border-2 tablet:border-[#3ef2c8] tablet:p-4 tablet:shadow-[4px_4px_0_#06020c]'
-            : 'flex max-h-[94vh] w-full max-w-[840px] flex-col border-2 border-[#3ef2c8] bg-[#0e071e] p-4 text-white shadow-[4px_4px_0_#06020c] tablet:max-w-[min(840px,calc(100vw-32px))]'
+            : 'flex max-h-[94vh] w-full max-w-[980px] flex-col border-2 border-[#3ef2c8] bg-[#0e071e] p-4 text-white shadow-[4px_4px_0_#06020c] tablet:max-w-[min(980px,calc(100vw-32px))]'
         }
       >
         {/* Header */}
@@ -593,7 +593,7 @@ export function SkinsModal({
           className={
             touch
               ? 'mt-3 flex min-h-0 flex-1 flex-col gap-2.5 overflow-hidden tablet:grid tablet:grid-cols-[220px_1fr] tablet:gap-4'
-              : 'mt-3 flex flex-col md:grid md:grid-cols-[230px_1fr] md:items-start gap-3 md:gap-4 overflow-hidden'
+              : 'mt-3 flex flex-col md:grid md:grid-cols-[260px_1fr] md:items-start gap-3 md:gap-4 overflow-hidden'
           }
         >
           {/* Left / Top: Stage Preview (h-fit, does not stretch to bottom) */}
@@ -715,7 +715,7 @@ export function SkinsModal({
                   } ${isCardFocused ? 'nav-focus' : ''}`}
                 >
                   <div className="w-full">
-                    <div className="flex w-full items-center justify-between leading-none">
+                    <div className="flex w-full items-center justify-between gap-1 leading-none sm:gap-2">
                       <span className="truncate font-pixel text-[8px] text-white sm:text-[10px]">{skin.name}</span>
                       <span
                         className="inline-flex min-h-[14px] items-center justify-center border px-1 font-pixel text-[8px] leading-none uppercase whitespace-nowrap sm:min-h-[16px]"
@@ -730,7 +730,7 @@ export function SkinsModal({
                     </div>
 
                     {/* Swatch preview */}
-                    <div className="mt-1.5 flex items-center gap-1.5">
+                    <div className="mt-1.5 flex items-center gap-1">
                       <span className="h-2.5 w-2.5 border border-[#08040f] sm:h-3 sm:w-3" style={{ backgroundColor: skin.suit }} />
                       <span className="h-2.5 w-2.5 border border-[#08040f] sm:h-3 sm:w-3" style={{ backgroundColor: skin.scarf }} />
                       <span className="h-2.5 w-2.5 border border-[#08040f] sm:h-3 sm:w-3" style={{ backgroundColor: skin.boot }} />

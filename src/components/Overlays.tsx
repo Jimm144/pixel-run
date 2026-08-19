@@ -14,13 +14,67 @@ function ControlIcon({ kind }: { kind: ControlIconKind }) {
   return (
     <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center border border-current/35 bg-[#0d0619]">
       <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor" shapeRendering="crispEdges">
-        {kind === 'jump' && <path d="M2 7 8 1l6 6h-4v8H6V7H2z" />}
-        {kind === 'dive' && <path d="M2 9h4V1h4v8h4l-6 6-6-6z" />}
-        {kind === 'boost' && <path d="m15 8-6-6v4H1v4h8v4l6-6z" />}
+        {kind === 'jump' && (
+          <>
+            <rect x="6" y="1" width="4" height="1" />
+            <rect x="5" y="2" width="6" height="1" />
+            <rect x="4" y="3" width="8" height="1" />
+            <rect x="3" y="4" width="10" height="1" />
+            <rect x="6" y="5" width="4" height="9" />
+          </>
+        )}
+        {kind === 'dive' && (
+          <>
+            <rect x="6" y="2" width="4" height="9" />
+            <rect x="3" y="11" width="10" height="1" />
+            <rect x="4" y="12" width="8" height="1" />
+            <rect x="5" y="13" width="6" height="1" />
+            <rect x="6" y="14" width="4" height="1" />
+          </>
+        )}
+        {kind === 'boost' && (
+          <>
+            <rect x="1" y="6" width="8" height="4" />
+            <rect x="9" y="5" width="4" height="6" />
+            <rect x="13" y="6" width="3" height="4" />
+          </>
+        )}
         {kind === 'pause' && <PauseIcon className="h-3.5 w-3.5" />}
-        {kind === 'hold' && <><path d="M2 8l6-5 6 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" /><path d="M2 14l6-5 6 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" /></>}
-        {kind === 'double' && <><path d="M1 6 4 3l3 3H5v6H3V6H1z" /><path d="M9 6l3-3 3 3h-2v6h-2V6H9z" /></>}
-        {kind === 'tap' && <><rect x="7" y="2" width="3" height="7" /><rect x="4" y="7" width="3" height="3" /><rect x="3" y="10" width="10" height="3" /></>}
+        {kind === 'hold' && (
+          <>
+            <rect x="7" y="3" width="2" height="1" />
+            <rect x="6" y="4" width="4" height="1" />
+            <rect x="5" y="5" width="6" height="1" />
+            <rect x="4" y="6" width="8" height="1" />
+            <rect x="3" y="7" width="10" height="1" />
+            <rect x="2" y="8" width="12" height="1" />
+            <rect x="7" y="9" width="2" height="1" />
+            <rect x="6" y="10" width="4" height="1" />
+            <rect x="5" y="11" width="6" height="1" />
+            <rect x="4" y="12" width="8" height="1" />
+            <rect x="3" y="13" width="10" height="1" />
+            <rect x="2" y="14" width="12" height="1" />
+          </>
+        )}
+        {kind === 'double' && (
+          <>
+            <rect x="3" y="3" width="2" height="1" />
+            <rect x="2" y="4" width="4" height="1" />
+            <rect x="1" y="5" width="6" height="1" />
+            <rect x="3" y="6" width="2" height="6" />
+            <rect x="11" y="3" width="2" height="1" />
+            <rect x="10" y="4" width="4" height="1" />
+            <rect x="9" y="5" width="6" height="1" />
+            <rect x="11" y="6" width="2" height="6" />
+          </>
+        )}
+        {kind === 'tap' && (
+          <>
+            <rect x="7" y="2" width="3" height="7" />
+            <rect x="4" y="7" width="3" height="3" />
+            <rect x="3" y="10" width="10" height="3" />
+          </>
+        )}
       </svg>
     </span>
   );

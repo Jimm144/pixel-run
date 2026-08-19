@@ -22,7 +22,16 @@ export default defineConfig({
   },
   build: {
     target: 'es2022',
-    minify: 'esbuild',
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        passes: 2,
+        drop_console: true,
+      },
+      format: {
+        comments: false,
+      },
+    },
     cssMinify: true,
     modulePreload: false,
     rollupOptions: {

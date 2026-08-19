@@ -1,0 +1,196 @@
+import type MqttApi from 'mqtt';
+import type { MqttClient } from 'mqtt';
+
+// Public MQTT brokers with WebSocket+TLS, free and open: no account, no
+// server, no money. The relay simply mirrors BroadcastChannel semantics —
+// every client publishes to the room topic and receives everyone else's
+// messages (self-messages never echo back, which the message handlers
+// already guard against with peerId checks).
+const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
+
+// mqtt.js is a ~120 kB UMD build. Loading it from a CDN only when a room is
+// actually used keeps the single-file bundle small and the page load fast —
+// multiplayer needs a network connection anyway, so the CDN dependency is
+// not a new constraint. The type-only import above is erased at build time.
+const MQTT_CDN_URLS = [
+  'https://unpkg.com/mqtt@5.15.2/dist/mqtt.min.js',
+  'https://cdn.jsdelivr.net/npm/mqtt@5.15.2/dist/mqtt.min.js',
+];
+
+function loadScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error(`failed to load ${src}`));
+    document.head.appendChild(s);
+  });
+}
+
+let mqttLib: typeof MqttApi | null = null;
+let mqttLoading: Promise<typeof MqttApi> | null = null;
+
+async function loadMqtt(): Promise<typeof MqttApi> {
+  if (mqttLib) return mqttLib;
+  if (!mqttLoading) {
+    mqttLoading = (async () => {
+      for (const url of MQTT_CDN_URLS) {
+        try {
+          await loadScript(url);
+          const g = (window as unknown as { mqtt?: typeof MqttApi }).mqtt;
+          if (g) {
+            mqttLib = g;
+            return g;
+          }
+        } catch {
+          // Try the next CDN.
+        }
+      }
+      throw new Error('mqtt failed to load from CDN');
+    })();
+  }
+  return mqttLoading;
+}
+
+export const ROOM_TOPIC_PREFIX = 'pixelrun/room/';
+// One retained message per room: clearing our own entry must never wipe
+// other rooms' announcements off the shared lobby.
+export const LOBBY_TOPIC_PREFIX = 'pixelrun/lobby/';
+export const LOBBY_TOPIC_WILDCARD = 'pixelrun/lobby/+';
+export const lobbyTopic = (code: string) => `${LOBBY_TOPIC_PREFIX}${code.toLowerCase()}`;
+
+// One relay per page load, reused across rooms: browsers (and mqtt.js'
+// browser build) handle a single persistent connection far more reliably
+// than churn of connect/close cycles. Rooms are switched by re-targeting
+// the topic subscriptions.
+export class MqttRelay {
+  private client: MqttClient | null = null;
+  private brokerIndex = 0;
+  private topics: string[] = [];
+  private connectedOnce = false;
+  private failoverTimer: number | null = null;
+  private closed = false;
+
+  connected = false;
+
+  onConnect?: () => void;
+  onDisconnect?: () => void;
+  onMessage?: (topic: string, payload: string) => void;
+
+  ensureStarted() {
+    if (this.closed) this.closed = false;
+    if (!this.client) void this.openClient();
+  }
+
+  setTopics(topics: string[]) {
+    const oldTopics = this.topics.filter((t) => !topics.includes(t));
+    this.topics = topics;
+    if (!this.client || !this.client.connected) return;
+    try {
+      if (oldTopics.length > 0) {
+        this.client.unsubscribe(oldTopics);
+      }
+      this.client.subscribe(topics, { qos: 1 });
+    } catch {
+      // Ignore
+    }
+  }
+
+  publish(topic: string, payload: unknown, qos: 0 | 1 = 1, retain = false) {
+    if (!this.client || !this.client.connected) return;
+    try {
+      this.client.publish(topic, typeof payload === 'string' ? payload : JSON.stringify(payload), { qos, retain });
+    } catch {
+      // Ignore
+    }
+  }
+
+  close() {
+    this.closed = true;
+    if (this.failoverTimer !== null) {
+      window.clearTimeout(this.failoverTimer);
+      this.failoverTimer = null;
+    }
+    this.topics = [];
+    if (this.client) {
+      try {
+        this.client.end(true);
+      } catch {
+        // Ignore
+      }
+      this.client = null;
+    }
+    this.connected = false;
+  }
+
+  private async openClient() {
+    if (this.closed) return;
+    const url = BROKERS[this.brokerIndex % BROKERS.length];
+    this.connectedOnce = false;
+
+    let lib: typeof MqttApi;
+    try {
+      lib = await loadMqtt();
+    } catch {
+      this.connected = false;
+      this.onDisconnect?.();
+      return;
+    }
+    if (this.closed) return;
+
+    const client = lib.connect(url, {
+      clientId: `pxrun_${Math.random().toString(36).substring(2, 10)}`,
+      keepalive: 30,
+      connectTimeout: 8000,
+      reconnectPeriod: 3000,
+      clean: true,
+    });
+    this.client = client;
+
+    client.on('connect', () => {
+      if (this.client !== client) return;
+      this.connected = true;
+      this.connectedOnce = true;
+      this.onConnect?.();
+      if (this.topics.length > 0) {
+        try {
+          client.subscribe(this.topics, { qos: 1 });
+        } catch {
+          // Ignore
+        }
+      }
+    });
+
+    client.on('message', (topic, message) => {
+      if (this.client !== client) return;
+      this.onMessage?.(topic, message.toString());
+    });
+
+    client.on('close', () => {
+      if (this.client !== client) return;
+      this.connected = false;
+      this.onDisconnect?.();
+      // Never connected to this broker: give mqtt.js one reconnect attempt,
+      // then fail over to the next broker. Connected sessions are left to
+      // mqtt.js' own reconnect loop.
+      if (!this.connectedOnce && this.failoverTimer === null) {
+        this.failoverTimer = window.setTimeout(() => {
+          this.failoverTimer = null;
+          if (this.client !== client || this.closed) return;
+          try {
+            client.end(true);
+          } catch {
+            // Ignore
+          }
+          this.brokerIndex++;
+          this.openClient();
+        }, 6000);
+      }
+    });
+
+    client.on('error', () => {
+      // Errors precede close; failover is handled there.
+    });
+  }
+}

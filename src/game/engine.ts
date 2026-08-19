@@ -181,6 +181,11 @@ export class Game implements GenHost, RenderHost {
   coyote!: number;
   jumps!: number;
   cut!: boolean;
+  aiJumpFrame!: number;
+  aiCutAt!: number;
+  aiDoublePending!: boolean;
+  aiPitJumpTtl!: number;
+  aiPadRide!: boolean;
   diving!: boolean;
   shielded!: boolean;
   shieldTimer!: number;
@@ -308,6 +313,11 @@ export class Game implements GenHost, RenderHost {
       coyote: 0,
       jumps: 0,
       cut: false,
+      aiJumpFrame: 0,
+      aiCutAt: 0,
+      aiDoublePending: false,
+      aiPitJumpTtl: 0,
+      aiPadRide: false,
       diving: false,
       shielded: false,
       shieldTimer: 0,
@@ -739,13 +749,6 @@ export class Game implements GenHost, RenderHost {
     this.cullArr(this.enemies, (e) => e.dead || e.x < lim);
     this.cullArr(this.spikes, (s) => s.x + s.n * 8 < lim);
     this.cullArr(this.springs, (s) => s.x + 14 < lim);
-  }
-
-  private hasGroundNear(x: number, y: number) {
-    for (const p of this.platforms) {
-      if (x >= p.x - 2 && x <= p.x + p.w + 2 && p.y > y - 24 && p.y < y + 90) return true;
-    }
-    return false;
   }
 
   // Biome identity lives in the motion trail, not in the hero's fixed sprite.
@@ -1606,6 +1609,7 @@ export class Game implements GenHost, RenderHost {
         this.padFlight = 90;
         this.jumps = 0;
         this.cut = true; // a pad launch is never chopped by releasing jump
+        this.jumpBuf = 0; // a buffered press mid-arc would cancel padFlight
         this.diving = false;
         sp.press = sp.mega ? 16 : 14;
         this.sx = 0.6;
@@ -1944,6 +1948,7 @@ export class Game implements GenHost, RenderHost {
         p.padFlight = 90;
         p.jumps = 0;
         p.cut = true;
+        p.jumpBuf = 0; // a buffered press mid-arc would cancel padFlight
         p.diving = false;
         spr.press = spr.mega ? 16 : 14;
         p.sx = 0.6;
@@ -2041,98 +2046,148 @@ export class Game implements GenHost, RenderHost {
     this.deathTimer = 0;
   }
 
+  /**
+   * Distance (px) from `scanFrom` to the next platform whose top sits at
+   * roughly foot level. Platforms far above or below don't count, so a gap
+   * in the floor reads as a long distance. Infinity when nothing within max.
+   */
+  private groundGapAt(scanFrom: number, feet: number, maxScan = 220): number {
+    let best = Infinity;
+    for (const p of this.platforms) {
+      if (Math.abs(p.y - feet) > 6) continue;
+      if (p.x + p.w < scanFrom - 2) continue;
+      if (p.x > scanFrom + maxScan) continue;
+      if (p.x <= scanFrom) return 0;
+      if (p.x - scanFrom < best) best = p.x - scanFrom;
+    }
+    return best;
+  }
+
+  /** True when some platform top the runner can actually land on sits within
+   *  reach below/at `feet` ahead of x. Platforms above the feet don't count —
+   *  you can't climb onto a ledge from below a pit. */
+  private reachableGroundAhead(x: number, feet: number): boolean {
+    for (const p of this.platforms) {
+      if (p.x + p.w < x - 6) continue;
+      if (p.x > x + 60) continue;
+      if (p.y > feet - 6 && p.y < feet + 130) return true;
+    }
+    return false;
+  }
+
   private attractAI() {
     const feet = this.py + PLAYER_H;
     const center = this.px + PLAYER_W / 2;
-    const ahead = this.px + PLAYER_W + 8;
-    let needJump = false;
+    let wantJump = false;
     let wantDoubleJump = false;
-    let wantDive = false;
 
-    // 1. Pit and hazard safety
-    if (this.onGround && !this.hasGroundNear(ahead, feet)) needJump = true;
-    for (const s of this.spikes) {
-      if (s.x > this.px + 2 && s.x < this.px + 48 && Math.abs(s.y - feet) < 24) {
-        needJump = true;
+    // Frame bookkeeping for pad rides + pit recovery.
+    if (this.onGround) {
+      this.aiJumpFrame = 0;
+      this.aiCutAt = 0;
+      this.aiDoublePending = false;
+      this.aiPitJumpTtl = 0;
+      this.aiPadRide = false;
+    } else if (this.aiJumpFrame > 0) {
+      this.aiJumpFrame++;
+    }
+    if (this.aiPitJumpTtl > 0) this.aiPitJumpTtl--;
+
+    // Hands off while riding a pad arc — any input (double jump cancels
+    // padFlight) would ruin the trajectory and drop the runner into the pit
+    // the pad was built to clear.
+    if (this.padFlight > 0) this.aiPadRide = true;
+    if (this.aiPadRide) return;
+
+    // 1. Pits & gaps — full jump right at the edge (a held jump covers
+    // ~54px of ground, enough for every normal gap; wider LAUNCH/MEGA gaps
+    // have springs, handled below). Every hop arms the pit-recovery timer so
+    // a short landing can always be salvaged by a double jump.
+    const gapDist = this.groundGapAt(this.px + 12, feet);
+    if (this.onGround) {
+      const springAhead = this.springs.some(
+        (s) => s.x > this.px - 26 && s.x < this.px + 12 && Math.abs(s.y - feet) < 22,
+      );
+      // A spring ahead means the gap is a pad crossing: don't jump, just walk
+      // onto the pad and ride the arc.
+      if (gapDist > 0 && !springAhead) {
+        wantJump = true;
+        this.aiPitJumpTtl = 90;
+        if (gapDist >= 70) this.aiDoublePending = true;
       }
     }
 
-    // 2. Enemy combat & aggressive stomping / slamming
+    // 2. Spikes — full jump so the whole body clears the patch: the spike
+    // hitbox is fatal on ANY overlap, including the landing, so a short hop
+    // that lands on the far side of a wide patch still dies.
+    for (const s of this.spikes) {
+      const right = s.x + s.n * 8;
+      if (s.x > this.px - 2 && right > this.px + 2 && s.x < this.px + 26 && Math.abs(s.y - feet) < 22) {
+        wantJump = true;
+        this.aiPitJumpTtl = 90;
+      }
+    }
+
+    // 3. Enemies — kill, don't just dodge: aim the arc so the descent lands
+    // on the blob (stomp), and re-aim immediately after any short landing.
+    // Spikers get cleared with a full jump (or a double jump if already up).
     for (const e of this.enemies) {
       if (e.dead) continue;
-      const exCenter = e.x + e.w / 2;
-      const distX = exCenter - center;
-      const distY = e.y - feet;
+      const ex = e.x + e.w / 2;
+      const distX = ex - center;
 
-      // Ground approach: Jump early to get height advantage above the enemy
-      if (this.onGround && distX > 8 && distX < 65 && Math.abs(distY) < 36) {
-        needJump = true;
+      if (e.kind === 'spiker') {
+        if (distX > 2 && distX < 36) {
+          if (this.onGround) wantJump = true;
+          else if (this.vy > 0 && this.jumps < 2) wantDoubleJump = true;
+        }
+        continue;
       }
 
-      // Air combat: Stomp & dive directly down onto the enemy
-      if (!this.onGround) {
-        // Horizontally aligned directly above enemy
-        if (Math.abs(distX) < 14 && distY > 2 && distY < 48) {
-          // Check we are not stomping directly into spikes
-          const hasSpikeBelow = this.spikes.some((s) => Math.abs(s.x - e.x) < 16 && Math.abs(s.y - e.y) < 16);
-          if (!hasSpikeBelow) {
-            wantDive = true;
-          }
-        }
-        // Approaching enemy in mid-air: adjust jump arc
-        else if (distX > 16 && distX < 55 && distY < 12 && this.vy > 0 && this.jumps < 2) {
-          wantDoubleJump = true;
+      if (this.onGround && distX > 2 && distX < 105) {
+        wantJump = true;
+        this.aiPitJumpTtl = 90;
+      }
+    }
+
+    // 4. Coin floats (UPPER patterns) — hop onto the floating platform to
+    // grab its coin line / gem, then drop back onto the main platform below.
+    // A held jump travels ~54px, so press when the float's left edge is
+    // within 54px of the front corner (landing inside the float's span).
+    if (this.onGround) {
+      for (const p of this.platforms) {
+        if (!p.float) continue;
+        const dxL = p.x - (this.px + PLAYER_W);
+        if (dxL > 54 - p.w && dxL < 54 && p.y < feet - 24 && p.y > feet - 95) {
+          wantJump = true;
+          this.aiPitJumpTtl = 90;
+          break;
         }
       }
     }
 
-    // 3. Coin collection (sweeps high and low coin trails)
-    for (const k of this.pickups) {
-      if (k.dead) continue;
-      const kx = k.x - center;
-      const ky = k.y - this.py;
-      if (kx > 6 && kx < 55) {
-        // Coin is elevated above normal ground level
-        if (this.onGround && ky < -14) {
-          needJump = true;
-        }
-        // Coin is high in the air
-        else if (!this.onGround && ky < -18 && this.vy > -2 && this.jumps < 2) {
-          wantDoubleJump = true;
-        }
-      }
-      // If we just jumped over a coin trail and are now falling through lower coins, dive to collect
-      if (!this.onGround && Math.abs(kx) < 10 && ky > 12 && ky < 40 && this.hasGroundNear(center, feet + 40)) {
-        wantDive = true;
-      }
-    }
-
-    // 4. Powerup collection
-    for (const u of this.powerups) {
-      if (u.dead) continue;
-      const ux = u.x - center;
-      const uy = u.y - this.py;
-      if (ux > 8 && ux < 60) {
-        if (this.onGround && uy < -8) needJump = true;
-        else if (!this.onGround && uy < -16 && this.jumps < 2) wantDoubleJump = true;
-      }
-    }
-
-    // 5. Airborne pit recovery
-    if (!this.onGround && this.vy > 0.5 && !this.hasGroundNear(this.px + 16, feet + 10) && this.jumps < 2) {
-      wantDoubleJump = true;
+    // 5. Pit recovery — while a pit crossing is in progress and the runner is
+    // falling with no reachable ledge ahead (it would sink below the far
+    // platform), double-jump to climb back to the far side.
+    if (!this.onGround && this.vy > 0.3 && this.jumps < 2 && this.aiPitJumpTtl > 0) {
+      if (!this.reachableGroundAhead(this.px + 8, feet)) wantDoubleJump = true;
     }
 
     // Execute decisions
-    if (needJump && this.jumpBuf === 0 && this.onGround) this.pressJump();
-    if (this.vy > 1.5) this.releaseJump();
-    if (wantDoubleJump && !this.onGround && this.jumps < 2) this.pressJump();
-    if (wantDive && !this.onGround && !this.diving && this.vy > -2) {
-      this.pressDive();
+    if (wantJump && this.jumpBuf === 0 && this.onGround) {
+      this.pressJump();
+      this.aiJumpFrame = 1;
     }
-    // Let the dive go once grounded — otherwise diveHeld stays latched and
-    // the gravity block would auto-dive on every subsequent fall.
-    if (this.onGround) this.releaseDive();
+    // The wide-gap double jump fires late (past the apex, while falling) so
+    // the two arcs stack into one long crossing instead of a sky-high stack.
+    if (this.aiDoublePending && !this.onGround && this.jumps < 2 && this.vy > 0.3) {
+      this.pressJump();
+      this.aiDoublePending = false;
+    }
+    if (this.vy > 1.5) this.releaseJump();
+    if (wantDoubleJump && !this.onGround && this.jumps < 2) {
+      this.pressJump();
+    }
   }
 
   /* ------------------------------------------------------------- rendering */

@@ -1,4 +1,6 @@
-import Peer, { type DataConnection } from 'peerjs';
+import type Peer from 'peerjs';
+import type { DataConnection } from 'peerjs';
+import { MqttRelay, LOBBY_TOPIC_PREFIX, LOBBY_TOPIC_WILDCARD, ROOM_TOPIC_PREFIX, lobbyTopic } from './mqttRelay';
 import type { SkinId } from '../skins';
 import type {
   MatchResult,
@@ -9,6 +11,51 @@ import type {
   PlayerTickPayload,
   PublicLobbyInfo,
 } from './types';
+
+// PeerJS is a ~60 kB UMD build. Loading it from a CDN only when a room is
+// actually used keeps the single-file bundle small and the page load fast —
+// multiplayer needs a network connection anyway, so the CDN dependency is
+// not a new constraint. The type-only import above is erased at build time.
+const PEERJS_CDN_URLS = [
+  'https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js',
+  'https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js',
+];
+
+function loadScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error(`failed to load ${src}`));
+    document.head.appendChild(s);
+  });
+}
+
+let peerLib: typeof Peer | null = null;
+let peerLoading: Promise<typeof Peer> | null = null;
+
+async function loadPeerJs(): Promise<typeof Peer> {
+  if (peerLib) return peerLib;
+  if (!peerLoading) {
+    peerLoading = (async () => {
+      for (const url of PEERJS_CDN_URLS) {
+        try {
+          await loadScript(url);
+          const g = (window as unknown as { Peer?: typeof Peer }).Peer;
+          if (g) {
+            peerLib = g;
+            return g;
+          }
+        } catch {
+          // Try the next CDN.
+        }
+      }
+      throw new Error('PeerJS failed to load from CDN');
+    })();
+  }
+  return peerLoading;
+}
 
 export const MAX_PLAYERS = 8;
 
@@ -42,6 +89,7 @@ function generateRoomCode(): string {
 export class PartyManager {
   socket: WebSocket | null = null;
   bc: BroadcastChannel | null = null;
+  mqtt: MqttRelay | null = null;
   globalLobbiesBc: BroadcastChannel | null = null;
   peer: Peer | null = null;
   peerConnections = new Map<string, DataConnection>();
@@ -57,7 +105,10 @@ export class PartyManager {
   serverOnline = true;
 
   // Local tab party tracking for zero-latency multi-tab testing
-  private localTabPlayers = new Map<string, { peerId: string; name: string; skinId: SkinId; isHost: boolean; meters: number; score: number; isAlive: boolean; ready: boolean }>();
+  private localTabPlayers = new Map<string, { peerId: string; name: string; skinId: SkinId; isHost: boolean; meters: number; score: number; isAlive: boolean; ready: boolean; ts: number; transport?: string }>();
+  // Public rooms announced over the MQTT lobby topic (cross-device, unlike
+  // the same-browser localStorage list).
+  private mqttLobbies = new Map<string, { code: string; hostName: string; playerCount: number; maxPlayers: number; ts: number }>();
   // WebRTC conn.peer -> joiner's self-generated peerId (host side), so a
   // dropped DataConnection can remove the right localTabPlayers entry.
   private peerConnToSelfId = new Map<string, string>();
@@ -69,6 +120,7 @@ export class PartyManager {
   private localReady = false;
   private syncTimer: number | null = null;
   private lobbyTimer: number | null = null;
+  private lastMqttLobbyPublish = 0;
   private storageListener: ((e: StorageEvent) => void) | null = null;
   private lobbyVisibilityListener: (() => void) | null = null;
   private reconnectTimer: number | null = null;
@@ -119,12 +171,13 @@ export class PartyManager {
       score: 0,
       isAlive: true,
       ready: true,
+      ts: Date.now(),
     });
     this.localAlive = true;
     this.localTick = null;
 
     // Initialize Sync Channels
-    this.initSyncChannels(code, 'host');
+    await this.initSyncChannels(code, 'host');
 
     // Periodic host broadcast so joiners instantly receive room state
     this.startHostSyncLoop();
@@ -132,8 +185,8 @@ export class PartyManager {
     // Publish lobby if public
     this.publishLobbyHeartbeat();
 
-    // Also attempt WebSocket in background
-    this.connectWebSocket(code);
+    // NOTE: the legacy PartyKit WebSocket backend is abandoned; the MQTT
+    // relay (plus BroadcastChannel for same-browser tabs) is the transport.
 
     return code;
   }
@@ -155,13 +208,23 @@ export class PartyManager {
     this.awaitingFirstRoomState = true;
 
     // Initialize Sync Channels
-    this.initSyncChannels(cleanCode, 'joiner');
+    await this.initSyncChannels(cleanCode, 'joiner');
 
     // Periodic join ping until connected
     this.startJoinPingLoop();
 
-    // Also attempt WebSocket in background
-    this.connectWebSocket(cleanCode);
+    // NOTE: the legacy PartyKit WebSocket backend is abandoned; the MQTT
+    // relay (plus BroadcastChannel for same-browser tabs) is the transport.
+
+    // Cross-network join watchdog: if no room state arrives in time the room
+    // is gone (host device offline) — back out instead of pinging an empty
+    // room forever. Any room_state (ws or bc/MQTT) clears the flag.
+    window.setTimeout(() => {
+      if (this.awaitingFirstRoomState && this.state === 'in_room' && this.roomId === cleanCode) {
+        this.leave();
+        this.onStatusMsg?.('ROOM NOT FOUND - IT MAY HAVE CLOSED');
+      }
+    }, 12000);
 
     return true;
   }
@@ -195,6 +258,17 @@ export class PartyManager {
     for (const local of this.getActivePublicLobbies()) {
       merged.set(local.code, local);
     }
+    const now = Date.now();
+    for (const [code, item] of this.mqttLobbies) {
+      if (now - item.ts < 120000) {
+        merged.set(code, {
+          code,
+          hostName: item.hostName || 'Runner',
+          playerCount: item.playerCount || 1,
+          maxPlayers: item.maxPlayers || MAX_PLAYERS,
+        });
+      }
+    }
     try {
       const res = await fetch(`${getPartyHttpBase()}/parties/main/lobby`, {
         headers: { accept: 'application/json' },
@@ -217,12 +291,9 @@ export class PartyManager {
             });
           }
         }
-        this.serverOnline = true;
-      } else {
-        this.serverOnline = false;
       }
     } catch {
-      this.serverOnline = false;
+      // Ignore — transport liveness owns serverOnline, not this fetch.
     }
     const ownCode = (this.roomId ?? '').toUpperCase();
     const result = Array.from(merged.values()).filter((l) => l.code !== ownCode);
@@ -320,6 +391,34 @@ export class PartyManager {
         } catch {
           // Ignore
         }
+        // MQTT lobby announcement: retained message so late subscribers see
+        // the room instantly, republished every ~4s to refresh the TTL.
+        const now = Date.now();
+        if (this.mqtt && now - this.lastMqttLobbyPublish > 4000) {
+          this.lastMqttLobbyPublish = now;
+          try {
+            if (this.isPublic) {
+              this.mqtt.publish(
+                lobbyTopic(this.roomId),
+                {
+                  code: this.roomId,
+                  hostName: this.localName,
+                  playerCount: this.opponents.size + 1,
+                  maxPlayers: MAX_PLAYERS,
+                  isPublic: true,
+                  ts: now,
+                },
+                1,
+                true
+              );
+            } else {
+              // A room flipped to private must vanish from the shared lobby.
+              this.mqtt.publish(lobbyTopic(this.roomId), '', 1, true);
+            }
+          } catch {
+            // Ignore
+          }
+        }
       }
     };
     update();
@@ -336,7 +435,7 @@ export class PartyManager {
     }
   }
 
-  private initSyncChannels(roomId: string, role: 'host' | 'joiner') {
+  private async initSyncChannels(roomId: string, role: 'host' | 'joiner') {
     const channelName = `pixelrun_room_${roomId.toLowerCase()}`;
 
     // 1. BroadcastChannel (0ms local tabs)
@@ -375,9 +474,11 @@ export class PartyManager {
       this.peerConnections.clear();
       this.peerConnToSelfId.clear();
 
+      const PeerClass = await loadPeerJs();
+
       if (role === 'host') {
         const hostPeerId = `pxrun-host-${roomId.toLowerCase()}`;
-        this.peer = new Peer(hostPeerId, {
+        this.peer = new PeerClass(hostPeerId, {
           config: {
             iceServers: [
               { urls: 'stun:stun.l.google.com:19302' },
@@ -423,7 +524,7 @@ export class PartyManager {
         });
       } else {
         const joinerPeerId = `pxrun-join-${roomId.toLowerCase()}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
-        this.peer = new Peer(joinerPeerId, {
+        this.peer = new PeerClass(joinerPeerId, {
           config: {
             iceServers: [
               { urls: 'stun:stun.l.google.com:19302' },
@@ -463,6 +564,58 @@ export class PartyManager {
     } catch {
       // Ignore
     }
+
+    // 4. Public MQTT relay (cross-network rooms with zero infrastructure).
+    //    The broker is a dumb pipe: the host is the coordinator, and the
+    //    same bc_* messages flow through BroadcastChannel, WebRTC and MQTT
+    //    alike. Ticks ride QoS 0 (latest-wins, no reliability guarantee);
+    //    everything else is QoS 1. ONE relay per page load — switching rooms
+    //    re-targets the subscriptions instead of churning connections.
+    if (typeof window !== 'undefined') {
+      if (!this.mqtt) {
+        this.mqtt = new MqttRelay();
+        this.mqtt.onConnect = () => {
+          this.serverOnline = true;
+        };
+        this.mqtt.onDisconnect = () => {
+          this.serverOnline = false;
+        };
+        this.mqtt.onMessage = (topic, payload) => {
+          try {
+            if (topic.startsWith(LOBBY_TOPIC_PREFIX)) {
+              this.handleLobbyMessage(payload);
+            } else if (topic.startsWith(ROOM_TOPIC_PREFIX)) {
+              this.handleSyncMessage(JSON.parse(payload));
+            }
+          } catch {
+            // Ignore
+          }
+        };
+      }
+      this.mqtt.ensureStarted();
+      this.mqtt.setTopics([`${ROOM_TOPIC_PREFIX}${roomId.toLowerCase()}`, LOBBY_TOPIC_WILDCARD]);
+    }
+  }
+
+  private handleLobbyMessage(raw: string) {
+    let entry: { code?: string; hostName?: string; playerCount?: number; maxPlayers?: number; isPublic?: boolean; ts?: number } | null = null;
+    try {
+      entry = raw ? JSON.parse(raw) : null;
+    } catch {
+      entry = null;
+    }
+    if (!entry || !entry.code || entry.isPublic === false) {
+      if (entry && entry.code) this.mqttLobbies.delete(String(entry.code).toUpperCase());
+      return;
+    }
+    this.mqttLobbies.set(String(entry.code).toUpperCase(), {
+      code: String(entry.code).toUpperCase(),
+      hostName: entry.hostName || 'Runner',
+      playerCount: entry.playerCount || 1,
+      maxPlayers: entry.maxPlayers || MAX_PLAYERS,
+      ts: entry.ts || Date.now(),
+    });
+    this.refreshPublicLobbies();
   }
 
   private broadcast(data: Record<string, unknown>) {
@@ -514,12 +667,42 @@ export class PartyManager {
         }
       }
     }
+
+    // 4. MQTT relay (cross-network): mirrors the BroadcastChannel — every
+    //    client sees every message. Ticks are QoS 0 (best-effort, latest
+    //    wins); identity/control messages are QoS 1. Messages are tagged with
+    //    their transport so the host never reconciles MQTT joiners against
+    //    the WebSocket room membership (they live outside it).
+    if (this.mqtt && this.roomId) {
+      try {
+        this.mqtt.publish(`${ROOM_TOPIC_PREFIX}${this.roomId.toLowerCase()}`, { ...data, transport: 'mqtt' }, data.type === 'bc_tick' ? 0 : 1);
+      } catch {
+        // Ignore
+      }
+    }
   }
 
   private startHostSyncLoop() {
     if (this.syncTimer) clearInterval(this.syncTimer);
     const sendState = () => {
       if (this.role === 'host' && this.state === 'in_room') {
+        // Sweep ghost joiners (crashed tabs/devices, dead WebRTC links):
+        // joiners ping bc_join every 300ms, so 8s of silence means gone.
+        // Only runs in_room — joiners stop pinging during a match, and
+        // killing their entries mid-match would wipe live meters/score.
+        const now = Date.now();
+        let changed = false;
+        for (const [id, entry] of Array.from(this.localTabPlayers.entries())) {
+          if (id !== this.peerId && now - (entry.ts || now) > 8000) {
+            this.localTabPlayers.delete(id);
+            changed = true;
+          }
+        }
+        if (changed) {
+          const playersList = Array.from(this.localTabPlayers.values());
+          this.broadcast({ type: 'bc_room_state', players: playersList });
+          this.updateOpponentsFromList(playersList);
+        }
         const playersList = Array.from(this.localTabPlayers.values());
         this.broadcast({
           type: 'bc_room_state',
@@ -566,6 +749,8 @@ export class PartyManager {
           existing.name = joinerName;
           existing.skinId = joinerSkin;
           existing.ready = joinerReady;
+          existing.ts = Date.now();
+          if (!existing.transport) existing.transport = data.transport as string | undefined;
         } else {
           this.localTabPlayers.set(joinerId, {
             peerId: joinerId,
@@ -576,6 +761,8 @@ export class PartyManager {
             score: 0,
             isAlive: true,
             ready: joinerReady,
+            ts: Date.now(),
+            transport: data.transport as string | undefined,
           });
         }
 
@@ -604,6 +791,8 @@ export class PartyManager {
     } else if (type === 'bc_room_state') {
       const players = data.players as Array<{ peerId: string; name: string; skinId: SkinId; isHost: boolean; ready?: boolean }>;
       if (Array.isArray(players)) {
+        // Any room state proves the room exists — clears the join watchdog.
+        this.awaitingFirstRoomState = false;
         this.updateOpponentsFromList(players);
       }
     } else if (type === 'bc_ready') {
@@ -883,6 +1072,13 @@ export class PartyManager {
   }
 
   private scheduleReconnect(roomId: string, socket: WebSocket) {
+    // A WebSocket that NEVER opened won't start working by retrying forever
+    // (dead hosted backend). Cap at 5 attempts (~31s of backoff) — dev-server
+    // restarts still recover; a dead remote URL stops hammering.
+    if (this.reconnectAttempts >= 5) {
+      this.reconnectAttempts = 0;
+      return;
+    }
     if (this.reconnectTimer !== null) return;
     const delay = Math.min(1000 * 2 ** this.reconnectAttempts, 15000);
     this.reconnectAttempts++;
@@ -949,11 +1145,15 @@ export class PartyManager {
                       score: p.score,
                       isAlive: p.isAlive,
                       ready: false,
+                      ts: Date.now(),
                     }
               );
             }
             for (const id of Array.from(this.localTabPlayers.keys())) {
-              if (id !== this.peerId && !serverIds.has(id)) {
+              // MQTT joiners live outside the WebSocket room — the server
+              // must never reconcile them away. Their ghosts are swept by
+              // the bc_join silence timer instead.
+              if (id !== this.peerId && !serverIds.has(id) && this.localTabPlayers.get(id)?.transport !== 'mqtt') {
                 this.localTabPlayers.delete(id);
               }
             }
@@ -1183,6 +1383,21 @@ export class PartyManager {
         // Ignore
       }
       this.bc = null;
+    }
+    if (this.mqtt) {
+      // Drop OUR room from the shared lobby before leaving — per-room
+      // retained topic, so other rooms' announcements survive. Joiners
+      // never published an entry, so only hosts clear one.
+      try {
+        if (this.role === 'host' && this.roomId) {
+          this.mqtt.publish(lobbyTopic(this.roomId), '', 1, true);
+        }
+      } catch {
+        // Ignore
+      }
+      // The relay itself lives for the whole page (one persistent broker
+      // connection); the next host()/join() re-targets its subscriptions.
+      this.lastMqttLobbyPublish = 0;
     }
     if (this.socket) {
       try {

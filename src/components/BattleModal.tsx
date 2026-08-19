@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { party, MAX_PLAYERS } from '../game/multiplayer/partyManager';
-import type { MatchResult, OpponentInfo, PublicLobbyInfo } from '../game/multiplayer/types';
+import type { MatchResult, OpponentInfo } from '../game/multiplayer/types';
 import { SKINS, type SkinId } from '../game/skins';
 import { drawPlayerSprite } from '../game/playerSprite';
 import { PixelButton } from './ui';
@@ -95,12 +95,9 @@ export function BattleModal({
   onClearMatchResult,
 }: BattleModalProps) {
   const [tab, setTab] = useState<'host' | 'join' | 'local'>('host');
-  const [joinSubTab, setJoinSubTab] = useState<'code' | 'public'>('code');
   const [roomCode, setRoomCode] = useState<string>('');
   const [inputCode, setInputCode] = useState<string>('');
-  const [isPublicRoom, setIsPublicRoom] = useState<boolean>(false);
   const [opponents, setOpponents] = useState<OpponentInfo[]>(() => Array.from(party.opponents.values()));
-  const [publicLobbies, setPublicLobbies] = useState<PublicLobbyInfo[]>(() => party.getActivePublicLobbies());
   const [statusMsg, setStatusMsg] = useState<string>('');
   const [copied, setCopied] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -164,10 +161,10 @@ export function BattleModal({
 
   // Initialize Host Room
   const initHost = useCallback(async () => {
-    const code = await party.host(onlineName, localSkin, isPublicRoom);
+    const code = await party.host(onlineName, localSkin, false);
     setRoomCode(code);
     setStatusMsg('ROOM IS READY - WAITING FOR PLAYERS');
-  }, [onlineName, localSkin, isPublicRoom]);
+  }, [onlineName, localSkin]);
 
   // Restore lobby state when modal mounts
   useEffect(() => {
@@ -199,24 +196,6 @@ export function BattleModal({
       });
     }
   }, [tab, roomCode, matchResult, initHost]);
-
-  // Public lobby watcher (localStorage/BroadcastChannel + PartyKit server)
-  useEffect(() => {
-    party.onPublicLobbiesChange = (lobbies) => {
-      setPublicLobbies([...lobbies]);
-    };
-    const interval = setInterval(() => {
-      setPublicLobbies(party.getActivePublicLobbies());
-    }, 1000);
-    const serverInterval = setInterval(() => {
-      void party.refreshPublicLobbies();
-    }, 5000);
-    void party.refreshPublicLobbies();
-    return () => {
-      clearInterval(interval);
-      clearInterval(serverInterval);
-    };
-  }, []);
 
   // Party event subscriptions
   useEffect(() => {
@@ -278,7 +257,6 @@ export function BattleModal({
       if (codeFromUrl && codeFromUrl.length === 4) {
         autoJoinAttemptedRef.current = true;
         setTab('join');
-        setJoinSubTab('code');
         setInputCode(codeFromUrl);
         handleJoinCode(codeFromUrl);
         // Consume the deep link so reopening the lobby later (after
@@ -470,14 +448,16 @@ export function BattleModal({
       <div className="relative flex max-h-[92dvh] w-full max-w-[680px] flex-col items-center border-2 border-[#3ef2c8] bg-[#0e071e] p-4 sm:p-6 text-[#ffffff] shadow-[4px_4px_0_#06020c]">
         {/* Top Header */}
         <div className="flex w-full items-center justify-between border-b-2 border-[#251842] pb-2 mb-3">
-          <h2 className="font-pixel text-[12px] uppercase tracking-wider text-[#3ef2c8]">
-            {matchResult ? 'MATCH RESULTS' : tab === 'local' ? 'LOCAL BATTLE' : 'ONLINE BATTLE'}
+          <div className="flex items-center gap-2">
+            <h2 className="font-pixel text-[12px] uppercase leading-none tracking-wider text-[#3ef2c8]">
+              {matchResult ? 'MATCH RESULTS' : tab === 'local' ? 'LOCAL BATTLE' : 'ONLINE BATTLE'}
+            </h2>
             {!matchResult && tab !== 'local' && (
-              <span className="ml-2 inline-block border-2 border-[#ff4d6d] bg-[#ff4d6d]/20 px-1.5 py-0.5 align-middle text-[8px] text-[#ff4d6d]">
+              <span className="inline-block border-2 border-[#ff4d6d] bg-[#ff4d6d]/20 px-1.5 py-0.5 text-[8px] leading-none text-[#ff4d6d]">
                 BETA
               </span>
             )}
-          </h2>
+          </div>
           <button
             type="button"
             onClick={handleExit}
@@ -598,8 +578,7 @@ export function BattleModal({
                     setRoomCode('');
                     setOpponents([]);
                   }
-                  setPublicLobbies(party.getActivePublicLobbies());
-                  setStatusMsg(joinSubTab === 'code' ? 'ENTER 4-LETTER CODE TO JOIN' : 'SELECT A PUBLIC ROOM BELOW');
+                  setStatusMsg('ENTER 4-LETTER CODE TO JOIN');
                 }}
                 className={`flex-1 min-h-[40px] py-2 text-[10px] transition-colors ${
                   tab === 'join'
@@ -667,155 +646,43 @@ export function BattleModal({
                     {copied ? 'COPIED!' : 'COPY LINK'}
                   </button>
                 </div>
-
-                {/* Explicit Visibility Selector */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[8px] text-[#9d8fd6]">VISIBILITY:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsPublicRoom(false);
-                      party.setRoomVisibility(false);
-                    }}
-                    className={`min-h-[32px] px-3 py-1 text-[8px] border-2 transition-colors ${
-                      !isPublicRoom
-                        ? 'border-[#3ef2c8] bg-[#3ef2c8] text-[#08040f]'
-                        : 'border-[#2c1f4d] bg-[#0c081e] text-[#9d8fd6] hover:text-[#ffffff]'
-                    }`}
-                  >
-                    PRIVATE
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsPublicRoom(true);
-                      party.setRoomVisibility(true);
-                    }}
-                    className={`min-h-[32px] px-3 py-1 text-[8px] border-2 transition-colors ${
-                      isPublicRoom
-                        ? 'border-[#ffd166] bg-[#ffd166] text-[#08040f]'
-                        : 'border-[#2c1f4d] bg-[#0c081e] text-[#9d8fd6] hover:text-[#ffffff]'
-                    }`}
-                  >
-                    PUBLIC
-                  </button>
-                </div>
               </div>
             )}
 
             {/* JOIN SECTION */}
             {tab === 'join' && (
               <div className="flex flex-col items-center gap-2.5 mb-4 w-full max-w-md px-2 sm:px-4">
-                <div className="flex w-full border border-[#2c1f4d] bg-[#080312]">
+                <div className="flex w-full gap-2">
+                  <input
+                    type="text"
+                    value={inputCode}
+                    onChange={(e) => setInputCode(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleJoinCode();
+                      }
+                    }}
+                    placeholder="CODE (E.G. ABCD)"
+                    maxLength={4}
+                    autoFocus
+                    className="flex-1 min-h-[42px] select-text border border-[#3ef2c8]/60 bg-[#080312] px-3 py-1 text-center font-pixel text-[10px] text-[#ffd166] uppercase focus:border-[#3ef2c8] focus:outline-none"
+                  />
                   <button
                     type="button"
-                    onClick={() => {
-                      setJoinSubTab('code');
-                      setStatusMsg('ENTER 4-LETTER CODE TO JOIN');
-                    }}
-                    className={`flex-1 min-h-[36px] py-1 text-[8px] ${
-                      joinSubTab === 'code' ? 'bg-[#ffd166]/25 text-[#ffd166]' : 'text-[#9d8fd6]'
-                    }`}
+                    onClick={() => handleJoinCode()}
+                    className="border-2 border-[#3ef2c8] bg-[#3ef2c8] min-h-[42px] px-4 py-1 text-[10px] text-[#08040f] hover:bg-[#6ef5d6] active:translate-x-[1px] active:translate-y-[1px]"
                   >
-                    ENTER CODE
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setJoinSubTab('public');
-                      setPublicLobbies(party.getActivePublicLobbies());
-                      void party.refreshPublicLobbies();
-                      setStatusMsg('SELECT A PUBLIC ROOM BELOW');
-                    }}
-                    className={`flex-1 min-h-[36px] py-1 text-[8px] ${
-                      joinSubTab === 'public' ? 'bg-[#ffd166]/25 text-[#ffd166]' : 'text-[#9d8fd6]'
-                    }`}
-                  >
-                    PUBLIC ROOMS ({publicLobbies.length})
+                    JOIN
                   </button>
                 </div>
-
-                {joinSubTab === 'code' ? (
-                  <div className="flex w-full gap-2">
-                    <input
-                      type="text"
-                      value={inputCode}
-                      onChange={(e) => setInputCode(e.target.value.toUpperCase())}
-                      onKeyDown={(e) => {
-                        e.stopPropagation();
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          handleJoinCode();
-                        }
-                      }}
-                      placeholder="CODE (E.G. ABCD)"
-                      maxLength={4}
-                      autoFocus
-                      className="flex-1 min-h-[42px] select-text border border-[#3ef2c8]/60 bg-[#080312] px-3 py-1 text-center font-pixel text-[10px] text-[#ffd166] uppercase focus:border-[#3ef2c8] focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleJoinCode()}
-                      className="border-2 border-[#3ef2c8] bg-[#3ef2c8] min-h-[42px] px-4 py-1 text-[10px] text-[#08040f] hover:bg-[#6ef5d6] active:translate-x-[1px] active:translate-y-[1px]"
-                    >
-                      JOIN
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex flex-col w-full max-h-40 overflow-y-auto gap-1 border border-[#2c1f4d] bg-[#080312] p-2">
-                    <div className="flex justify-between items-center px-1 pb-1 border-b border-[#2c1f4d]">
-                      <span className="text-[8px] text-[#9d8fd6]">ACTIVE PUBLIC ROOMS</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPublicLobbies(party.getActivePublicLobbies());
-                          void party.refreshPublicLobbies();
-                          sfx.play('ui');
-                        }}
-                        className="text-[8px] text-[#3ef2c8] underline hover:text-[#ffffff]"
-                      >
-                        REFRESH
-                      </button>
-                    </div>
-                    {!party.serverOnline && (
-                      <div className="py-1 text-center text-[8px] text-[#ff4d6d]">
-                        PARTY SERVER OFFLINE - SHOWING LOCAL ROOMS ONLY
-                      </div>
-                    )}
-                    {publicLobbies.length === 0 ? (
-                      <div className="py-3 text-center text-[8px] text-[#9d8fd6]">
-                        NO PUBLIC ROOMS OPEN. HOST A ROOM OR ENTER A CODE.
-                      </div>
-                    ) : (
-                      publicLobbies.map((lobby) => (
-                        <div
-                          key={lobby.code}
-                          className="flex items-center justify-between border border-[#3ef2c8]/30 bg-[#0c1824] px-2 py-1.5"
-                        >
-                          <div className="flex flex-col text-left">
-                            <span className="text-[8px] text-[#3ef2c8]">{lobby.hostName}</span>
-                            <span className="text-[8px] text-[#ffd166]">
-                              CODE: {lobby.code} ({lobby.playerCount}/{lobby.maxPlayers})
-                            </span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleJoinCode(lobby.code)}
-                            className="border-2 border-[#ffd166] bg-[#ffd166] min-h-[34px] px-3 py-0.5 text-[8px] text-[#08040f] hover:bg-[#ffe082] active:translate-x-[1px] active:translate-y-[1px]"
-                          >
-                            JOIN
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
               </div>
             )}
 
             {/* LOCAL BATTLE (2 - 4 PLAYERS) */}
             {tab === 'local' && (
-              <div className="flex flex-col items-center gap-3 mb-4 w-full px-2 sm:px-4">
+              <div className="flex flex-col items-center gap-4 mb-4 w-full px-3 py-1 sm:px-6">
                 {/* Player count buttons */}
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-[8px] text-[#9d8fd6]">PLAYERS:</span>
@@ -848,7 +715,7 @@ export function BattleModal({
                     return (
                       <div
                         key={`local-p-${idx}`}
-                        className="flex flex-col items-center border-2 p-3 justify-between bg-[#0a0518] shadow-[2px_2px_0_#08040f]"
+                        className="flex flex-col items-center border-2 p-4 justify-between bg-[#0a0518] shadow-[2px_2px_0_#08040f]"
                         style={{ borderColor: col }}
                       >
                         <canvas

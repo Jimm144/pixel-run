@@ -88,7 +88,7 @@ Four daily quests generate automatically based on the local calendar date:
 
 - **Pure Canvas Rendering**: 100% procedural pixel art drawn on a single HTML5 canvas with zero image assets.
 - **Web Audio API Synth**: 4-channel chiptune synthesizer generating melodies, basslines, drums, and SFX in real time.
-- **Zero-Dependency Core**: Lightweight architecture resulting in a single self-contained HTML build (`~357 kB`).
+- **Fast Single-File Load**: One self-contained HTML build (~530 kB, ~147 kB gzipped). Multiplayer libraries (MQTT + PeerJS, ~180 kB) are fetched from a CDN only when a room is actually created/joined — multiplayer needs a network anyway, and the solo game stays fully offline.
 - **High-Performance Game Loop**:
   - Pre-parsed $O(1)$ integer RGB color caching (`HEX_CACHE`).
   - $O(N)$ in-place linear two-pointer entity compaction.

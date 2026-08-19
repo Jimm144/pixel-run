@@ -11,6 +11,7 @@
     "party": "partykit dev"
   },
   "dependencies": {
+    "mqtt": "^5.15.2",
     "peerjs": "^1.5.5",
     "react": "19.2.6",
     "react-dom": "19.2.6"
