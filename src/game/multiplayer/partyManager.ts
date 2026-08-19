@@ -19,14 +19,13 @@ function getPartyWebSocketUrl(room: string): string {
 }
 
 function getPartyHttpBase(): string {
-  const isLocal =
-    typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' ||
-      window.location.hostname === '127.0.0.1' ||
-      window.location.port === '5173');
-
-  if (isLocal) {
-    return 'http://localhost:1999';
+  // Any HTTP-served instance (localhost OR a LAN IP) talks to the party
+  // server on the same host — so a second device can join rooms against
+  // this machine's local PartyKit dev server. HTTPS pages (the deployed
+  // site) always use the hosted PartyKit backend.
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  if (hostname && window.location.protocol === 'http:') {
+    return `http://${hostname}:1999`;
   }
   return 'https://pixel-run.jimm144.partykit.dev';
 }
