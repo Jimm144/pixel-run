@@ -70,15 +70,15 @@ function QuestCard({ quest, record, run, compact }: { quest: QuestDefinition; re
   const width = `${Math.round((progress.value / progress.target) * 100)}%`;
   return (
     <div
-      className={`min-w-0 border-2 ${compact ? 'p-2' : 'p-2.5'} ${progress.done ? 'shadow-[0_0_0_2px_rgba(255,255,255,0.18)]' : ''}`}
+      className={`min-w-0 border-2 ${compact ? 'p-2' : 'p-2.5'} ${progress.done ? 'shadow-[2px_2px_0_#08040f]' : ''}`}
       style={{
         borderColor: `${color}99`,
         backgroundColor: progress.done ? `${color}22` : '#0d0619',
       }}
     >
-      <div className="flex items-center justify-between gap-2 font-pixel text-[7px] leading-none tablet:text-[8px]">
+      <div className="flex items-center justify-between gap-2 font-pixel text-[8px] leading-none">
         <span style={{ color: textColor }}>{progress.done ? 'COMPLETE' : quest.difficulty.toUpperCase()}</span>
-        <span className="text-[#6f5fa8]">{quest.scope === 'day' ? 'TODAY' : 'RUN'}</span>
+        <span className="text-[#9d8fd6]">{quest.scope === 'day' ? 'TODAY' : 'RUN'}</span>
       </div>
       <p className={`${compact ? 'mt-1 line-clamp-2 text-[8px]' : 'mt-2 min-h-[33px] text-[8px]'} font-pixel leading-[1.4] text-[#e9e2ff] ${progress.done ? 'text-white' : ''}`}>
         {getQuestLabel(quest)}
@@ -86,7 +86,7 @@ function QuestCard({ quest, record, run, compact }: { quest: QuestDefinition; re
       <div className={`${compact ? 'mt-1.5 h-2' : 'mt-2 h-2.5'} border border-[#2c1f4d] bg-[#08040f]`}>
         <div className="h-full" style={{ width, backgroundColor: progress.done ? '#ffffff' : color }} />
       </div>
-      <div className={`${compact ? 'mt-0.5' : 'mt-1'} flex justify-between font-pixel text-[7px] text-[#6f5fa8] tablet:text-[8px]`}>
+      <div className={`${compact ? 'mt-0.5' : 'mt-1'} flex justify-between font-pixel text-[8px] text-[#9d8fd6]`}>
         <span>{progress.done ? 'DONE' : `${progress.value}/${progress.target}`}</span>
         <span>{progress.done ? '100%' : `${Math.round((progress.value / progress.target) * 100)}%`}</span>
       </div>
@@ -101,16 +101,16 @@ export function DailyQuestPanel({ quests, record, run, compact = false, announce
   const elapsed =
     record.completedAt !== null && record.firstRunAt !== null ? formatDuration(record.completedAt - record.firstRunAt) : null;
   return (
-    <Panel decorated={decorated} className={`w-full ${compact ? 'p-2.5' : 'p-4'} border-2 border-[#3ef2c8] bg-[#140a26]/95 shadow-[0_0_24px_rgba(62,242,200,0.16)] ${announcement ? 'bg-[#140a26]/80' : ''}`}>
+    <Panel decorated={decorated} className={`w-full ${compact ? 'p-2.5' : 'p-4'} border-2 border-[#3ef2c8] bg-[#140a26]/95 ${announcement ? 'bg-[#140a26]/80' : ''}`}>
       <div className={`${compact ? 'mb-2' : 'mb-3'} flex items-center justify-between gap-3`}>
-        <h2 className="font-pixel text-[10px] text-[#3ef2c8] tablet:text-[12px]">{announcement ? 'DAILY QUESTS' : 'QUESTS'}</h2>
-        {!announcement && <span className="font-pixel text-[7px] text-[#6f5fa8] tablet:text-[8px]">NEXT {formatHms(remaining)}</span>}
+        <h2 className="font-pixel text-[12px] text-[#3ef2c8]">{announcement ? 'DAILY QUESTS' : 'QUESTS'}</h2>
+        {!announcement && <span className="font-pixel text-[8px] text-[#9d8fd6]">NEXT {formatHms(remaining)}</span>}
       </div>
       <div className="grid grid-cols-2 gap-2">
         {quests.map((quest) => <QuestCard key={quest.id} quest={quest} record={record} run={run} compact={compact} />)}
       </div>
       {!announcement && (
-        <div className={`${compact ? 'mt-2 pt-2' : 'mt-3 pt-3'} border-t-2 border-[#221741] font-pixel text-[6px]`}>
+        <div className={`${compact ? 'mt-2 pt-2' : 'mt-3 pt-3'} border-t-2 border-[#251842] font-pixel text-[8px]`}>
           <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
             <span style={{ color: QUEST_DIFFICULTY_COLORS.easy }}>EASY {record.completedByDifficulty.easy}</span>
             <span style={{ color: QUEST_DIFFICULTY_COLORS.medium }}>MEDIUM {record.completedByDifficulty.medium}</span>
@@ -129,7 +129,7 @@ export function DailyQuestPanel({ quests, record, run, compact = false, announce
                     event.stopPropagation();
                     onShare();
                   }}
-                  className="pointer-events-auto cursor-pointer border-2 border-[#3ef2c8] bg-[#0d0619] px-2 py-1 text-[6px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+                  className="pointer-events-auto cursor-pointer border-2 border-[#3ef2c8] bg-[#0d0619] px-2 py-1 text-[8px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
                 >
                   SHARE
                 </button>
@@ -161,15 +161,15 @@ export function QuestCompletionToast({ quests, completed, touch }: { quests: Que
       className={`animate-quest-announcement pointer-events-none absolute z-30 w-[min(88vw,360px)] -translate-x-1/2 opacity-90 ${touch ? 'top-14 left-1/2' : 'top-14 left-1/2'}`}
     >
       <Panel decorated={false} className="border-2 bg-[#140a26] p-3 shadow-[3px_3px_0_#08040f]">
-        <p className="font-pixel text-[9px] text-[#ffd166]">{labels.length > 0 ? 'QUEST COMPLETE' : 'SHARE'}</p>
+        <p className="font-pixel text-[10px] text-[#ffd166]">{labels.length > 0 ? 'QUEST COMPLETE' : 'SHARE'}</p>
         <div className="mt-2 space-y-1">
           {labels.map((quest) => (
-            <p key={quest.id} className="font-pixel text-[7px] leading-[1.5] text-white">
+            <p key={quest.id} className="font-pixel text-[8px] leading-[1.5] text-white">
               {getQuestLabel(quest)}
             </p>
           ))}
           {extras.map((text) => (
-            <p key={text} className="font-pixel text-[7px] leading-[1.5] text-white">
+            <p key={text} className="font-pixel text-[8px] leading-[1.5] text-white">
               {text}
             </p>
           ))}

@@ -13,13 +13,14 @@ interface Props {
   onStart: () => void;
   onToggleMute: () => void;
   onRestartHint: () => void;
+  onRestart: () => void;
   onQuestProgress: (stats: QuestRunStats) => void;
   ui: UI;
   showTouch: boolean;
   modalOpen?: boolean;
 }
 
-export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onToggleMute, onRestartHint, onQuestProgress, ui, showTouch, modalOpen }: Props) {
+export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onToggleMute, onRestartHint, onRestart, onQuestProgress, ui, showTouch, modalOpen }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   /** Zone accent for the touch pause button — follows the biome. */
@@ -43,6 +44,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
     onResume,
     onToggleMute,
     onRestartHint,
+    onRestart,
   });
 
   /* ---------------------------------------------------- engine + main loop */
@@ -98,7 +100,9 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
           countingRef.current = countingNow;
           setCounting(countingNow);
         }
-        if (game.phase === 'playing') questProgressRef.current(game.getQuestRunStats());
+        // Quest progress only counts toward the daily record in solo runs —
+        // battle pickups must not complete (or push totals past) quests.
+        if (game.phase === 'playing' && game.mode === 'solo') questProgressRef.current(game.getQuestRunStats());
       }
     };
     raf = requestAnimationFrame(loop);

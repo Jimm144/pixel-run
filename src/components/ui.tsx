@@ -31,7 +31,7 @@ export function PixelButton({
       style={style}
       className={cn(
         'font-pixel border-2 uppercase leading-none tracking-wide transition-[transform,box-shadow,background-color,border-color,color] duration-75 active:translate-x-[3px] active:translate-y-[3px]',
-        small ? 'px-3 py-2 text-[8px]' : 'px-5 py-3.5 text-[11px]',
+        small ? 'px-3 py-2 text-[10px]' : 'px-5 py-3 text-[10px]',
         styles,
         className,
       )}
@@ -55,7 +55,7 @@ export function Panel({ children, className }: { children: ReactNode; className?
   return (
     <div
       className={cn(
-        'relative border-2 border-[#3ef2c8]/70 bg-[#100722] p-5 shadow-[4px_4px_0_#06020c]',
+        'relative border-2 border-[#3ef2c8] bg-[#0e071e] p-5 shadow-[4px_4px_0_#06020c]',
         className,
       )}
     >
@@ -67,8 +67,8 @@ export function Panel({ children, className }: { children: ReactNode; className?
 export function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div className="flex flex-col items-center gap-1.5 border-2 border-[#2c1f4d] bg-[#0d0619] px-2 py-2">
-      <span className="font-pixel text-[7px] text-[#6f5fa8]">{label}</span>
-      <span className="font-pixel text-[11px]" style={{ color: color ?? '#ffffff' }}>
+      <span className="font-pixel text-[8px] text-[#9d8fd6]">{label}</span>
+      <span className="font-pixel text-[10px]" style={{ color: color ?? '#ffffff' }}>
         {value}
       </span>
     </div>

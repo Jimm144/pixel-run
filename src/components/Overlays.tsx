@@ -32,7 +32,7 @@ function ControlHint({ kind, keys, danger = false }: { kind: ControlIconKind; ke
       <span className={danger ? 'text-[#ff4d6d]' : 'text-[#3ef2c8]'}>
         <ControlIcon kind={kind} />
       </span>
-      <p className={`truncate font-pixel text-[7px] leading-[1.7] tablet:text-[9px] ${danger ? 'text-[#ff4d6d]' : 'text-[#3ef2c8]'}`}>
+      <p className={`truncate font-pixel text-[8px] leading-[1.7] ${danger ? 'text-[#ff4d6d]' : 'text-[#3ef2c8]'}`}>
         {keys}
       </p>
     </div>
@@ -115,6 +115,65 @@ function PixelShirtIcon({ className = 'h-5 w-5 sm:h-6 sm:w-6' }: { className?: s
   );
 }
 
+function PixelSwordsIcon({ className = 'h-5 w-5 sm:h-6 sm:w-6' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} fill="currentColor" shapeRendering="crispEdges" aria-hidden="true">
+      {/* --- SWORD 1: Top-Left to Bottom-Right --- */}
+      {/* Pointy Tip */}
+      <rect x="0" y="0" width="2" height="1" />
+      <rect x="0" y="1" width="1" height="1" />
+      {/* Broad Double-Edged Blade */}
+      <rect x="1" y="1" width="2" height="2" />
+      <rect x="2" y="2" width="2" height="2" />
+      <rect x="3" y="3" width="2" height="2" />
+      <rect x="4" y="4" width="2" height="2" />
+      <rect x="5" y="5" width="2" height="2" />
+      <rect x="6" y="6" width="2" height="2" />
+      <rect x="7" y="7" width="2" height="2" />
+      {/* Broad Angled Crossguard / Quillons */}
+      <rect x="7" y="9" width="3" height="1" />
+      <rect x="6" y="10" width="2" height="1" />
+      <rect x="5" y="11" width="1" height="2" />
+      <rect x="9" y="7" width="1" height="3" />
+      <rect x="10" y="6" width="1" height="2" />
+      <rect x="11" y="5" width="2" height="1" />
+      {/* Grip / Hilt */}
+      <rect x="9" y="9" width="2" height="2" />
+      <rect x="11" y="11" width="2" height="2" />
+      {/* Large Pommel */}
+      <rect x="13" y="13" width="3" height="3" />
+      <rect x="14" y="12" width="1" height="1" />
+      <rect x="12" y="14" width="1" height="1" />
+
+      {/* --- SWORD 2: Top-Right to Bottom-Left --- */}
+      {/* Pointy Tip */}
+      <rect x="14" y="0" width="2" height="1" />
+      <rect x="15" y="1" width="1" height="1" />
+      {/* Broad Double-Edged Blade */}
+      <rect x="13" y="1" width="2" height="2" />
+      <rect x="12" y="2" width="2" height="2" />
+      <rect x="11" y="3" width="2" height="2" />
+      <rect x="10" y="4" width="2" height="2" />
+      <rect x="9" y="5" width="2" height="2" />
+      <rect x="8" y="6" width="2" height="2" />
+      {/* Broad Angled Crossguard / Quillons */}
+      <rect x="6" y="7" width="1" height="3" />
+      <rect x="5" y="6" width="1" height="2" />
+      <rect x="3" y="5" width="2" height="1" />
+      <rect x="6" y="9" width="3" height="1" />
+      <rect x="8" y="10" width="2" height="1" />
+      <rect x="10" y="11" width="1" height="2" />
+      {/* Grip / Hilt */}
+      <rect x="5" y="9" width="2" height="2" />
+      <rect x="3" y="11" width="2" height="2" />
+      {/* Large Pommel */}
+      <rect x="0" y="13" width="3" height="3" />
+      <rect x="1" y="12" width="1" height="1" />
+      <rect x="3" y="14" width="1" height="1" />
+    </svg>
+  );
+}
+
 function GladiatorPreview() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -147,13 +206,13 @@ function DiscordPromo({ onClaim, onDismiss }: { onClaim: () => void; onDismiss: 
         <GladiatorPreview />
       </div>
       <div className="min-w-0 flex-1 pr-3">
-        <p className="font-pixel text-[7px] leading-[1.6] text-[#ffd166] tablet:text-[8px]">
+        <p className="font-pixel text-[8px] leading-[1.6] text-[#ffd166]">
           JOIN THE DISCORD TO GET THE LEGENDARY GLADIATOR SKIN
         </p>
         <button
           type="button"
           onClick={onClaim}
-          className="mt-2 border-2 border-[#08040f] bg-[#5865f2] px-2 py-1 font-pixel text-[7px] text-white shadow-[2px_2px_0_#08040f] hover:bg-[#7289da] active:translate-x-[1px] active:translate-y-[1px]"
+          className="mt-2 border-2 border-[#08040f] bg-[#5865f2] px-3 py-1.5 font-pixel text-[8px] text-white shadow-[2px_2px_0_#08040f] hover:bg-[#7289da] active:translate-x-[1px] active:translate-y-[1px]"
         >
           JOIN DISCORD
         </button>
@@ -201,6 +260,7 @@ export function StartScreen({
   questOnDayRollover,
   questOnShare,
   onOpenSkins,
+  onOpenBattle,
   showDiscordPromo,
   onDiscordPromoClaim,
   onDiscordPromoDismiss,
@@ -222,6 +282,7 @@ export function StartScreen({
   questOnDayRollover?: () => void;
   questOnShare?: () => void;
   onOpenSkins?: () => void;
+  onOpenBattle?: () => void;
   showDiscordPromo?: boolean;
   onDiscordPromoClaim?: () => void;
   onDiscordPromoDismiss?: () => void;
@@ -231,11 +292,11 @@ export function StartScreen({
 }) {
   return (
     <div
-      className="absolute inset-0 z-10 flex cursor-default items-start justify-center overflow-y-auto bg-[#08040f]/88 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
+      className="absolute inset-0 z-10 flex cursor-default items-start justify-center overflow-y-auto bg-[#08040f]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
     >
       <div className="my-auto flex w-full max-w-[420px] flex-col items-center gap-3 tablet:max-w-[500px]">
         <div className="text-center">
-          <h1 className="font-pixel text-[26px] leading-none drop-shadow-[0_4px_0_#08040f] sm:text-[34px] tablet:text-[44px]">
+          <h1 className="font-pixel text-[20px] leading-none drop-shadow-[0_4px_0_#08040f] sm:text-[28px] tablet:text-[36px]">
             <span className="animate-title block text-[#3ef2c8]">PIXEL</span>
             <span className="animate-title-2 block text-[#ff4d6d]">RUN</span>
           </h1>
@@ -265,7 +326,7 @@ export function StartScreen({
                 </>
               )}
             </div>
-            <div className="mt-1 flex w-full items-center justify-center gap-4 border-t-2 border-[#221741] pt-3 font-pixel text-[8px] text-[#6f5fa8] tablet:text-[10px]">
+            <div className="mt-1 flex w-full items-center justify-center gap-4 border-t-2 border-[#251842] pt-3 font-pixel text-[8px] text-[#9d8fd6] tablet:text-[10px]">
               <span>LAST RUN <span className="text-[#9d8fd6]">{pad(lastRun, 6)}</span></span>
               <span>BEST <span className="text-[#ffd166]">{pad(best, 6)}</span></span>
             </div>
@@ -279,10 +340,10 @@ export function StartScreen({
           <button
             onClick={(e) => { e.stopPropagation(); onToggleMusic(); }}
             aria-pressed={musicOn}
-            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] tablet:px-5 tablet:py-3 tablet:text-[10px] ${
+            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,background-color,border-color,color] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] tablet:px-5 tablet:py-3 tablet:text-[10px] ${
               musicOn
-                ? 'border-[#3ef2c8]/40 bg-[#3ef2c8]/10 text-[#3ef2c8]'
-                : 'border-[#6f5fa8]/30 bg-[#0d0619] text-[#6f5fa8]'
+                ? 'border-[#3ef2c8]/40 bg-[#3ef2c8]/10 text-[#3ef2c8] hover:bg-[#3ef2c8]/20'
+                : 'border-[#9d8fd6]/30 bg-[#0d0619] text-[#9d8fd6] hover:border-[#9d8fd6]/60'
             }`}
           >
             <svg viewBox="0 0 16 16" className="h-3 w-3" fill="currentColor">
@@ -305,10 +366,10 @@ export function StartScreen({
           <button
             onClick={(e) => { e.stopPropagation(); onToggleSfx(); }}
             aria-pressed={sfxOn}
-            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] tablet:px-5 tablet:py-3 tablet:text-[10px] ${
+            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,background-color,border-color,color] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] tablet:px-5 tablet:py-3 tablet:text-[10px] ${
               sfxOn
-                ? 'border-[#ffd166]/40 bg-[#ffd166]/10 text-[#ffd166]'
-                : 'border-[#6f5fa8]/30 bg-[#0d0619] text-[#6f5fa8]'
+                ? 'border-[#ffd166]/40 bg-[#ffd166]/10 text-[#ffd166] hover:bg-[#ffd166]/20'
+                : 'border-[#9d8fd6]/30 bg-[#0d0619] text-[#9d8fd6] hover:border-[#9d8fd6]/60'
             }`}
           >
             <svg viewBox="0 0 16 16" className="h-3 w-3" fill="currentColor">
@@ -329,9 +390,20 @@ export function StartScreen({
           </button>
         </div>
         <div className="flex w-full max-w-[420px] items-stretch gap-2 tablet:max-w-[500px]">
+          {onOpenBattle && (
+            <button
+              type="button"
+              onClick={onOpenBattle}
+              aria-label="Multiplayer Battle"
+              title="Multiplayer Battle"
+              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[#ff4d6d]/70 bg-[#1c0812] text-[#ff4d6d] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,background-color] duration-75 hover:bg-[#ff4d6d]/20 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
+            >
+              <PixelSwordsIcon className="h-5 w-5 sm:h-6 sm:w-6" />
+            </button>
+          )}
           <PixelButton
             onClick={onStart}
-            className="flex flex-1 items-center justify-center gap-3 py-3.5 text-[11px] tablet:py-4 tablet:text-[14px]"
+            className="flex flex-1 items-center justify-center gap-3 py-3.5 text-[10px] tablet:py-4 tablet:text-[12px]"
           >
             <PlayIcon />
             <span>START RUN</span>
@@ -342,7 +414,7 @@ export function StartScreen({
               onClick={onOpenSkins}
               aria-label="Character Locker"
               title="Character Locker"
-              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[#3ef2c8]/60 bg-[#061815] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,filter] duration-75 hover:-translate-y-[1px] hover:brightness-125 hover:shadow-[4px_4px_0_#08040f] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
+              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[#3ef2c8]/60 bg-[#061815] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,background-color] duration-75 hover:bg-[#3ef2c8]/20 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
             >
               <PixelShirtIcon className="h-5 w-5 sm:h-6 sm:w-6" />
             </button>
@@ -354,20 +426,20 @@ export function StartScreen({
             target="_blank"
             rel="noreferrer noopener"
             onClick={(e) => e.stopPropagation()}
-            className="font-pixel text-[7px] text-[#5c4f8e] transition-colors hover:text-[#9d8fd6] tablet:text-[9px]"
+            className="font-pixel text-[8px] text-[#9d8fd6] transition-colors hover:text-[#ffffff] tablet:text-[10px]"
           >
             GITHUB
           </a>
           {onExportSave && (
             <>
-              <span className="text-[7px] text-[#332454]">|</span>
+              <span className="text-[8px] text-[#332454]">|</span>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onExportSave();
                 }}
-                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[7px] text-[#ffd166]/70 transition-colors hover:text-[#ffd166] tablet:text-[9px]"
+                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[8px] text-[#ffd166]/70 transition-colors hover:text-[#ffd166] tablet:text-[10px]"
               >
                 <span>SAVE</span>
                 <PixelArrow dir="down" />
@@ -376,14 +448,14 @@ export function StartScreen({
           )}
           {onImportSave && (
             <>
-              <span className="text-[7px] text-[#332454]">|</span>
+              <span className="text-[8px] text-[#332454]">|</span>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onImportSave();
                 }}
-                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[7px] text-[#c98cff]/70 transition-colors hover:text-[#c98cff] tablet:text-[9px]"
+                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[8px] text-[#c98cff]/70 transition-colors hover:text-[#c98cff] tablet:text-[10px]"
               >
                 <span>LOAD</span>
                 <PixelArrow dir="up" />
@@ -392,14 +464,14 @@ export function StartScreen({
           )}
           {onCheckUpdate && (
             <>
-              <span className="text-[7px] text-[#332454]">|</span>
+              <span className="text-[8px] text-[#332454]">|</span>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onCheckUpdate();
                 }}
-                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[7px] text-[#3ef2c8]/70 transition-colors hover:text-[#3ef2c8] tablet:text-[9px]"
+                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[8px] text-[#3ef2c8]/70 transition-colors hover:text-[#3ef2c8] tablet:text-[10px]"
               >
                 <span>UPDATE</span>
                 <PixelReloadIcon />
@@ -439,9 +511,9 @@ function VolumeStepper({ label, value, onChange }: { label: string; value: numbe
           type="button"
           aria-label={isMuted ? `Unmute ${label}` : `Mute ${label}`}
           onClick={toggleMute}
-          className={`flex items-center justify-center border-2 px-1.5 py-1 font-pixel text-[7px] transition-colors ${
+          className={`flex items-center justify-center border-2 px-1.5 py-1 font-pixel text-[8px] transition-colors ${
             isMuted
-              ? 'border-[#2c1f4d] bg-[#08040f] text-[#6f5fa8]/50 opacity-60 hover:border-[#6f5fa8]/60 hover:text-[#9d8fd6]'
+              ? 'border-[#2c1f4d] bg-[#08040f] text-[#9d8fd6]/50 opacity-60 hover:border-[#9d8fd6]/60 hover:text-[#9d8fd6]'
               : 'border-[#3ef2c8]/60 bg-[#3ef2c8]/10 text-[#3ef2c8] hover:bg-[#3ef2c8]/20 active:bg-[#3ef2c8]/30'
           }`}
           title={isMuted ? `Unmute ${label} (${Math.round(prevVolRef.current * 100)}%)` : `Mute ${label}`}
@@ -458,7 +530,7 @@ function VolumeStepper({ label, value, onChange }: { label: string; value: numbe
             )}
           </svg>
         </button>
-        <span className="font-pixel text-[7px] text-[#9d8fd6]">{label}</span>
+        <span className="font-pixel text-[8px] text-[#9d8fd6]">{label}</span>
       </div>
       <div className="flex items-center gap-1.5">
         <button
@@ -466,22 +538,22 @@ function VolumeStepper({ label, value, onChange }: { label: string; value: numbe
           aria-label={`${label} down`}
           disabled={isMuted}
           onClick={() => step(-10)}
-          className={`border-2 px-2 py-1 font-pixel text-[8px] transition-colors ${
+          className={`border-2 px-2 py-1 font-pixel text-[10px] transition-colors ${
             isMuted
-              ? 'border-[#2c1f4d] bg-[#08040f] text-[#6f5fa8]/40 opacity-40 cursor-not-allowed'
+              ? 'border-[#2c1f4d] bg-[#08040f] text-[#9d8fd6]/40 opacity-40 cursor-not-allowed'
               : 'border-[#3ef2c8]/50 bg-[#0d0619] text-[#3ef2c8] hover:bg-[#3ef2c8]/10 active:bg-[#3ef2c8]/20'
           }`}
         >
           -
         </button>
-        <span className={`w-11 text-center font-pixel text-[8px] ${isMuted ? 'text-[#6f5fa8]' : 'text-[#e9e2ff]'}`}>
+        <span className={`w-11 text-center font-pixel text-[10px] ${isMuted ? 'text-[#9d8fd6]' : 'text-[#e9e2ff]'}`}>
           {pct}%
         </span>
         <button
           type="button"
           aria-label={`${label} up`}
           onClick={() => step(10)}
-          className="border-2 border-[#3ef2c8]/50 bg-[#0d0619] px-2 py-1 font-pixel text-[8px] text-[#3ef2c8] transition-colors hover:bg-[#3ef2c8]/10 active:bg-[#3ef2c8]/20"
+          className="border-2 border-[#3ef2c8]/50 bg-[#0d0619] px-2 py-1 font-pixel text-[10px] text-[#3ef2c8] transition-colors hover:bg-[#3ef2c8]/10 active:bg-[#3ef2c8]/20"
         >
           +
         </button>
@@ -519,7 +591,7 @@ export function PauseScreen({
       onPointerDown={() => sfx.unlock()}
     >
       <Panel className="w-full max-w-[300px] p-4 tablet:max-w-[420px] tablet:p-6">
-        <h2 className="mb-3 text-center font-pixel text-[16px] text-[#3ef2c8] tablet:mb-4 tablet:text-[18px]">PAUSED</h2>
+        <h2 className="mb-3 text-center font-pixel text-[16px] text-[#3ef2c8] tablet:mb-4 tablet:text-[20px]">PAUSED</h2>
         <div className="mb-3 grid grid-cols-2 gap-2 tablet:mb-4 tablet:gap-3">
           <Stat label="SCORE" value={pad(stats.score, 6)} color="#ffffff" />
           <Stat label="DIST" value={stats.meters + 'M'} color="#3ef2c8" />
@@ -585,19 +657,19 @@ export function GameOverScreen({
       onPointerDown={() => sfx.unlock()}
     >
       <div className="my-auto flex w-full max-w-[380px] flex-col items-center gap-3 tablet:max-w-[460px]">
-        <h2 className="animate-shake-in font-pixel text-[22px] text-[#ff4d6d] drop-shadow-[0_4px_0_#08040f] tablet:text-[28px]">
+        <h2 className="animate-shake-in font-pixel text-[20px] text-[#ff4d6d] drop-shadow-[0_4px_0_#08040f] tablet:text-[28px]">
           WASTED
         </h2>
         <Panel className="w-full">
           <div className="mb-3 text-center">
-            <p className="font-pixel text-[7px] text-[#6f5fa8] tablet:text-[9px]">
+            <p className="font-pixel text-[8px] text-[#9d8fd6]">
               {newBest ? 'NEW PERSONAL BEST' : 'FINAL SCORE'}
             </p>
-            <p className="font-pixel text-[24px] text-[#ffd166] drop-shadow-[0_3px_0_#08040f] tablet:text-[32px]">
+            <p className="font-pixel text-[20px] text-[#ffd166] drop-shadow-[0_3px_0_#08040f] tablet:text-[28px]">
               {pad(stats.score, 6)}
             </p>
             {!newBest && (
-              <p className="mt-2 font-pixel text-[7px] text-[#6f5fa8] tablet:text-[9px]">
+              <p className="mt-2 font-pixel text-[8px] text-[#9d8fd6]">
                 BEST <span className="text-[#3ef2c8]">{pad(best, 6)}</span>
               </p>
             )}
@@ -612,11 +684,11 @@ export function GameOverScreen({
         </Panel>
         <div className="flex w-full max-w-[380px] flex-col items-center gap-2 tablet:max-w-[460px]">
           <div className="flex w-full gap-2">
-            <PixelButton onClick={onRestart} className="flex flex-[2] items-center justify-center py-3 text-[11px] tablet:py-3.5 tablet:text-[13px]">
+            <PixelButton onClick={onRestart} className="flex flex-[2] items-center justify-center py-3 text-[10px] tablet:py-3.5 tablet:text-[12px]">
               <RetryIcon className="mr-2 inline-block h-[16px] w-[16px] align-[-3px] tablet:h-[20px] tablet:w-[20px]" />
               RETRY
             </PixelButton>
-            <PixelButton variant="ghost" onClick={onMenu} className="flex flex-1 items-center justify-center py-3 text-[11px] tablet:py-3.5 tablet:text-[13px]">
+            <PixelButton variant="ghost" onClick={onMenu} className="flex flex-1 items-center justify-center py-3 text-[10px] tablet:py-3.5 tablet:text-[12px]">
               MENU
             </PixelButton>
           </div>
@@ -625,7 +697,7 @@ export function GameOverScreen({
               variant="ghost"
               onClick={onShare}
               small
-              className="w-full flex items-center justify-center py-2.5 border-[#ffd166]/70 bg-[#ffd166]/10 text-[#ffd166] hover:bg-[#ffd166]/20 hover:text-[#fff4b8] hover:border-[#ffd166] tablet:py-3 tablet:text-[10px]"
+              className="w-full flex items-center justify-center py-2.5 border-[#ffd166]/70 bg-[#ffd166]/10 text-[#ffd166] hover:bg-[#ffd166]/20 hover:text-[#fff4b8] hover:border-[#ffd166] tablet:py-3"
             >
               <ShareIcon className="mr-1.5 inline-block h-[12px] w-[12px] align-[-2px] tablet:h-[15px] tablet:w-[15px]" />
               SHARE SCORE

@@ -62,7 +62,7 @@ export class Renderer {
    *  then scrolled with integer drawImage offsets — no live sampling, no
    *  subpixel crawl, no antialiased diagonals. */
   private bandCache = new Map<string, HTMLCanvasElement>();
-  /** Sun disc + glow, baked whenever the sky palette changes. */
+  /** Sun disc, baked whenever the sky palette changes. */
   private sunSprite: HTMLCanvasElement | null = null;
   /** Moon phase sprites (Full -> Waning Gibbous -> Half -> Crescent -> Eclipse), baked whenever the sky palette changes. */
   private moonPhaseSprites: HTMLCanvasElement[] = [];
@@ -87,6 +87,9 @@ export class Renderer {
   private hudGemsText = '';
   private hudComboKey = '';
   private hudComboStr = '';
+  /** Per-opponent smoothed render positions (opponent px/py only move on tick
+   *  arrival every ~33-66ms; exponential lerp hides the steps). */
+  private oppSmooth = new Map<string, { x: number; y: number }>();
 
   constructor(
     private g: RenderHost,
@@ -110,6 +113,7 @@ export class Renderer {
     this.platI = 0;
     this.platNI = 1;
     this.platformCaches.clear();
+    this.oppSmooth.clear();
   }
 
   /** Called when the canvas size changes — drops the size-dependent art
@@ -119,8 +123,12 @@ export class Renderer {
     this.bandCache.clear();
     this.platformCaches.clear();
     // Re-seed the motes so a viewport shrink doesn't leave most of them
-    // below the visible area (they were sampled once against the old VH).
-    for (const m of this.motes) m[1] = rnd(0, VH);
+    // below the visible area (they were sampled once against the old VH),
+    // and so a viewport grow doesn't leave them clustered on the old left edge.
+    for (const m of this.motes) {
+      m[0] = rnd(0, VW);
+      m[1] = rnd(0, VH);
+    }
   }
 
   setHudScale(v: number) {
@@ -151,14 +159,6 @@ export class Renderer {
     cv.height = size;
     const c = cv.getContext('2d')!;
     const r = 24;
-    c.globalAlpha = 0.14;
-    c.fillStyle = this.g.zone.sunB;
-    for (let y = -gr; y <= gr; y++) {
-      const hw = Math.round(Math.sqrt(Math.max(0, gr * gr - y * y)));
-      if (hw <= 0) continue;
-      c.fillRect(gr - hw, gr + y, hw * 2, 1);
-    }
-    c.globalAlpha = 1;
     for (let y = -r; y <= r; y++) {
       const hw = Math.round(Math.sqrt(Math.max(0, r * r - y * y)));
       if (hw < 2) continue;
@@ -190,26 +190,7 @@ export class Renderer {
       const c = cv.getContext('2d')!;
       const isEclipse = phase === 4;
 
-      // 1. Soft atmospheric lunar aura
-      if (isEclipse) {
-        c.globalAlpha = 0.22;
-        c.fillStyle = '#ff2e63';
-        for (let y = -gr; y <= gr; y++) {
-          const hw = Math.round(Math.sqrt(Math.max(0, gr * gr - y * y)));
-          if (hw <= 0) continue;
-          c.fillRect(gr - hw, gr + y, hw * 2, 1);
-        }
-      } else {
-        c.globalAlpha = 0.12;
-        c.fillStyle = '#b8e2ff';
-        for (let y = -gr; y <= gr; y++) {
-          const hw = Math.round(Math.sqrt(Math.max(0, gr * gr - y * y)));
-          if (hw <= 0) continue;
-          c.fillRect(gr - hw, gr + y, hw * 2, 1);
-        }
-      }
-
-      // 2. Translucent spherical earthshine disc (shadow backing)
+      // 1. Translucent spherical earthshine disc (shadow backing)
       c.globalAlpha = isEclipse ? 0.95 : 0.28;
       c.fillStyle = isEclipse ? '#09030d' : '#080d1e';
       for (let y = -r; y <= r; y++) {
@@ -219,7 +200,7 @@ export class Renderer {
       }
       c.globalAlpha = 1;
 
-      // 3. Moon illuminated surface with curved phase terminator & craters
+      // 2. Moon illuminated surface with curved phase terminator & craters
       const angle = phaseAngles[phase];
 
       for (let y = -r; y <= r; y++) {
@@ -229,12 +210,11 @@ export class Renderer {
         const yFrac = (y + r) / (2 * r);
 
         if (isEclipse) {
-          // Blood Moon: fiery glowing rim with deep eclipsed dark center
+          // Blood Moon: deep eclipsed dark center with a flat red rim
           for (let x = -hw; x <= hw; x++) {
             const d_sq = x * x + y * y;
-            if (d_sq >= 16 * 16 && d_sq <= 24 * 24) {
-              const rimFrac = (Math.sqrt(d_sq) - 16) / 8;
-              c.fillStyle = mix('#ff2e63', '#ffd166', rimFrac * 0.7);
+            if (d_sq >= 22 * 22 && d_sq <= 24 * 24) {
+              c.fillStyle = '#ff2e63';
               c.fillRect(gr + x, gr + y, 1, 1);
             } else if (d_sq >= 10 * 10) {
               c.fillStyle = '#4a0822';
@@ -289,7 +269,7 @@ export class Renderer {
     c.fillRect(16, 1, 1, 15);
 
     if (kind === 'shield') {
-      // 1. Aegis Shield: dark base, glowing cyan rim, radiant center crest
+      // 1. Aegis Shield: dark base, cyan rim, center crest
       c.fillStyle = '#165e68';
       c.fillRect(5, 4, 8, 1);
       c.fillRect(4, 5, 10, 5);
@@ -472,7 +452,7 @@ export class Renderer {
       c.globalAlpha = 1;
     }
 
-    if ((this.g.countdown > 0 || this.g.goTimer > 0) && this.g.phase !== 'dead') this.drawCountdown();
+    if ((this.g.countdown > 0 || this.g.goTimer > 0) && this.g.phase !== 'dead' && this.g.phase !== 'over') this.drawCountdown();
   }
 
   /** Zoom-out punch as the death slow-mo opens: 1.04 easing back to 1 over
@@ -991,7 +971,7 @@ export class Renderer {
     const top = ground - h;
 
     if (roll < 0.25) {
-      // 1. Antenna slab megatower with glowing beacon
+      // 1. Antenna slab megatower with beacon lamp
       c.fillRect(Math.round(nx), top, bw, h + 2);
       c.fillRect(Math.round(nx + bw * 0.45), top - 12, 3, 12);
       c.fillStyle = tipCol;
@@ -1309,18 +1289,13 @@ export class Renderer {
       const y = baseY + press;
       const groundY = baseY + 9;
       if (s.mega) {
-        // mega pad — big, golden, glowing
+        // mega pad — big, golden
         c.fillStyle = '#3a2010';
         c.fillRect(x + 1, baseY + 6, 16, Math.max(1, groundY - (baseY + 6)));
         c.fillStyle = '#ffb03e';
         c.fillRect(x, y, 18, 5);
         c.fillStyle = '#ffe9a0';
         c.fillRect(x + 2, y + 1, 14, 1);
-        c.globalAlpha = 0.3 + 0.25 * Math.sin(this.g.frame * 0.18);
-        c.fillStyle = '#ffd166';
-        c.fillRect(x - 2, y - 4, 22, 3);
-        c.fillRect(x - 2, Math.min(groundY - 2, y + 5), 22, 2);
-        c.globalAlpha = 1;
       } else {
         c.fillStyle = '#5b2f6e';
         c.fillRect(x + 1, baseY + 5, 12, Math.max(1, groundY - (baseY + 5)));
@@ -1373,13 +1348,6 @@ export class Renderer {
       const bob = Math.sin(k.t * 0.9) * 1.6;
       const y = Math.round(k.y + bob);
       if (k.gem) {
-        const pulse = (Math.sin(k.t * 1.6) + 1) * 0.5;
-        // Soft aura glow
-        c.globalAlpha = 0.2 + pulse * 0.2;
-        c.fillStyle = '#7ef7ff';
-        c.fillRect(x - 5, y - 5, 10, 10);
-        c.globalAlpha = 1;
-
         // Clean pixel diamond outline
         c.fillStyle = '#08121e';
         c.fillRect(x - 4, y - 4, 8, 8);
@@ -1468,12 +1436,6 @@ export class Renderer {
       const x = Math.round(power.x - cam);
       if (x > VW + 14 || x < -14) continue;
       const y = Math.round(power.y - Math.max(0, Math.sin(power.t)) * 2);
-      const col = POWERUP_COLORS[power.kind];
-      const pulse = 0.28 + (Math.sin(power.t * 1.7) + 1) * 0.1;
-      c.globalAlpha = pulse;
-      c.fillStyle = col;
-      c.fillRect(x - 9, y - 9, 18, 18);
-      c.globalAlpha = 1;
       c.drawImage(this.powerupSprite(power.kind), x - 9, y - 9);
     }
   }
@@ -1604,9 +1566,6 @@ export class Renderer {
 
   private drawPowerUpEffects(c: CanvasRenderingContext2D, cx: number, cy: number) {
     if (this.g.shielded) {
-      c.globalAlpha = 0.12;
-      c.fillStyle = '#7ef7ff';
-      c.fillRect(cx - 7, cy - 7, 14, 14);
       c.globalAlpha = 0.62 + 0.12 * Math.sin(this.g.frame * 0.16);
       c.fillRect(cx - 6, cy - 9, 12, 1);
       c.fillRect(cx - 6, cy + 8, 12, 1);
@@ -1736,6 +1695,90 @@ export class Renderer {
       c.fillRect(ix - 3, 4, 7, 2);
       c.fillRect(ix - 2, 2, 5, 2);
       c.fillRect(ix - 1, 0, 3, 2);
+    }
+
+    /* Local Battle Players (P1 - P4) */
+    if (this.g.mode === 'local' && this.g.localPlayers) {
+      this.g.localPlayers.forEach((p, idx) => {
+        if (!p.isAlive) return;
+        const pCx = Math.round(p.px - cam + PLAYER_W / 2);
+        const pCy = Math.round(p.py + PLAYER_H / 2);
+        const badgeLabel = p.name ? p.name.substring(0, 8) : `P${idx + 1}`;
+
+        if (idx === 0) {
+          // P1 Badge above player 1
+          drawTextCentered(c, badgeLabel, cx, cy - PLAYER_H / 2 - 8, 1, p.color || '#3ef2c8', '#150a24');
+        } else {
+          c.save();
+          c.translate(pCx, pCy);
+          if (p.spin > 0) c.rotate(p.spin * Math.PI * 2);
+          // sx/sy lerp asymptotically toward 1 in the engine, so compare with
+          // an epsilon — otherwise a perpetual near-1 scale keeps the sprite
+          // on subpixel offsets and it shimmers every frame.
+          const psx = Math.abs(p.sx - 1) < 0.05 ? 1 : p.sx;
+          const psy = Math.abs(p.sy - 1) < 0.05 ? 1 : p.sy;
+          if (psx !== 1 || psy !== 1) c.scale(psx, psy);
+
+          drawPlayerSprite(c, 0, 0, {
+            skinId: p.skinId || 'rob',
+            frame: this.g.frame,
+            run: p.onGround ? Math.floor(p.animT) % 4 : -1,
+            onGround: p.onGround,
+            diving: p.diving,
+            vx: p.vx,
+          });
+
+          c.restore();
+
+          // P2 / P3 / P4 Badge
+          drawTextCentered(c, badgeLabel, pCx, pCy - PLAYER_H / 2 - 8, 1, p.color || '#ffd166', '#150a24');
+        }
+      });
+    }
+
+    /* Online Multiplayer Opponent Ghosts */
+    if (this.g.mode === 'online' && this.g.opponentStates) {
+      if (this.oppSmooth.size > this.g.opponentStates.size + 4) {
+        for (const k of this.oppSmooth.keys()) if (!this.g.opponentStates.has(k)) this.oppSmooth.delete(k);
+      }
+      for (const opp of this.g.opponentStates.values()) {
+        if (!opp.isAlive || opp.px === undefined || opp.py === undefined) continue;
+        // Smooth the rendered position toward the latest tick. Big jumps
+        // (respawn, throttled-tab catch-up) snap straight there instead of
+        // lerping across the screen. After match end the world is frozen, so
+        // snap too — no smoothing against a still target.
+        let s = this.oppSmooth.get(opp.peerId);
+        if (!s) {
+          s = { x: opp.px, y: opp.py };
+          this.oppSmooth.set(opp.peerId, s);
+        } else if (this.g.phase === 'over' || Math.abs(opp.px - s.x) > 40 || Math.abs(opp.py - s.y) > 60) {
+          s.x = opp.px;
+          s.y = opp.py;
+        } else {
+          s.x += (opp.px - s.x) * 0.35;
+          s.y += (opp.py - s.y) * 0.35;
+        }
+        const oppCx = Math.round(s.x - cam + PLAYER_W / 2);
+        const oppCy = Math.round(s.y + PLAYER_H / 2);
+
+        c.save();
+        c.translate(oppCx, oppCy);
+        c.globalAlpha = 0.75;
+
+        drawPlayerSprite(c, 0, 0, {
+          skinId: opp.skinId || 'bob',
+          frame: opp.frame ?? this.g.frame,
+          run: opp.run ?? -1,
+          onGround: opp.run !== -1,
+          diving: Boolean(opp.diving),
+          vx: opp.vx ?? 0,
+        });
+
+        c.globalAlpha = 0.9;
+        drawTextCentered(c, opp.name, 0, -PLAYER_H / 2 - 8, 1, '#ffd166', '#150a24');
+
+        c.restore();
+      }
     }
   }
 
@@ -1913,7 +1956,7 @@ export class Renderer {
     this.drawPowerUpHud();
 
     // 3. DISTANCE & GEMS (Top Right)
-    const rightMargin = mobile ? 45 : 8;
+    const rightMargin = mobile ? 54 : 8;
     if (this.hudM !== m) {
       this.hudM = m;
       this.hudMText = m + 'M';
@@ -1947,12 +1990,64 @@ export class Renderer {
     drawText(c, gtxt, gx0 + 9, gy, 1, '#3ef2c8', '#150a24');
 
     // 4. COMBO BAR
-    // On mobile / narrow screens, place below the top row (y = 44) centered in the open sky.
+    // On mobile / narrow screens, place below the top row (y = 56) centered in the open sky.
     // On wide desktop, place top center (y = 8).
     if (mobile || isNarrow) {
-      this.drawCombo(Math.round(W / 2), 44);
+      this.drawCombo(Math.round(W / 2), 56);
     } else {
       this.drawCombo(Math.round(W / 2), 8);
+    }
+
+    // 5. BATTLE LIVE STATUS
+    if (this.g.mode === 'local' && this.g.localPlayers && this.g.localPlayers.length > 0) {
+      const midX = Math.round(W / 2);
+      // Below the combo bar (y = 56, bar 65-72) on mobile / narrow screens.
+      const vsY = mobile || isNarrow ? 78 : 26;
+      const parts = this.g.localPlayers.map((p, idx) => ({
+        txt: `${p.name ? p.name.substring(0, 7) : `P${idx + 1}`}:${p.isAlive ? p.score : 'DEAD'}`,
+        col: p.isAlive ? (idx === 0 ? '#3ef2c8' : idx === 1 ? '#ffd166' : idx === 2 ? '#ff70a6' : '#7ef7ff') : '#6b5880',
+      }));
+
+      const sep = ' | ';
+      let totalW = 0;
+      parts.forEach((part, i) => {
+        totalW += textWidth(part.txt, 1);
+        if (i < parts.length - 1) totalW += textWidth(sep, 1);
+      });
+      let curX = midX - Math.floor(totalW / 2);
+
+      parts.forEach((part, i) => {
+        drawText(c, part.txt, curX, vsY, 1, part.col, '#150a24');
+        curX += textWidth(part.txt, 1);
+        if (i < parts.length - 1) {
+          drawText(c, sep, curX, vsY, 1, '#ffffff', '#150a24');
+          curX += textWidth(sep, 1);
+        }
+      });
+    } else if (this.g.mode === 'online' && this.g.opponentStates && this.g.opponentStates.size > 0) {
+      const midX = Math.round(W / 2);
+      const vsY = mobile || isNarrow ? 78 : 26;
+      const p1Score = this.g.score;
+      const firstOpp = this.g.opponentStates.values().next().value;
+      if (firstOpp) {
+        const p2Score = firstOpp.score;
+        const p1Ahead = p1Score >= p2Score;
+        const p1Col = p1Ahead ? '#3ef2c8' : '#ffd166';
+        const p2Col = !p1Ahead ? '#3ef2c8' : '#ff70a6';
+
+        const p1Txt = `YOU:${p1Score}`;
+        const vsTxt = ` VS `;
+        const p2Txt = `${firstOpp.name.slice(0, 6)}:${p2Score}`;
+
+        const totalW = textWidth(p1Txt, 1) + textWidth(vsTxt, 1) + textWidth(p2Txt, 1);
+        const startX = midX - Math.floor(totalW / 2);
+
+        drawText(c, p1Txt, startX, vsY, 1, p1Col, '#150a24');
+        const vsX = startX + textWidth(p1Txt, 1);
+        drawText(c, vsTxt, vsX, vsY, 1, '#ffffff', '#150a24');
+        const p2X = vsX + textWidth(vsTxt, 1);
+        drawText(c, p2Txt, p2X, vsY, 1, p2Col, '#150a24');
+      }
     }
 
     c.restore();

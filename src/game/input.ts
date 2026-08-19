@@ -8,6 +8,7 @@ export interface GamepadStateUpdate {
   diveReleased: boolean;
   diveHeld: boolean;
   moveRight: boolean;
+  moveLeft: boolean;
   pausePressed: boolean;
   confirmPressed: boolean;
   backPressed: boolean;
@@ -263,6 +264,7 @@ class InputManager {
       let jump = false;
       let dive = false;
       let moveRight = false;
+      let moveLeft = false;
       let pause = false;
       let confirm = false;
       let back = false;
@@ -288,12 +290,11 @@ class InputManager {
         // Jump: Cross / A (0), Square / X (2), R1 (5)
         const curJump = isPressed(0) || isPressed(2) || isPressed(5);
 
-        // Slam / Dive: Circle / B (1), L1 (4), R2 (7), Left Stick Down (axes[1] > 0.45), Right Stick Down (axes[3] > 0.45)
-        // L2 (6) is completely removed. R2 (7) is Slam / Dive.
+        // Slam / Dive: Circle / B (1), L1 (4), R2 (7), D-pad Down (13), Left Stick Down (axes[1] > 0.38), Right Stick Down (axes[3] > 0.38)
         const stickDown =
-          (typeof gp.axes[1] === 'number' && gp.axes[1] > 0.45) ||
-          (typeof gp.axes[3] === 'number' && gp.axes[3] > 0.45);
-        const curDive = isPressed(1) || isPressed(4) || isTriggerPressed(7) || stickDown;
+          (typeof gp.axes[1] === 'number' && gp.axes[1] > 0.38) ||
+          (typeof gp.axes[3] === 'number' && gp.axes[3] > 0.38);
+        const curDive = isPressed(1) || isPressed(4) || isPressed(13) || isTriggerPressed(7) || stickDown;
 
         // D-pad Right (15), Stick Right
         const curRight = isPressed(15) || (typeof gp.axes[0] === 'number' && gp.axes[0] > 0.35);
@@ -315,7 +316,7 @@ class InputManager {
         if (curJump) jump = true;
         if (curDive) dive = true;
         if (curRight) { moveRight = true; right = true; }
-        if (curLeft) left = true;
+        if (curLeft) { moveLeft = true; left = true; }
         if (curUp) up = true;
         if (curDown) down = true;
         if (curPause) pause = true;
@@ -358,6 +359,7 @@ class InputManager {
           diveReleased: !dive && this.prevDive,
           diveHeld: dive,
           moveRight,
+          moveLeft,
           pausePressed: pause && !this.prevPause,
           confirmPressed: confirm && !this.prevConfirm,
           backPressed: back && !this.prevBack,

@@ -402,12 +402,12 @@ export function SkinsModal({
       const pct = Math.min(100, Math.max(0, Math.round((cur / max) * 100)));
       return (
         <div className="w-full">
-          <div className="mb-1.5 flex justify-between font-pixel text-[6.5px] leading-none text-[#ffd166] sm:text-[7.5px]">
+          <div className="mb-1.5 flex justify-between font-pixel text-[8px] leading-none text-[#ffd166]">
             <span>{pct}%</span>
             <span>{cur}/{max}</span>
           </div>
           <div className="h-2 w-full overflow-hidden border border-[#59427e] bg-[#100722]">
-            <div className="h-full bg-gradient-to-r from-[#ffd166] to-[#ff4d6d] transition-all duration-200" style={{ width: `${pct}%` }} />
+            <div className="h-full bg-[#ffd166] transition-all duration-200" style={{ width: `${pct}%` }} />
           </div>
         </div>
       );
@@ -418,12 +418,12 @@ export function SkinsModal({
       const pct = Math.min(100, Math.max(0, Math.round((cur / max) * 100)));
       return (
         <div className="w-full">
-          <div className="mb-1.5 flex justify-between font-pixel text-[6.5px] leading-none text-[#ffd166] sm:text-[7.5px]">
+          <div className="mb-1.5 flex justify-between font-pixel text-[8px] leading-none text-[#ffd166]">
             <span>{pct}%</span>
             <span>{Math.floor(cur / 1000)}K/{Math.floor(max / 1000)}K</span>
           </div>
           <div className="h-2 w-full overflow-hidden border border-[#59427e] bg-[#100722]">
-            <div className="h-full bg-gradient-to-r from-[#ffd166] to-[#ff4d6d] transition-all duration-200" style={{ width: `${pct}%` }} />
+            <div className="h-full bg-[#ffd166] transition-all duration-200" style={{ width: `${pct}%` }} />
           </div>
         </div>
       );
@@ -434,12 +434,12 @@ export function SkinsModal({
       const pct = Math.min(100, Math.max(0, Math.round((cur / max) * 100)));
       return (
         <div className="w-full">
-          <div className="mb-1.5 flex justify-between font-pixel text-[6.5px] leading-none text-[#ffd166] sm:text-[7.5px]">
+          <div className="mb-1.5 flex justify-between font-pixel text-[8px] leading-none text-[#ffd166]">
             <span>{pct}%</span>
             <span>{Math.floor(cur / 1000)}K/{Math.floor(max / 1000)}K</span>
           </div>
           <div className="h-2 w-full overflow-hidden border border-[#59427e] bg-[#100722]">
-            <div className="h-full bg-gradient-to-r from-[#ffd166] to-[#ff4d6d] transition-all duration-200" style={{ width: `${pct}%` }} />
+            <div className="h-full bg-[#ffd166] transition-all duration-200" style={{ width: `${pct}%` }} />
           </div>
         </div>
       );
@@ -450,33 +450,33 @@ export function SkinsModal({
       const pct = Math.min(100, Math.max(0, Math.round((cur / max) * 100)));
       return (
         <div className="w-full">
-          <div className="mb-1.5 flex justify-between font-pixel text-[6.5px] leading-none text-[#ffd166] sm:text-[7.5px]">
+          <div className="mb-1.5 flex justify-between font-pixel text-[8px] leading-none text-[#ffd166]">
             <span>{pct}%</span>
             <span>{cur}/{max} SETS</span>
           </div>
           <div className="h-2 w-full overflow-hidden border border-[#59427e] bg-[#100722]">
-            <div className="h-full bg-gradient-to-r from-[#ffd166] to-[#ff4d6d] transition-all duration-200" style={{ width: `${pct}%` }} />
+            <div className="h-full bg-[#ffd166] transition-all duration-200" style={{ width: `${pct}%` }} />
           </div>
         </div>
       );
     }
     if (skin.unlock.type === 'moon') {
       return (
-        <div className="flex h-[20px] sm:h-[22px] w-full items-center justify-center border border-[#ff4d6d]/40 bg-[#25050f] px-1 text-center font-pixel text-[6px] text-[#ff4d6d]">
+        <div className="flex h-[20px] sm:h-[22px] w-full items-center justify-center border border-[#ff4d6d]/40 bg-[#25050f] px-1 text-center font-pixel text-[8px] text-[#ff4d6d]">
           {skin.unlock.desc}
         </div>
       );
     }
     if (skin.unlock.type === 'konami') {
       return (
-        <div className="flex h-[20px] sm:h-[22px] w-full items-center justify-center border border-[#c98cff]/40 bg-[#1c0830] px-1 text-center font-pixel text-[6px] text-[#c98cff]">
+        <div className="flex h-[20px] sm:h-[22px] w-full items-center justify-center border border-[#c98cff]/40 bg-[#1c0830] px-1 text-center font-pixel text-[8px] text-[#c98cff]">
           {skin.unlock.desc}
         </div>
       );
     }
     if (skin.unlock.type === 'save') {
       return (
-        <div className="flex h-[20px] sm:h-[22px] w-full items-center justify-center border border-[#ffd166]/40 bg-[#2b2005] px-1 text-center font-pixel text-[6px] text-[#ffd166]">
+        <div className="flex h-[20px] sm:h-[22px] w-full items-center justify-center border border-[#ffd166]/40 bg-[#2b2005] px-1 text-center font-pixel text-[8px] text-[#ffd166]">
           {skin.unlock.desc}
         </div>
       );
@@ -486,10 +486,10 @@ export function SkinsModal({
       return (
         <div
           title={skin.unlock.desc}
-          className={`flex min-h-[20px] w-full items-center justify-center border px-1 py-1 text-center font-pixel text-[6px] leading-tight ${
+          className={`flex min-h-[20px] w-full items-center justify-center border px-1 py-1 text-center font-pixel text-[8px] leading-tight ${
           active
             ? 'border-[#ff70a6]/60 bg-[#33081e] text-[#ff70a6]'
-            : 'border-[#453c60] bg-[#1c162e] text-[#6f5fa8]'
+            : 'border-[#453c60] bg-[#1c162e] text-[#9d8fd6]'
         }`}
         >
           {active ? 'EVENT LIVE' : 'LIMITED EVENT'}
@@ -498,7 +498,7 @@ export function SkinsModal({
     }
     if (skin.unlock.type === 'discord') {
       return (
-        <div className={`flex h-[20px] sm:h-[22px] w-full items-center justify-center border px-1 text-center font-pixel text-[6px] ${
+        <div className={`flex h-[20px] sm:h-[22px] w-full items-center justify-center border px-1 text-center font-pixel text-[8px] ${
           discordClaimed
             ? 'border-[#3ef2c8]/60 bg-[#092922] text-[#3ef2c8]'
             : 'border-[#5865f2]/60 bg-[#151942] text-[#9da9ff]'
@@ -514,29 +514,29 @@ export function SkinsModal({
     <div
       className={
         touch
-          ? 'fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#0d0619] p-3 text-white pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] tablet:items-center tablet:justify-center tablet:bg-[#08040f]/90 tablet:p-4'
-          : 'fixed inset-0 z-50 flex items-center justify-center bg-[#08040f]/90 p-3'
+          ? 'fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#0d0619] p-3 text-white pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] tablet:items-center tablet:justify-center tablet:bg-[#08040f]/80 tablet:p-4'
+          : 'fixed inset-0 z-50 flex items-center justify-center bg-[#08040f]/80 p-3'
       }
     >
       <div
         className={
           touch
-            ? 'flex h-full min-h-0 w-full flex-col bg-[#0d0619] p-0 text-white tablet:h-auto tablet:max-h-[92vh] tablet:max-w-[780px] tablet:border-4 tablet:border-[#3ef2c8] tablet:p-4 tablet:shadow-[0_0_0_4px_#08040f]'
-            : 'flex max-h-[94vh] w-full max-w-[840px] flex-col border-4 border-[#3ef2c8] bg-[#0d0619] p-4 text-white shadow-[0_0_0_4px_#08040f] tablet:max-w-[min(840px,calc(100vw-32px))]'
+            ? 'flex h-full min-h-0 w-full flex-col bg-[#0e071e] p-0 text-white tablet:h-auto tablet:max-h-[92vh] tablet:max-w-[780px] tablet:border-2 tablet:border-[#3ef2c8] tablet:p-4 tablet:shadow-[4px_4px_0_#06020c]'
+            : 'flex max-h-[94vh] w-full max-w-[840px] flex-col border-2 border-[#3ef2c8] bg-[#0e071e] p-4 text-white shadow-[4px_4px_0_#06020c] tablet:max-w-[min(840px,calc(100vw-32px))]'
         }
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-2 border-b-2 border-[#251842] pb-2 sm:pb-2.5">
           <div className="flex min-w-0 flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-            <h2 className="font-pixel text-[12px] text-[#3ef2c8] whitespace-nowrap sm:text-[14px] md:text-[16px]">
+            <h2 className="font-pixel text-[12px] text-[#3ef2c8] whitespace-nowrap md:text-[16px]">
               CHARACTER LOCKER
             </h2>
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <div className="flex shrink-0 items-center gap-1.5 border-2 border-[#3ef2c8]/60 bg-[#092922] px-2 py-0.5 font-pixel text-[7.5px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] whitespace-nowrap sm:text-[9px] md:text-[10px]">
+              <div className="flex shrink-0 items-center gap-1.5 border-2 border-[#3ef2c8]/60 bg-[#092922] px-2 py-0.5 font-pixel text-[8px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] whitespace-nowrap md:text-[10px]">
                 <GemIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                 <span>GEMS: {stats.gems}</span>
               </div>
-              <div className="flex shrink-0 items-center gap-1.5 border-2 border-[#ffd166]/60 bg-[#2b2005] px-2 py-0.5 font-pixel text-[7.5px] text-[#ffd166] shadow-[2px_2px_0_#08040f] whitespace-nowrap sm:text-[9px] md:text-[10px]">
+              <div className="flex shrink-0 items-center gap-1.5 border-2 border-[#ffd166]/60 bg-[#2b2005] px-2 py-0.5 font-pixel text-[8px] text-[#ffd166] shadow-[2px_2px_0_#08040f] whitespace-nowrap md:text-[10px]">
                 <span>UNLOCKED: {unlockedSkins.length}/{SKIN_LIST.length}</span>
               </div>
             </div>
@@ -544,7 +544,8 @@ export function SkinsModal({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center border border-[#ff4d6d] bg-[#ff4d6d]/20 font-pixel text-[10px] sm:text-[11px] text-[#ff4d6d] shadow-[1px_1px_0_#08040f] hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px]"
+            aria-label="Close"
+            className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center border-2 border-[#ff4d6d] bg-[#ff4d6d]/20 font-pixel text-[10px] text-[#ff4d6d] shadow-[1px_1px_0_#08040f] hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px]"
           >
             <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
               <path d="M3 3l10 10M13 3L3 13" />
@@ -576,7 +577,7 @@ export function SkinsModal({
                   backgroundColor: active ? theme.text : isHovered ? theme.bg : '#140a26',
                   borderColor: active ? theme.text : isHovered ? theme.border : '#251842',
                 }}
-                className={`cursor-pointer border-2 px-3 py-1 font-pixel text-[8px] uppercase tracking-wider shadow-[2px_2px_0_#08040f] transition-[color,background-color,border-color,transform] duration-75 hover:-translate-y-[1px] active:translate-x-[1px] active:translate-y-[1px] sm:text-[9.5px] ${
+                className={`cursor-pointer border-2 px-3 py-1 font-pixel text-[8px] uppercase tracking-wider shadow-[2px_2px_0_#08040f] transition-[color,background-color,border-color,transform] duration-75 hover:-translate-y-[1px] active:translate-x-[1px] active:translate-y-[1px] ${
                   isTabFocused ? 'nav-focus' : ''
                 }`}
               >
@@ -598,13 +599,13 @@ export function SkinsModal({
           {/* Left / Top: Stage Preview (h-fit, does not stretch to bottom) */}
           <div className="flex shrink-0 flex-row md:flex-col items-center justify-between md:justify-start gap-2.5 md:gap-0 self-stretch md:self-start border-2 border-[#251842] bg-[#120722] p-2.5 md:p-3.5 shadow-[2px_2px_0_#08040f]">
             <div className="flex items-center gap-2.5 md:flex-col md:gap-0">
-              <div className="relative flex items-center justify-center border-2 border-[#38225c] bg-[#1a0e2e] p-1.5 md:p-2.5 shadow-inner">
+              <div className="relative flex items-center justify-center border-2 border-[#38225c] bg-[#1a0e2e] p-1.5 md:p-2.5">
                 <canvas ref={previewCanvasRef} width={96} height={96} style={{ imageRendering: 'pixelated' }} className="h-20 w-20 md:h-24 md:w-24 block [image-rendering:pixelated]" />
               </div>
               <div className="text-left md:mt-2.5 md:text-center">
-                <div className="font-pixel text-[12px] text-white sm:text-[13px] md:text-[15px]">{selectedSkin.name}</div>
+                <div className="font-pixel text-[12px] text-white md:text-[16px]">{selectedSkin.name}</div>
                 <span
-                  className="mt-0.5 md:mt-1 inline-block border px-1.5 md:px-2 py-0.5 font-pixel text-[7px] md:text-[8px] uppercase"
+                  className="mt-0.5 md:mt-1 inline-block border px-1.5 md:px-2 py-0.5 font-pixel text-[8px] uppercase"
                   style={{
                     color: TIER_COLORS[selectedSkin.tier].text,
                     borderColor: TIER_COLORS[selectedSkin.tier].border,
@@ -619,14 +620,14 @@ export function SkinsModal({
             {/* Action Button */}
             <div className="w-36 md:mt-3 md:w-full">
               {isEquipped ? (
-                <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#3ef2c8] bg-[#3ef2c8]/20 px-2 font-pixel text-[8.5px] md:text-[9px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f]">
+                <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#3ef2c8] bg-[#3ef2c8]/20 px-2 font-pixel text-[10px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f]">
                   EQUIPPED
                 </div>
               ) : isUnlocked ? (
                 <button
                   type="button"
                   onClick={() => handleEquip(selectedSkinId)}
-                  className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#08040f] bg-[#3ef2c8] px-2 font-pixel text-[8.5px] md:text-[9px] text-[#0b0616] shadow-[3px_3px_0_#08040f] transition-all hover:bg-[#7ef7ff] active:translate-x-[2px] active:translate-y-[2px]"
+                  className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#08040f] bg-[#3ef2c8] px-2 font-pixel text-[10px] text-[#0b0616] shadow-[3px_3px_0_#08040f] transition-all hover:bg-[#7ef7ff] active:translate-x-[2px] active:translate-y-[2px]"
                 >
                   EQUIP
                 </button>
@@ -634,14 +635,14 @@ export function SkinsModal({
                 <button
                   type="button"
                   onClick={() => inputManager.triggerKonami()}
-                  className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#ffd166] bg-[#ffd166]/20 px-2 font-pixel text-[7.5px] md:text-[8px] text-[#ffd166] shadow-[2px_2px_0_#08040f] hover:bg-[#ffd166]/40 active:translate-x-[1px] active:translate-y-[1px]"
+                  className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#ffd166] bg-[#ffd166]/20 px-2 font-pixel text-[8px] text-[#ffd166] shadow-[2px_2px_0_#08040f] hover:bg-[#ffd166]/40 active:translate-x-[1px] active:translate-y-[1px]"
                 >
                   ???????
                 </button>
               ) : selectedSkin.unlock.type === 'holiday' ? (
                 <div
                   title={selectedSkin.unlock.desc}
-                  className="flex min-h-[32px] md:min-h-[36px] w-full items-center justify-center border-2 border-[#453c60] bg-[#140a26] px-2 py-1 text-center font-pixel text-[7.5px] leading-tight text-[#c4b8e8] shadow-[2px_2px_0_#08040f]"
+                  className="flex min-h-[32px] md:min-h-[36px] w-full items-center justify-center border-2 border-[#453c60] bg-[#140a26] px-2 py-1 text-center font-pixel text-[8px] leading-tight text-[#9d8fd6] shadow-[2px_2px_0_#08040f]"
                 >
                   {isSkinAvailable(selectedSkin) ? 'EVENT LIVE' : 'LIMITED EVENT'}
                 </div>
@@ -650,7 +651,7 @@ export function SkinsModal({
                   type="button"
                   onClick={handleDiscordClaim}
                   disabled={discordClaimed}
-                  className={`flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 px-2 font-pixel text-[7px] md:text-[7.5px] shadow-[3px_3px_0_#08040f] transition-all active:translate-x-[2px] active:translate-y-[2px] ${
+                  className={`flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 px-2 font-pixel text-[8px] shadow-[3px_3px_0_#08040f] transition-all active:translate-x-[2px] active:translate-y-[2px] ${
                     discordClaimed
                       ? 'cursor-not-allowed border-[#3ef2c8]/60 bg-[#092922] text-[#3ef2c8]'
                       : 'border-[#08040f] bg-[#5865f2] text-white hover:bg-[#7289da]'
@@ -663,16 +664,16 @@ export function SkinsModal({
                   type="button"
                   disabled={stats.gems < (selectedSkin.unlock.cost || 0)}
                   onClick={() => handleBuy(selectedSkin)}
-                  className={`flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 px-2 font-pixel text-[8px] md:text-[8.5px] shadow-[3px_3px_0_#08040f] transition-all active:translate-x-[2px] active:translate-y-[2px] ${
+                  className={`flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 px-2 font-pixel text-[8px] md:text-[10px] shadow-[3px_3px_0_#08040f] transition-all active:translate-x-[2px] active:translate-y-[2px] ${
                     stats.gems >= (selectedSkin.unlock.cost || 0)
                       ? 'border-[#08040f] bg-[#ffd166] text-[#120820] hover:bg-[#ffe9a0]'
-                      : 'cursor-not-allowed border-[#38225c] bg-[#160a2c] text-[#6f5fa8]'
+                      : 'cursor-not-allowed border-[#38225c] bg-[#160a2c] text-[#9d8fd6]'
                   }`}
                 >
                   BUY ({selectedSkin.unlock.cost} GEMS)
                 </button>
               ) : (
-                <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#38225c] bg-[#140a26] px-2 text-center font-pixel text-[7.5px] md:text-[8px] text-[#c4b8e8] shadow-[2px_2px_0_#08040f]">
+                <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#38225c] bg-[#140a26] px-2 text-center font-pixel text-[8px] text-[#9d8fd6] shadow-[2px_2px_0_#08040f]">
                   {selectedSkin.unlock.desc}
                 </div>
               )}
@@ -715,9 +716,9 @@ export function SkinsModal({
                 >
                   <div className="w-full">
                     <div className="flex w-full items-center justify-between leading-none">
-                      <span className="truncate font-pixel text-[8px] text-white sm:text-[9px]">{skin.name}</span>
+                      <span className="truncate font-pixel text-[8px] text-white sm:text-[10px]">{skin.name}</span>
                       <span
-                        className="inline-flex min-h-[14px] items-center justify-center border px-1 font-pixel text-[6.5px] leading-none uppercase whitespace-nowrap sm:min-h-[16px] sm:text-[7px]"
+                        className="inline-flex min-h-[14px] items-center justify-center border px-1 font-pixel text-[8px] leading-none uppercase whitespace-nowrap sm:min-h-[16px]"
                         style={{
                           color: tierTheme.text,
                           borderColor: tierTheme.border,
@@ -739,11 +740,11 @@ export function SkinsModal({
                   {/* Status / Progress slot with uniform height */}
                   <div className="mt-auto flex h-[26px] w-full flex-col justify-end">
                     {equipped ? (
-                      <span className="font-pixel text-[7.5px] text-[#3ef2c8]">EQUIPPED</span>
+                      <span className="font-pixel text-[8px] text-[#3ef2c8]">EQUIPPED</span>
                     ) : unlocked ? (
-                      <span className="font-pixel text-[7.5px] text-[#a0a0b8]">UNLOCKED</span>
+                      <span className="font-pixel text-[8px] text-[#9d8fd6]">UNLOCKED</span>
                     ) : skin.unlock.type === 'gems' ? (
-                      <span className="font-pixel text-[7.5px] text-[#ffd166]">{skin.unlock.cost} GEMS</span>
+                      <span className="font-pixel text-[8px] text-[#ffd166]">{skin.unlock.cost} GEMS</span>
                     ) : (
                       renderCardProgressBar(skin)
                     )}
@@ -755,7 +756,7 @@ export function SkinsModal({
         </div>
 
         {/* Footer with Controls */}
-        <div className="mt-2 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 border-t-2 border-[#251842] pt-1.5 text-center font-pixel text-[6px] text-[#6f5fa8] sm:mt-2.5 sm:pt-2 sm:text-[7.5px] tablet:text-[8px] md:text-[8.5px]">
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 border-t-2 border-[#251842] pt-1.5 text-center font-pixel text-[8px] text-[#9d8fd6]">
           {touch ? (
             <>
               <span>TAP: SELECT | DOUBLE TAP: EQUIP | SWIPE: BROWSE |</span>

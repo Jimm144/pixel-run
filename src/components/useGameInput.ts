@@ -4,12 +4,20 @@ import { DIVE_SWIPE_PX } from '../game/types';
 import type { Game } from '../game/engine';
 import { inputManager, type GamepadAction } from '../game/input';
 
-export type UI = 'start' | 'playing' | 'paused' | 'over';
+export type UI = 'start' | 'playing' | 'paused' | 'over' | 'results';
+
+// Modals sit at different z-layers: Battle/Skins at z-50, Save/Load and skin
+// unlock at z-[100], the feedback banner at z-40. Search highest-first.
+const MODAL_ROOT_SELECTOR = '.fixed.z-\\[100\\], .fixed.z-50, .fixed.z-40';
+const CLOSE_BUTTON_SELECTOR =
+  '.fixed.z-50 button[aria-label="Close"], .fixed.z-50 button[title="Close"], ' +
+  '.fixed.z-\\[100\\] button[aria-label="Close"], .fixed.z-\\[100\\] button[title="Close"]';
 
 const JUMP = ['Space', 'ArrowUp', 'KeyW', 'KeyZ', 'KeyK'];
 const DIVE = ['ArrowDown', 'KeyS', 'KeyJ'];
 const MOVE_RIGHT = ['ArrowRight', 'KeyD'];
-const GAME_KEYS = JUMP.concat(DIVE, MOVE_RIGHT);
+const MOVE_LEFT = ['ArrowLeft', 'KeyA'];
+const GAME_KEYS = JUMP.concat(DIVE, MOVE_RIGHT, MOVE_LEFT);
 
 export interface GameInputOptions {
   gameRef: RefObject<Game | null>;
@@ -20,6 +28,7 @@ export interface GameInputOptions {
   onResume: () => void;
   onToggleMute: () => void;
   onRestartHint: () => void;
+  onRestart: () => void;
 }
 
 /** Which pointer currently owns the held dive — the play-area drag or the
@@ -33,10 +42,10 @@ type DiveOwner = 'wrap' | 'button' | null;
  * key-release cleanup. Listener closures only read refs, so they are
  * subscribed once and stay correct across re-renders and StrictMode remounts.
  */
-export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResume, onToggleMute, onRestartHint }: GameInputOptions) {
+export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResume, onToggleMute, onRestartHint, onRestart }: GameInputOptions) {
   const uiRef = useRef(ui);
   const modalOpenRef = useRef(Boolean(modalOpen));
-  const cbRef = useRef({ onStart, onPause, onResume, onToggleMute, onRestartHint });
+  const cbRef = useRef({ onStart, onPause, onResume, onToggleMute, onRestartHint, onRestart });
   // The "latest value" refs are written in an effect (not during render) so
   // the subscribed-once listeners below always read the freshest callbacks.
   useEffect(() => {
@@ -46,10 +55,11 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
     modalOpenRef.current = Boolean(modalOpen);
   }, [modalOpen]);
   useEffect(() => {
-    cbRef.current = { onStart, onPause, onResume, onToggleMute, onRestartHint };
+    cbRef.current = { onStart, onPause, onResume, onToggleMute, onRestartHint, onRestart };
   });
 
   const moveKeys = useRef(new Set<string>());
+  const playerMoveKeys = useRef<Map<string, Set<string>>>(new Map());
   const jumpId = useRef<number | null>(null);
   const diveId = useRef<number | null>(null);
   const diveOwner = useRef<DiveOwner>(null);
@@ -61,7 +71,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
     const now = performance.now();
     if (now - restartArmedAt.current <= 800) {
       restartArmedAt.current = 0;
-      cbRef.current.onStart();
+      cbRef.current.onRestart();
     } else {
       restartArmedAt.current = now;
       cbRef.current.onRestartHint();
@@ -71,13 +81,19 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
   const applyMove = (g: Game) => {
     if (g.phase !== 'playing') return;
     const right = MOVE_RIGHT.some((code) => moveKeys.current.has(code));
-    g.setMove(right ? 1 : 0);
+    const left = MOVE_LEFT.some((code) => moveKeys.current.has(code));
+    g.setMove(right ? 1 : left ? -1 : 0);
   };
 
   const navigate2D = (dir: 'up' | 'down' | 'left' | 'right') => {
+    const isModalOpen = modalOpenRef.current;
+    const root = isModalOpen
+      ? document.querySelector<HTMLElement>(MODAL_ROOT_SELECTOR) || document.body
+      : document.body;
+
     const focusable = Array.from(
-      document.querySelectorAll<HTMLElement>(
-        'button:not([disabled]):not([aria-hidden="true"]), [tabindex="0"], a[href], input:not([disabled])'
+      root.querySelectorAll<HTMLElement>(
+        'button:not([disabled]):not([aria-hidden="true"]), select:not([disabled]), input:not([disabled]), [tabindex="0"], a[href]'
       )
     ).filter((el) => {
       const style = window.getComputedStyle(el);
@@ -96,7 +112,9 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
     if (!active || !focusable.includes(active)) {
       const u = uiRef.current;
       let target: HTMLElement | null = null;
-      if (u === 'start') {
+      if (isModalOpen) {
+        target = focusable.find((el) => el.tagName === 'BUTTON' && !el.getAttribute('aria-label')?.includes('Close')) || focusable[0];
+      } else if (u === 'start') {
         target = focusable.find((el) => el.textContent?.includes('START RUN') || el.textContent?.includes('START')) || null;
       } else if (u === 'paused') {
         target = focusable.find((el) => el.textContent?.includes('RESUME')) || null;
@@ -185,40 +203,104 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
 
   const onKeyDown = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement | null;
-    const isTyping =
+    const isTextInput =
       target &&
-      (target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable ||
-        (target as any).type === 'text');
+      (target.tagName === 'TEXTAREA' ||
+        (target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'text') ||
+        target.isContentEditable);
 
-    if (isTyping || modalOpenRef.current) {
-      return; // Do NOT intercept typing in input fields or shift focus
+    const code = e.code;
+    const g = gameRef.current;
+    const u = uiRef.current;
+    const isModalOpen = modalOpenRef.current;
+
+    // Allow normal typing inside input fields unless Esc
+    if (isTextInput) {
+      if (code === 'Escape') {
+        e.preventDefault();
+        target.blur();
+      }
+      return;
     }
 
     document.body.classList.add('keyboard-active');
-    const code = e.code;
-    const g = gameRef.current;
-    // Only swallow native behaviour for live gameplay keys — the menu keys
-    // below are handled too, so preventDefault keeps them from also
-    // activating the last-focused button or scrolling the page.
-    if (g && g.phase === 'playing' && GAME_KEYS.includes(code)) e.preventDefault();
-    if (g && g.phase === 'playing') {
-      if (JUMP.includes(code)) {
-        if (!e.repeat) g.pressJump();
-      } else if (DIVE.includes(code)) {
-        // Key repeat re-fires pressDive ~30/s, pinning the dive and freezing
-        // the spin — guard it like jump does.
-        if (!e.repeat) g.pressDive();
-      } else if (MOVE_RIGHT.includes(code)) {
-        moveKeys.current.add(code);
-        applyMove(g);
+
+    // 1. LIVE GAMEPLAY (playing phase and NO modal open)
+    if (g && g.phase === 'playing' && !isModalOpen) {
+      if (GAME_KEYS.includes(code) || code.startsWith('Arrow') || code.startsWith('Numpad') || code === 'KeyI' || code === 'KeyK' || code === 'KeyJ' || code === 'KeyL') {
+        e.preventDefault();
       }
-    }
-    const u = uiRef.current;
-    if (u === 'playing') {
-      // Menu keys must ignore key-repeat (holding P flips pause/resume at
-      // ~30 Hz) and must not trigger a previously focused button natively.
+      if (g.isLocalBattle) {
+        const getPlayerForScheme = (scheme: string, fallbackIdx: number): number => {
+          if (g.playerControls && Array.isArray(g.playerControls)) {
+            const idx = g.playerControls.indexOf(scheme);
+            if (idx !== -1) return idx;
+          }
+          return fallbackIdx;
+        };
+
+        // WASD Scheme
+        const wasdIdx = getPlayerForScheme('wasd', 0);
+        if (code === 'KeyW') {
+          if (!e.repeat) g.pressPlayerJump(wasdIdx);
+        } else if (code === 'KeyS') {
+          if (!e.repeat) g.pressPlayerDive(wasdIdx);
+        } else if (code === 'KeyD' || code === 'KeyA') {
+          if (!playerMoveKeys.current.has('wasd')) playerMoveKeys.current.set('wasd', new Set());
+          playerMoveKeys.current.get('wasd')!.add(code);
+          const keys = playerMoveKeys.current.get('wasd')!;
+          g.setPlayerMove(wasdIdx, keys.has('KeyD') ? 1 : keys.has('KeyA') ? -1 : 0);
+        }
+
+        // Arrows Scheme
+        const arrIdx = getPlayerForScheme('arrows', 1);
+        if (code === 'ArrowUp') {
+          if (!e.repeat) g.pressPlayerJump(arrIdx);
+        } else if (code === 'ArrowDown') {
+          if (!e.repeat) g.pressPlayerDive(arrIdx);
+        } else if (code === 'ArrowRight' || code === 'ArrowLeft') {
+          if (!playerMoveKeys.current.has('arrows')) playerMoveKeys.current.set('arrows', new Set());
+          playerMoveKeys.current.get('arrows')!.add(code);
+          const keys = playerMoveKeys.current.get('arrows')!;
+          g.setPlayerMove(arrIdx, keys.has('ArrowRight') ? 1 : keys.has('ArrowLeft') ? -1 : 0);
+        }
+
+        // IJKL Scheme
+        const ijklIdx = getPlayerForScheme('ijkl', 2);
+        if (code === 'KeyI') {
+          if (!e.repeat) g.pressPlayerJump(ijklIdx);
+        } else if (code === 'KeyK') {
+          if (!e.repeat) g.pressPlayerDive(ijklIdx);
+        } else if (code === 'KeyL' || code === 'KeyJ') {
+          if (!playerMoveKeys.current.has('ijkl')) playerMoveKeys.current.set('ijkl', new Set());
+          playerMoveKeys.current.get('ijkl')!.add(code);
+          const keys = playerMoveKeys.current.get('ijkl')!;
+          g.setPlayerMove(ijklIdx, keys.has('KeyL') ? 1 : keys.has('KeyJ') ? -1 : 0);
+        }
+
+        // Numpad Scheme
+        const numIdx = getPlayerForScheme('numpad', 3);
+        if (code === 'Numpad8') {
+          if (!e.repeat) g.pressPlayerJump(numIdx);
+        } else if (code === 'Numpad5' || code === 'Numpad2') {
+          if (!e.repeat) g.pressPlayerDive(numIdx);
+        } else if (code === 'Numpad6' || code === 'Numpad4') {
+          if (!playerMoveKeys.current.has('numpad')) playerMoveKeys.current.set('numpad', new Set());
+          playerMoveKeys.current.get('numpad')!.add(code);
+          const keys = playerMoveKeys.current.get('numpad')!;
+          g.setPlayerMove(numIdx, keys.has('Numpad6') ? 1 : keys.has('Numpad4') ? -1 : 0);
+        }
+      } else {
+        if (JUMP.includes(code)) {
+          if (!e.repeat) g.pressJump();
+        } else if (DIVE.includes(code)) {
+          if (!e.repeat) g.pressDive();
+        } else if (MOVE_RIGHT.includes(code) || MOVE_LEFT.includes(code)) {
+          moveKeys.current.add(code);
+          applyMove(g);
+        }
+      }
+
       if (e.repeat) return;
       if (code === 'Escape' || code === 'KeyP') {
         e.preventDefault();
@@ -229,57 +311,125 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
       }
       return;
     }
+
+    // 2. MENU & MODAL NAVIGATION (ui !== 'playing' OR modal is open)
     if (e.repeat) return;
 
-    if (u === 'start' || u === 'paused' || u === 'over') {
-      if (code === 'ArrowDown' || code === 'KeyS') {
-        e.preventDefault();
-        navigate2D('down');
-        return;
-      }
-      if (code === 'ArrowUp' || code === 'KeyW') {
-        e.preventDefault();
-        navigate2D('up');
-        return;
-      }
-      if (code === 'ArrowLeft' || code === 'KeyA') {
-        e.preventDefault();
-        navigate2D('left');
-        return;
-      }
-      if (code === 'ArrowRight' || code === 'KeyD') {
-        e.preventDefault();
-        navigate2D('right');
-        return;
-      }
+    if (code === 'ArrowDown' || code === 'KeyS') {
+      e.preventDefault();
+      navigate2D('down');
+      return;
+    }
+    if (code === 'ArrowUp' || code === 'KeyW') {
+      e.preventDefault();
+      navigate2D('up');
+      return;
+    }
+    if (code === 'ArrowLeft' || code === 'KeyA') {
+      e.preventDefault();
+      navigate2D('left');
+      return;
+    }
+    if (code === 'ArrowRight' || code === 'KeyD') {
+      e.preventDefault();
+      navigate2D('right');
+      return;
     }
 
-    const menuKey =
-      code === 'Space' || code === 'Enter' || code === 'Escape' || code === 'KeyP' ||
-      code === 'KeyR' || code === 'KeyM' || code === 'KeyZ' || code === 'KeyK';
-    if (menuKey) e.preventDefault();
+    if (code === 'Space' || code === 'Enter') {
+      const active = document.activeElement as HTMLElement | null;
+      if (active && (active.tagName === 'BUTTON' || active.tagName === 'A' || active.tagName === 'SELECT') && active.offsetParent !== null) {
+        e.preventDefault();
+        active.click();
+        return;
+      }
+      if (!isModalOpen) {
+        e.preventDefault();
+        if (u === 'start' || u === 'over') cbRef.current.onStart();
+        else if (u === 'paused') cbRef.current.onResume();
+      }
+      return;
+    }
+
+    if (code === 'Escape') {
+      e.preventDefault();
+      if (isModalOpen) {
+        const closeBtn = document.querySelector<HTMLButtonElement>(CLOSE_BUTTON_SELECTOR);
+        if (closeBtn) closeBtn.click();
+      } else if (u === 'paused') {
+        cbRef.current.onResume();
+      }
+      return;
+    }
+
     if (code === 'KeyM') {
+      e.preventDefault();
       cbRef.current.onToggleMute();
       return;
     }
-    if (u === 'start') {
-      if (code === 'Space' || code === 'Enter' || code === 'KeyR' || code === 'KeyZ' || code === 'KeyK') cbRef.current.onStart();
-    } else if (u === 'paused') {
-      if (code === 'Escape' || code === 'KeyP' || code === 'Space' || code === 'Enter') cbRef.current.onResume();
-      else if (code === 'KeyR') handleRestart();
-    } else if (u === 'over') {
-      if (code === 'Space' || code === 'Enter' || code === 'KeyR' || code === 'KeyZ' || code === 'KeyK') cbRef.current.onStart();
+
+    if (code === 'KeyR' && !isModalOpen) {
+      e.preventDefault();
+      handleRestart();
+      return;
     }
   };
 
   const onKeyUp = (e: KeyboardEvent) => {
     const g = gameRef.current;
     if (!g) return;
-    if (JUMP.includes(e.code)) g.releaseJump();
-    else if (DIVE.includes(e.code)) g.releaseDive();
-    else if (MOVE_RIGHT.includes(e.code)) {
-      moveKeys.current.delete(e.code);
-      applyMove(g);
+    const code = e.code;
+    if (g.isLocalBattle) {
+      const getPlayerForScheme = (scheme: string, fallbackIdx: number): number => {
+        if (g.playerControls && Array.isArray(g.playerControls)) {
+          const idx = g.playerControls.indexOf(scheme);
+          if (idx !== -1) return idx;
+        }
+        return fallbackIdx;
+      };
+
+      const wasdIdx = getPlayerForScheme('wasd', 0);
+      if (code === 'KeyW') g.releasePlayerJump(wasdIdx);
+      else if (code === 'KeyS') g.releasePlayerDive(wasdIdx);
+      else if (code === 'KeyD' || code === 'KeyA') {
+        playerMoveKeys.current.get('wasd')?.delete(code);
+        const keys = playerMoveKeys.current.get('wasd');
+        g.setPlayerMove(wasdIdx, keys?.has('KeyD') ? 1 : keys?.has('KeyA') ? -1 : 0);
+      }
+
+      const arrIdx = getPlayerForScheme('arrows', 1);
+      if (code === 'ArrowUp') g.releasePlayerJump(arrIdx);
+      else if (code === 'ArrowDown') g.releasePlayerDive(arrIdx);
+      else if (code === 'ArrowRight' || code === 'ArrowLeft') {
+        playerMoveKeys.current.get('arrows')?.delete(code);
+        const keys = playerMoveKeys.current.get('arrows');
+        g.setPlayerMove(arrIdx, keys?.has('ArrowRight') ? 1 : keys?.has('ArrowLeft') ? -1 : 0);
+      }
+
+      const ijklIdx = getPlayerForScheme('ijkl', 2);
+      if (code === 'KeyI') g.releasePlayerJump(ijklIdx);
+      else if (code === 'KeyK') g.releasePlayerDive(ijklIdx);
+      else if (code === 'KeyL' || code === 'KeyJ') {
+        playerMoveKeys.current.get('ijkl')?.delete(code);
+        const keys = playerMoveKeys.current.get('ijkl');
+        g.setPlayerMove(ijklIdx, keys?.has('KeyL') ? 1 : keys?.has('KeyJ') ? -1 : 0);
+      }
+
+      const numIdx = getPlayerForScheme('numpad', 3);
+      if (code === 'Numpad8') g.releasePlayerJump(numIdx);
+      else if (code === 'Numpad5' || code === 'Numpad2') g.releasePlayerDive(numIdx);
+      else if (code === 'Numpad6' || code === 'Numpad4') {
+        playerMoveKeys.current.get('numpad')?.delete(code);
+        const keys = playerMoveKeys.current.get('numpad');
+        g.setPlayerMove(numIdx, keys?.has('Numpad6') ? 1 : keys?.has('Numpad4') ? -1 : 0);
+      }
+    } else {
+      if (JUMP.includes(e.code)) g.releaseJump();
+      else if (DIVE.includes(e.code)) g.releaseDive();
+      else if (MOVE_RIGHT.includes(e.code) || MOVE_LEFT.includes(e.code)) {
+        moveKeys.current.delete(e.code);
+        applyMove(g);
+      }
     }
   };
 
@@ -287,6 +437,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
     const g = gameRef.current;
     if (!g) return;
     moveKeys.current.clear();
+    playerMoveKeys.current.clear();
     g.releaseJump();
     g.releaseDive();
     g.setMove(0);
@@ -366,21 +517,81 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
     window.addEventListener('pointercancel', onPointerUp);
     window.addEventListener('lostpointercapture', onLostPointerCapture);
 
+    let gpAnimId = 0;
+    const prevGpButtons = [
+      { jump: false, dive: false },
+      { jump: false, dive: false },
+      { jump: false, dive: false },
+      { jump: false, dive: false },
+    ];
+
+    const pollAllGamepads = () => {
+      const g = gameRef.current;
+      if (typeof navigator !== 'undefined' && navigator.getGamepads) {
+        const gamepads = navigator.getGamepads();
+        if (g && g.phase === 'playing' && !modalOpenRef.current) {
+          if (g.isLocalBattle) {
+            const getPlayerForScheme = (scheme: string, fallbackIdx: number): number => {
+              if (g.playerControls && Array.isArray(g.playerControls)) {
+                const idx = g.playerControls.indexOf(scheme);
+                if (idx !== -1) return idx;
+              }
+              return fallbackIdx;
+            };
+
+            for (let i = 0; i < 4; i++) {
+              const gp = gamepads[i];
+              if (!gp) continue;
+              const pIdx = getPlayerForScheme(`gp${i}`, i);
+
+              const stickDown =
+                (typeof gp.axes[1] === 'number' && gp.axes[1] > 0.38) ||
+                (typeof gp.axes[3] === 'number' && gp.axes[3] > 0.38);
+              const jump = Boolean(gp.buttons[0]?.pressed || gp.buttons[2]?.pressed || gp.buttons[5]?.pressed || gp.buttons[12]?.pressed);
+              const dive = Boolean(gp.buttons[1]?.pressed || gp.buttons[4]?.pressed || gp.buttons[7]?.pressed || gp.buttons[13]?.pressed || stickDown);
+              const right = Boolean(gp.buttons[15]?.pressed || (typeof gp.axes[0] === 'number' && gp.axes[0] > 0.35));
+              const left = Boolean(gp.buttons[14]?.pressed || (typeof gp.axes[0] === 'number' && gp.axes[0] < -0.35));
+              const dir = right ? 1 : left ? -1 : 0;
+
+              if (jump && !prevGpButtons[i].jump) g.pressPlayerJump(pIdx);
+              else if (!jump && prevGpButtons[i].jump) g.releasePlayerJump(pIdx);
+
+              if (dive && !prevGpButtons[i].dive) g.pressPlayerDive(pIdx);
+              else if (!dive && prevGpButtons[i].dive) g.releasePlayerDive(pIdx);
+
+              g.setPlayerMove(pIdx, dir);
+
+              prevGpButtons[i].jump = jump;
+              prevGpButtons[i].dive = dive;
+            }
+          }
+        }
+      }
+      gpAnimId = requestAnimationFrame(pollAllGamepads);
+    };
+    gpAnimId = requestAnimationFrame(pollAllGamepads);
+
     const cleanupGamepad = inputManager.onGamepadUpdate((state) => {
       const g = gameRef.current;
       const u = uiRef.current;
+      const isModalOpen = modalOpenRef.current;
 
-      if (u === 'playing' && g && !modalOpenRef.current) {
-        if (state.jumpPressed) g.pressJump();
-        if (state.jumpReleased) g.releaseJump();
-        if (state.divePressed) g.pressDive();
-        if (state.diveReleased) g.releaseDive();
-        g.setMove(state.moveRight ? 1 : 0);
+      if (u === 'playing' && g && !isModalOpen) {
+        if (!g.isLocalBattle) {
+          if (state.jumpPressed) g.pressJump();
+          if (state.jumpReleased) g.releaseJump();
+          if (state.divePressed) g.pressDive();
+          if (state.diveReleased) g.releaseDive();
+          g.setMove(state.moveRight ? 1 : state.moveLeft ? -1 : 0);
+        }
         if (state.pausePressed) cbRef.current.onPause();
       } else {
         if (state.pausePressed) {
           document.body.classList.add('gamepad-active');
-          if (u === 'paused') {
+          if (isModalOpen) {
+            const closeBtn = document.querySelector<HTMLButtonElement>(CLOSE_BUTTON_SELECTOR);
+            if (closeBtn) closeBtn.click();
+          } else if (u === 'paused') {
             cbRef.current.onResume();
           } else if (u === 'playing') {
             cbRef.current.onPause();
@@ -388,26 +599,27 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
         } else if (state.jumpPressed || state.confirmPressed) {
           document.body.classList.add('gamepad-active');
           const active = document.activeElement as HTMLElement | null;
-          if (active && active.tagName === 'BUTTON' && active.offsetParent !== null) {
+          if (active && (active.tagName === 'BUTTON' || active.tagName === 'A' || active.tagName === 'SELECT') && active.offsetParent !== null) {
             active.click();
-          } else if (!modalOpenRef.current) {
-            if (u === 'start' || u === 'over') {
-              cbRef.current.onStart();
-            } else if (u === 'paused') {
-              cbRef.current.onResume();
-            }
+          } else if (isModalOpen) {
+            navigate2D('down');
+          } else if (u === 'start' || u === 'over') {
+            cbRef.current.onStart();
+          } else if (u === 'paused') {
+            cbRef.current.onResume();
           }
         } else if (state.backPressed) {
           document.body.classList.add('gamepad-active');
-          if (!modalOpenRef.current) {
-            if (u === 'paused') {
-              cbRef.current.onResume();
-            } else if (u === 'over') {
-              const menuButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
-                (btn) => btn.textContent?.includes('MENU') && btn.offsetParent !== null
-              );
-              if (menuButton) menuButton.click();
-            }
+          if (isModalOpen) {
+            const closeBtn = document.querySelector<HTMLButtonElement>(CLOSE_BUTTON_SELECTOR);
+            if (closeBtn) closeBtn.click();
+          } else if (u === 'paused') {
+            cbRef.current.onResume();
+          } else if (u === 'over') {
+            const menuButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+              (btn) => btn.textContent?.includes('MENU') && btn.offsetParent !== null
+            );
+            if (menuButton) menuButton.click();
           }
         }
       }
@@ -416,13 +628,17 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
     const cleanupAction = inputManager.onAction((action: GamepadAction) => {
       document.body.classList.add('gamepad-active');
       const u = uiRef.current;
-      if (!modalOpenRef.current && u !== 'playing') {
+      const isModalOpen = modalOpenRef.current;
+      if (isModalOpen || u !== 'playing') {
         if (action === 'down') navigate2D('down');
         else if (action === 'up') navigate2D('up');
         else if (action === 'left') navigate2D('left');
         else if (action === 'right') navigate2D('right');
         else if (action === 'back') {
-          if (u === 'paused') {
+          if (isModalOpen) {
+            const closeBtn = document.querySelector<HTMLButtonElement>(CLOSE_BUTTON_SELECTOR);
+            if (closeBtn) closeBtn.click();
+          } else if (u === 'paused') {
             cbRef.current.onResume();
           } else if (u === 'over') {
             const menuButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
@@ -435,6 +651,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
     });
 
     return () => {
+      cancelAnimationFrame(gpAnimId);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);

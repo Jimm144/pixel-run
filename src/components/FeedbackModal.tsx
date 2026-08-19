@@ -141,19 +141,19 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
       onTouchEnd={(e) => e.stopPropagation()}
     >
       <div
-        className="flex w-full flex-col border-2 border-[#3ef2c8] bg-[#120826]/95 p-3 text-white shadow-[0_0_0_2px_#08040f,3px_3px_0_#08040f]"
+        className="flex w-full flex-col border-2 border-[#3ef2c8] bg-[#0e071e]/95 p-3 text-white shadow-[4px_4px_0_#06020c]"
         onClick={(e) => e.stopPropagation()}
         onPointerDown={(e) => e.stopPropagation()}
       >
         {mode === 'prompt' ? (
           <>
             {/* Header & Prompt */}
-            <div className="flex items-center justify-between border-b border-[#302254] pb-2">
-              <div className="font-pixel text-[11px] text-[#3ef2c8] tablet:text-[12px]">ENJOYING PIXEL RUN?</div>
+            <div className="flex items-center justify-between border-b-2 border-[#251842] pb-2">
+              <div className="font-pixel text-[12px] text-[#3ef2c8]">ENJOYING PIXEL RUN?</div>
               <button
                 type="button"
                 onClick={finalizeClose}
-                className="font-pixel text-[8px] text-[#786b99] hover:text-[#c4b8e8]"
+                className="font-pixel text-[8px] text-[#9d8fd6] hover:text-[#ffffff]"
               >
                 [X]
               </button>
@@ -164,7 +164,7 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
               <button
                 type="button"
                 onClick={handlePromptYes}
-                className={`flex-1 border-2 py-1.5 text-center font-pixel text-[9px] transition-all active:translate-x-[1px] active:translate-y-[1px] ${
+                className={`flex-1 border-2 py-1.5 text-center font-pixel text-[10px] transition-all active:translate-x-[1px] active:translate-y-[1px] ${
                   focusIndex === 0
                     ? 'border-[#08040f] bg-[#3ef2c8] text-[#08040f] focus-ring'
                     : 'border-[#08040f] bg-[#3ef2c8] text-[#08040f] shadow-[1px_1px_0_#08040f] hover:bg-[#7ef7ff]'
@@ -176,7 +176,7 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
               <button
                 type="button"
                 onClick={handlePromptNo}
-                className={`flex-1 border-2 py-1.5 text-center font-pixel text-[9px] transition-all active:translate-x-[1px] active:translate-y-[1px] ${
+                className={`flex-1 border-2 py-1.5 text-center font-pixel text-[10px] transition-all active:translate-x-[1px] active:translate-y-[1px] ${
                   focusIndex === 1
                     ? 'border-[#08040f] bg-[#ff4d6d] text-white focus-ring'
                     : 'border-[#08040f] bg-[#ff4d6d] text-white shadow-[1px_1px_0_#08040f] hover:bg-[#ff7088]'
@@ -189,12 +189,12 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
         ) : mode === 'star_prompt' ? (
           <>
             {/* Header & Prompt */}
-            <div className="flex items-center justify-between border-b border-[#302254] pb-2">
-              <div className="font-pixel text-[10px] text-[#3ef2c8] tablet:text-[11px]">WANT TO STAR GITHUB REPO?</div>
+            <div className="flex items-center justify-between border-b-2 border-[#251842] pb-2">
+              <div className="font-pixel text-[12px] text-[#3ef2c8]">WANT TO STAR GITHUB REPO?</div>
               <button
                 type="button"
                 onClick={finalizeClose}
-                className="font-pixel text-[8px] text-[#786b99] hover:text-[#c4b8e8]"
+                className="font-pixel text-[8px] text-[#9d8fd6] hover:text-[#ffffff]"
               >
                 [X]
               </button>
@@ -205,7 +205,7 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
               <button
                 type="button"
                 onClick={handleStarYes}
-                className={`flex-1 border-2 py-1.5 text-center font-pixel text-[9px] transition-all active:translate-x-[1px] active:translate-y-[1px] ${
+                className={`flex-1 border-2 py-1.5 text-center font-pixel text-[10px] transition-all active:translate-x-[1px] active:translate-y-[1px] ${
                   focusIndex === 0
                     ? 'border-[#08040f] bg-[#3ef2c8] text-[#08040f] focus-ring'
                     : 'border-[#08040f] bg-[#3ef2c8] text-[#08040f] shadow-[1px_1px_0_#08040f] hover:bg-[#7ef7ff]'
@@ -217,7 +217,7 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
               <button
                 type="button"
                 onClick={handleStarNo}
-                className={`flex-1 border-2 py-1.5 text-center font-pixel text-[9px] transition-all active:translate-x-[1px] active:translate-y-[1px] ${
+                className={`flex-1 border-2 py-1.5 text-center font-pixel text-[10px] transition-all active:translate-x-[1px] active:translate-y-[1px] ${
                   focusIndex === 1
                     ? 'border-[#08040f] bg-[#59427e] text-white focus-ring'
                     : 'border-[#08040f] bg-[#59427e] text-white shadow-[1px_1px_0_#08040f] hover:bg-[#786b99]'
@@ -228,11 +228,11 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
             </div>
 
             {/* Checkbox: Don't show again */}
-            <div className="mt-2 flex items-center justify-center border-t border-[#302254] pt-1.5">
+            <div className="mt-2 flex items-center justify-center border-t border-[#251842] pt-1.5">
               <label
                 onClick={(e) => e.stopPropagation()}
-                className={`flex cursor-pointer items-center gap-1.5 select-none font-pixel text-[8px] transition-colors tablet:text-[9px] ${
-                  focusIndex === 2 ? 'text-[#3ef2c8] focus-ring px-1.5 py-0.5' : 'text-[#a094c4] hover:text-[#3ef2c8]'
+                className={`flex cursor-pointer items-center gap-1.5 select-none font-pixel text-[8px] transition-colors ${
+                  focusIndex === 2 ? 'text-[#3ef2c8] focus-ring px-1.5 py-0.5' : 'text-[#9d8fd6] hover:text-[#3ef2c8]'
                 }`}
               >
                 <input
@@ -251,12 +251,12 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
         ) : (
           <>
             {/* In-Site Text Box Mode */}
-            <div className="flex items-center justify-between border-b border-[#302254] pb-1.5">
-              <span className="font-pixel text-[10px] text-[#ff4d6d]">REPORT AN ISSUE</span>
+            <div className="flex items-center justify-between border-b-2 border-[#251842] pb-1.5">
+              <span className="font-pixel text-[12px] text-[#ff4d6d]">REPORT AN ISSUE</span>
               <button
                 type="button"
                 onClick={() => setMode('prompt')}
-                className="font-pixel text-[8px] text-[#786b99] hover:text-[#c4b8e8]"
+                className="font-pixel text-[8px] text-[#9d8fd6] hover:text-[#ffffff]"
               >
                 [BACK]
               </button>
@@ -270,7 +270,7 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
                 onKeyDown={(e) => e.stopPropagation()}
                 placeholder="What happened or what can be improved?"
                 rows={3}
-                className="w-full resize-none border border-[#453c60] bg-[#090414] p-1.5 font-pixel text-[8px] text-[#ffffff] placeholder-[#59427e] outline-none focus:border-[#3ef2c8]"
+                className="w-full resize-none border border-[#453c60] bg-[#090414] p-1.5 font-pixel text-[8px] text-[#ffffff] placeholder-[#9d8fd6] outline-none focus:border-[#3ef2c8]"
               />
             </div>
 
@@ -278,14 +278,14 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
               <button
                 type="button"
                 onClick={handleSubmitIssue}
-                className="flex-1 border-2 border-[#08040f] bg-[#3ef2c8] py-1.5 text-center font-pixel text-[9px] text-[#08040f] shadow-[1px_1px_0_#08040f] hover:bg-[#7ef7ff] active:translate-x-[1px] active:translate-y-[1px]"
+                className="flex-1 border-2 border-[#08040f] bg-[#3ef2c8] py-1.5 text-center font-pixel text-[10px] text-[#08040f] shadow-[1px_1px_0_#08040f] hover:bg-[#7ef7ff] active:translate-x-[1px] active:translate-y-[1px]"
               >
                 SUBMIT
               </button>
               <button
                 type="button"
                 onClick={() => setMode('prompt')}
-                className="border-2 border-[#302254] bg-[#160b2c] px-3 py-1.5 text-center font-pixel text-[8px] text-[#786b99] shadow-[1px_1px_0_#08040f] hover:text-[#c4b8e8] active:translate-x-[1px] active:translate-y-[1px]"
+                className="border-2 border-[#251842] bg-[#160b2c] px-3 py-1.5 text-center font-pixel text-[10px] text-[#9d8fd6] shadow-[1px_1px_0_#08040f] hover:text-[#ffffff] active:translate-x-[1px] active:translate-y-[1px]"
               >
                 CANCEL
               </button>

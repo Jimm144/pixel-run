@@ -1,5 +1,6 @@
 import type { BgKind, Zone } from './palette';
 import type { SkinId } from './skins';
+import type { OpponentInfo, LocalPlayerState } from './multiplayer/types';
 
 /** Gameplay is authored against this size; physics never changes. */
 export const BASE_VW = 400;
@@ -27,7 +28,7 @@ export function setViewportSize(w: number, h: number) {
   VH = Math.min(MAX_VH, Math.max(MIN_VH, Math.round(h)));
 }
 
-export type Phase = 'ready' | 'playing' | 'paused' | 'dead';
+export type Phase = 'ready' | 'playing' | 'paused' | 'dead' | 'over';
 
 export interface Stats {
   score: number;
@@ -98,9 +99,6 @@ export const FADE_WINDOW = 0.08;
 export const PIT_DEATH_Y = BASE_VH + 60;
 /** Slow-mo frames before the death report reaches App (onDeath fires). */
 export const DEATH_REPORT_FRAME = 42;
-/** Slam shockwave hitbox around the player. */
-export const SLAM_RADIUS = 46;
-export const SLAM_VERT = 28;
 /** Horizontal overlap tolerance when hugging a wall (keeps px from poking in). */
 export const WALL_MARGIN = 1;
 /** Play-area drag distance (px) that triggers a dive on touch. */
@@ -314,4 +312,11 @@ export interface RenderHost {
   zone: Zone;
   zoneOrder: number[];
   moonPhase: number;
+  mode: 'solo' | 'local' | 'online';
+  matchOver: boolean;
+  isLocalBattle?: boolean;
+  p2?: LocalPlayerState;
+  localPlayers?: LocalPlayerState[];
+  isMultiplayer?: boolean;
+  opponentStates?: Map<string, OpponentInfo>;
 }

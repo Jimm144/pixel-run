@@ -552,7 +552,12 @@ function getStoredBestScore(): number {
 export function loadUnlockedSkins(): SkinId[] {
   try {
     const raw = localStorage.getItem(UNLOCKED_KEY);
-    const arr: SkinId[] = raw ? JSON.parse(raw).map((id: string) => (id === 'lekos' ? 'leskos' : id)) : ['bob', 'bobette'];
+    const arr: SkinId[] = raw
+      ? JSON.parse(raw)
+          .map((id: string) => (id === 'lekos' ? 'leskos' : id))
+          // Drop invalid/corrupt ids so they can never be equipped or shown.
+          .filter((id: unknown): id is SkinId => typeof id === 'string' && Object.prototype.hasOwnProperty.call(SKINS, id))
+      : ['bob', 'bobette'];
     if (!arr.includes('bob')) arr.push('bob');
     if (!arr.includes('bobette')) arr.push('bobette');
 
@@ -668,13 +673,9 @@ export function evaluateSkinUnlocks(
         nextStats.scoreDone = true;
       }
     }
-    if (!nextStats.coinsDone) {
-      nextStats.coins = (nextStats.coins || 0) + currentRun.coins;
-      if (nextStats.coins >= MILESTONES.COINS_TARGET) {
-        nextStats.coins = MILESTONES.COINS_TARGET;
-        nextStats.coinsDone = true;
-      }
-    }
+    // Coins are intentionally NOT added here: the engine live-counts every
+    // pickup into lifetime coins (and caps at the target), so adding the run
+    // total again at death would double-count the milestone.
     if (!nextStats.totalDistDone) {
       nextStats.totalDistance = (nextStats.totalDistance || 0) + currentRun.meters;
       if (nextStats.totalDistance >= MILESTONES.DISTANCE_TARGET) {

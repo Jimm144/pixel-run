@@ -145,48 +145,51 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#08040f]/90 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#08040f]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="relative flex w-full max-w-[380px] flex-col items-center border-4 border-[#3ef2c8] bg-[#0d0619] p-4 text-center font-pixel text-white shadow-[0_0_0_4px_#08040f] sm:p-5">
+      <div className="relative flex w-full max-w-[380px] flex-col items-center border-2 border-[#3ef2c8] bg-[#0e071e] p-4 text-center font-pixel text-white shadow-[4px_4px_0_#06020c] sm:p-5">
         {/* Header */}
         <div className="mb-3 flex w-full items-center justify-between border-b-2 border-[#251842] pb-2">
-          <h2 className="text-[11px] uppercase tracking-wider text-[#3ef2c8] sm:text-[13px]">
+          <h2 className="font-pixel text-[12px] uppercase tracking-wider text-[#3ef2c8]">
             {mode === 'save' ? 'EXPORT SAVE DATA' : 'RESTORE SAVE DATA'}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="flex h-7 w-7 items-center justify-center border border-[#ff4d6d] bg-[#ff4d6d]/20 text-[10px] text-[#ff4d6d] hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px]"
+            aria-label="Close"
+            className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center border-2 border-[#ff4d6d] bg-[#ff4d6d]/20 font-pixel text-[10px] text-[#ff4d6d] shadow-[1px_1px_0_#08040f] hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px]"
           >
-            ✕
+            <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
+              <path d="M3 3l10 10M13 3L3 13" />
+            </svg>
           </button>
         </div>
 
         {errorMsg && (
-          <div className="mb-3 w-full border border-[#ff4d6d] bg-[#ff4d6d]/15 p-2 text-[7px] text-[#ff4d6d] sm:text-[8px]">
+          <div className="mb-3 w-full border border-[#ff4d6d] bg-[#ff4d6d]/15 p-2 text-[8px] text-[#ff4d6d]">
             {errorMsg}
           </div>
         )}
 
         {successMsg && (
-          <div className="mb-3 w-full border border-[#3ef2c8] bg-[#3ef2c8]/15 p-2 text-[7px] text-[#3ef2c8] sm:text-[8px]">
+          <div className="mb-3 w-full border border-[#3ef2c8] bg-[#3ef2c8]/15 p-2 text-[8px] text-[#3ef2c8]">
             {successMsg}
           </div>
         )}
 
         {mode === 'save' ? (
           <div className="flex w-full flex-col gap-3">
-            <p className="text-[7.5px] leading-relaxed text-[#9d8fd6] sm:text-[8.5px]">
+            <p className="text-[8px] leading-relaxed text-[#9d8fd6] sm:text-[10px]">
               Download your backup file or copy the save code string to restore in Safari.
             </p>
 
             <div className="flex flex-col gap-2">
               <PixelButton
                 onClick={handleDownload}
-                className="w-full py-3 text-[9.5px] sm:text-[11px]"
+                className="w-full py-3 text-[10px]"
               >
                 {loading ? 'EXPORTING...' : 'DOWNLOAD SAVE FILE'}
               </PixelButton>
@@ -194,15 +197,15 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
               <PixelButton
                 variant="ghost"
                 onClick={handleCopy}
-                className="w-full py-2.5 text-[8.5px] sm:text-[9.5px]"
+                className="w-full py-2.5 text-[10px]"
               >
-                {copied ? '✓ COPIED TO CLIPBOARD!' : 'COPY SAVE CODE'}
+                {copied ? 'COPIED TO CLIPBOARD!' : 'COPY SAVE CODE'}
               </PixelButton>
             </div>
 
             {/* Selectable Save Code Box */}
             <div className="mt-1 flex flex-col text-left">
-              <span className="mb-1 text-[6.5px] text-[#6f5fa8] sm:text-[7.5px]">
+              <span className="mb-1 text-[8px] text-[#9d8fd6]">
                 BACKUP CODE STRING (TAP TO SELECT ALL):
               </span>
               <textarea
@@ -211,13 +214,13 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
                 onFocus={(e) => e.target.select()}
                 onClick={(e) => (e.target as HTMLTextAreaElement).select()}
                 onChange={() => {}}
-                className="h-16 w-full resize-none border-2 border-[#251842] bg-[#120722] p-2 font-mono text-[7px] text-[#ffd166] selection:bg-[#3ef2c8] selection:text-[#08040f] focus:border-[#3ef2c8] focus:outline-none"
+                className="h-16 w-full resize-none border-2 border-[#251842] bg-[#120722] p-2 font-mono text-[8px] text-[#ffd166] selection:bg-[#3ef2c8] selection:text-[#08040f] focus:border-[#3ef2c8] focus:outline-none"
               />
             </div>
           </div>
         ) : (
           <div className="flex w-full flex-col gap-3">
-            <p className="text-[7.5px] leading-relaxed text-[#9d8fd6] sm:text-[8.5px]">
+            <p className="text-[8px] leading-relaxed text-[#9d8fd6] sm:text-[10px]">
               Select your .save file or paste your backup code string below.
             </p>
 
@@ -235,20 +238,20 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
             {/* Label acts as the click target — guaranteed to open file picker on all platforms */}
             <label
               htmlFor="save-file-input"
-              className="flex w-full cursor-pointer items-center justify-center border-2 border-[#3ef2c8]/60 bg-[#092922] py-2.5 font-pixel text-[9px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] transition-colors hover:bg-[#0d3b2d] active:translate-x-[1px] active:translate-y-[1px] sm:text-[10px]"
+              className="flex w-full cursor-pointer items-center justify-center border-2 border-[#3ef2c8]/60 bg-[#092922] py-2.5 font-pixel text-[10px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] transition-colors hover:bg-[#0d3b2d] active:translate-x-[1px] active:translate-y-[1px]"
             >
               {loading ? 'LOADING...' : 'SELECT .SAVE FILE'}
             </label>
 
             <div className="flex flex-col text-left">
               <div className="mb-1 flex items-center justify-between">
-                <span className="text-[6.5px] text-[#6f5fa8] sm:text-[7.5px]">
+                <span className="text-[8px] text-[#9d8fd6]">
                   OR PASTE SAVE CODE:
                 </span>
                 <button
                   type="button"
                   onClick={handlePasteFromClipboard}
-                  className="cursor-pointer border border-[#3ef2c8]/40 bg-[#092922] px-1.5 py-0.5 text-[6.5px] text-[#3ef2c8] hover:bg-[#0d3b2d]"
+                  className="cursor-pointer border-2 border-[#3ef2c8]/40 bg-[#092922] px-1.5 py-0.5 text-[8px] text-[#3ef2c8] hover:bg-[#0d3b2d]"
                 >
                   PASTE FROM CLIPBOARD
                 </button>
@@ -257,13 +260,13 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
                 value={inputCode}
                 onChange={(e) => setInputCode(e.target.value)}
                 placeholder="Paste PRSAVE1:... code here"
-                className="h-20 w-full resize-none border-2 border-[#251842] bg-[#120722] p-2 font-mono text-[7px] text-[#ffd166] placeholder-[#6f5fa8] focus:border-[#3ef2c8] focus:outline-none"
+                className="h-20 w-full resize-none border-2 border-[#251842] bg-[#120722] p-2 font-mono text-[8px] text-[#ffd166] placeholder-[#9d8fd6] focus:border-[#3ef2c8] focus:outline-none"
               />
             </div>
 
             <PixelButton
               onClick={handleRestoreFromText}
-              className="w-full py-3 text-[9.5px] sm:text-[11px]"
+              className="w-full py-3 text-[10px]"
             >
               {loading ? 'RESTORING...' : 'RESTORE PROGRESS'}
             </PixelButton>

@@ -32,8 +32,6 @@ import {
   ri,
   rnd,
   SLAM_PTS,
-  SLAM_RADIUS,
-  SLAM_VERT,
   STOMP_PTS,
   VW,
   WALL_MARGIN,
@@ -55,8 +53,23 @@ import {
 import { type SkinId, loadEquippedSkin, loadLifetimeStats, saveLifetimeStats, MILESTONES } from './skins';
 import { WorldGen } from './worldGen';
 
+import { party } from './multiplayer/partyManager';
+import type { OpponentInfo, LocalPlayerState, MatchResult } from './multiplayer/types';
+import { coinSync } from './coinSync';
+
 export { BASE_VW, BASE_VH, MAX_VH, VW, VH, worldOffsetY, setViewportSize } from './types';
 export type { Phase, Stats } from './types';
+
+/**
+ * Deterministic cross-tab identity for a coin: rounded world-x + rounded
+ * world-y. The world is generated from the shared match seed, so every tab
+ * produces the same pickups at the same absolute position — no zone index
+ * (startX shifts with the viewport) and no spawn-slot index (culling
+ * diverges once tabs collect different coins) are safe across tabs. The y
+ * component keeps two different coins that happen to share a rounded world-x
+ * from being deduped as the same coin when tabs' worlds diverge slightly.
+ */
+const coinId = (x: number, y: number) => Math.round(x) + ':' + Math.round(y);
 
 /**
  * Initial values for every mutable piece of run state. reset() re-applies
@@ -75,6 +88,7 @@ type GameState = {
     }[keyof Game],
     | 'ctx'
     | 'onDeath'
+    | 'onMatchEnd'
     | 'best'
     | 'frame'
     | 'animT'
@@ -86,6 +100,14 @@ type GameState = {
     | 'stats'
     | 'rng'
     | 'matchSeed'
+    | 'isLocalBattle'
+    | 'p2'
+    | 'localPlayers'
+    | 'isMultiplayer'
+    | 'opponentStates'
+    | 'playerControls'
+    | 'mode'
+    | 'matchOver'
   >]: Game[K];
 };
 
@@ -99,7 +121,23 @@ export class Game implements GenHost, RenderHost {
   ctx: CanvasRenderingContext2D;
   phase!: Phase;
   onDeath: ((s: Stats) => void) | null = null;
+  onMatchEnd: ((result: MatchResult) => void) | null = null;
   best = 0;
+
+  /* ---- multiplayer battle state */
+  /** 'solo' | 'local' (shared-screen battle) | 'online' (PartyKit match). */
+  mode: 'solo' | 'local' | 'online' = 'solo';
+  /** Convenience flag: true once the match has ended (implies phase 'over'). */
+  matchOver = false;
+  get isLocalBattle(): boolean {
+    return this.mode === 'local';
+  }
+  get isMultiplayer(): boolean {
+    return this.mode === 'online';
+  }
+  p2: LocalPlayerState | undefined = undefined;
+  localPlayers: LocalPlayerState[] = [];
+  opponentStates = new Map<string, OpponentInfo>();
 
   /* ---- input */
   jumpHeld!: boolean;
@@ -109,6 +147,8 @@ export class Game implements GenHost, RenderHost {
   savedJumpHeld!: boolean;
   savedDiveHeld!: boolean;
   savedMoveDir!: number;
+  /** Jump buffer saved across a mid-countdown pause (taps must survive to GO). */
+  savedJumpBuf!: number;
 
   /* ---- world arrays (read by WorldGen + Renderer through the host contract) */
   platforms!: Platform[];
@@ -209,6 +249,15 @@ export class Game implements GenHost, RenderHost {
   private worldGen!: WorldGen;
   private particles!: ParticleSystem;
   private texts!: FloatTexts;
+  /** Another tab collected a coin — remove it from this world too. */
+  private onCoinCollected = (id: string) => {
+    for (const k of this.pickups) {
+      if (!k.dead && !k.gem && coinId(k.x, k.y) === id) {
+        k.dead = true;
+        return;
+      }
+    }
+  };
 
   constructor(ctx: CanvasRenderingContext2D) {
     this.ctx = ctx;
@@ -219,6 +268,7 @@ export class Game implements GenHost, RenderHost {
     this.renderer = new Renderer(this, this.particles, this.texts);
     this.worldGen = new WorldGen(this);
     this.reset();
+    coinSync.subscribe(this.onCoinCollected);
   }
 
   private defaults(): GameState {
@@ -231,6 +281,7 @@ export class Game implements GenHost, RenderHost {
       savedJumpHeld: false,
       savedDiveHeld: false,
       savedMoveDir: 0,
+      savedJumpBuf: 0,
       platforms: [],
       pickups: [],
       powerups: [],
@@ -312,11 +363,22 @@ export class Game implements GenHost, RenderHost {
   }
 
   /* ------------------------------------------------------------- lifecycle */
-  reset() {
-    this.matchSeed = (Math.random() * 0x7fffffff) >>> 0;
+  reset(seed?: number) {
+    this.matchSeed = seed !== undefined ? seed : (Math.random() * 0x7fffffff) >>> 0;
     this.rng = new Mulberry32(this.matchSeed);
+    // Re-arm the cross-tab coin channel for the current room (no-op unless it changed).
+    coinSync.setRoom(party.roomId);
 
     Object.assign(this, this.defaults());
+    // Battle flags are excluded from defaults() on purpose (they are owned by
+    // the battle entry points), so re-zero them here — otherwise a stale
+    // battle leaks into the attract demo and solo runs after toMenu().
+    this.mode = 'solo';
+    this.matchOver = false;
+    this.p2 = undefined;
+    this.localPlayers = [];
+    this.opponentStates = new Map<string, OpponentInfo>();
+    this.playerControls = ['wasd', 'arrows', 'ijkl', 'numpad'];
     this.particles.reset();
     this.texts.reset();
     this.worldGen.reset();
@@ -339,14 +401,127 @@ export class Game implements GenHost, RenderHost {
     this.worldGen.generate(this.camX + VW * 2.2);
   }
 
-  startRun() {
-    this.reset();
+  startRun(seed?: number) {
+    this.reset(seed);
+    this.mode = party.isMultiplayer ? 'online' : 'solo';
+    this.p2 = undefined;
+    this.opponentStates = party.opponents;
     this.phase = 'playing';
     this.countdown = 180;
     this.countdownTicks = true;
     this.flash = 0.35;
     this.flashCol = '#ffffff';
     sfx.startMusic(this.zone.bg, 0);
+  }
+
+  playerControls: string[] = ['wasd', 'arrows', 'ijkl', 'numpad'];
+
+  startLocalBattle(skins: SkinId[], names?: string[], controls?: string[]) {
+    this.reset();
+    this.mode = 'local';
+    this.activeSkin = skins[0] || 'bob';
+    if (controls) this.playerControls = [...controls];
+
+    const count = Math.min(4, Math.max(2, skins.length));
+    const colors = ['#3ef2c8', '#ffd166', '#ff70a6', '#7ef7ff'];
+
+    this.localPlayers = [];
+    for (let i = 0; i < count; i++) {
+      this.localPlayers.push({
+        px: anchorX() - i * 14,
+        py: 170 - PLAYER_H,
+        vx: 0,
+        vy: 0,
+        skinId: skins[i] || 'bob',
+        name: (names && names[i]) || `Player ${i + 1}`,
+        onGround: false,
+        diving: false,
+        jumps: 0,
+        coyote: 0,
+        jumpBuf: 0,
+        jumpHeld: false,
+        diveHeld: false,
+        moveDir: 0,
+        distance: 0,
+        score: 0,
+        isAlive: true,
+        animT: 0,
+        padFlight: 0,
+        cut: false,
+        shielded: false,
+        invuln: 0,
+        spin: 0,
+        sx: 1,
+        sy: 1,
+        color: colors[i],
+      });
+    }
+
+    this.phase = 'playing';
+    this.countdown = 180;
+    this.countdownTicks = true;
+    this.flash = 0.35;
+    this.flashCol = '#ffffff';
+    sfx.startMusic(this.zone.bg, 0);
+  }
+
+  /* ---- Multi-Player Local Inputs (P1 - P4) */
+  pressPlayerJump(idx: number) {
+    if (idx === 0) {
+      this.pressJump();
+      return;
+    }
+    if (this.phase !== 'playing') return;
+    const p = this.localPlayers[idx];
+    if (!p || !p.isAlive) return;
+    p.jumpHeld = true;
+    p.jumpBuf = BUFFER;
+  }
+  releasePlayerJump(idx: number) {
+    if (idx === 0) {
+      this.releaseJump();
+      return;
+    }
+    const p = this.localPlayers[idx];
+    if (!p) return;
+    p.jumpHeld = false;
+    p.jumpBuf = 0;
+  }
+  pressPlayerDive(idx: number) {
+    if (idx === 0) {
+      this.pressDive();
+      return;
+    }
+    if (this.phase !== 'playing' || this.countdown > 0) return;
+    const p = this.localPlayers[idx];
+    if (!p || !p.isAlive) return;
+    p.diveHeld = true;
+    if (!p.onGround && p.vy > -3) {
+      p.diving = true;
+      p.padFlight = 0;
+      p.vy = Math.max(p.vy, 6.5);
+      p.spin = 0;
+      p.sx = 0.8;
+      p.sy = 1.25;
+    }
+  }
+  releasePlayerDive(idx: number) {
+    if (idx === 0) {
+      this.releaseDive();
+      return;
+    }
+    const p = this.localPlayers[idx];
+    if (!p) return;
+    p.diveHeld = false;
+  }
+  setPlayerMove(idx: number, d: number) {
+    if (idx === 0) {
+      this.setMove(d);
+      return;
+    }
+    const p = this.localPlayers[idx];
+    if (!p) return;
+    p.moveDir = d;
   }
 
   /** Called when the canvas size changes — drops size-dependent art caches. */
@@ -372,6 +547,9 @@ export class Game implements GenHost, RenderHost {
     this.savedJumpHeld = this.jumpHeld;
     this.savedDiveHeld = this.diveHeld;
     this.savedMoveDir = this.moveDir;
+    // A tap buffered during the countdown must fire at GO after the pause —
+    // it can't be re-derived from jumpHeld (the finger already lifted).
+    this.savedJumpBuf = this.countdown > 0 ? this.jumpBuf : 0;
     this.jumpHeld = false;
     this.jumpBuf = 0;
     this.diveHeld = false;
@@ -389,6 +567,8 @@ export class Game implements GenHost, RenderHost {
       this.savedDiveHeld = false;
       this.savedMoveDir = 0;
       if (this.jumpHeld) this.jumpBuf = BUFFER; // buffered for GO
+      else if (this.savedJumpBuf > 0) this.jumpBuf = this.savedJumpBuf; // mid-countdown tap survives
+      this.savedJumpBuf = 0;
       if (this.countdown === 0) {
         this.goTimer = 0; // don't flash "GO" over the fresh countdown
         this.countdown = 180; // 3s of "3-2-1-GO" before control resumes
@@ -439,7 +619,7 @@ export class Game implements GenHost, RenderHost {
 
   /* ----------------------------------------------------------------- input */
   pressJump() {
-    if (this.phase === 'paused' || this.phase === 'dead') return;
+    if (this.phase === 'paused' || this.phase === 'dead' || this.phase === 'over') return;
     this.jumpHeld = true;
     this.jumpBuf = BUFFER;
   }
@@ -449,10 +629,13 @@ export class Game implements GenHost, RenderHost {
     // buffer here cancels any buffered jump (held input survives via
     // jumpHeld, which resume()/the countdown re-buffers at GO).
     this.jumpBuf = 0;
-    if (this.phase === 'paused') this.savedJumpHeld = false;
+    if (this.phase === 'paused') {
+      this.savedJumpHeld = false;
+      this.savedJumpBuf = 0; // releasing during the pause cancels the buffered tap too
+    }
   }
   pressDive() {
-    if (this.phase !== 'playing' || this.countdown > 0) return;
+    if ((this.phase !== 'playing' && this.phase !== 'ready') || this.countdown > 0) return;
     this.diveHeld = true;
     if (!this.onGround && this.vy > -3) {
       this.diving = true;
@@ -470,12 +653,13 @@ export class Game implements GenHost, RenderHost {
   setMove(d: number) {
     if (this.phase !== 'playing') {
       this.moveDir = 0;
-      // Mirror releaseJump/releaseDive: letting go of the key while paused
-      // must not be re-applied by resume() (savedMoveDir is restored there).
       if (this.phase === 'paused') this.savedMoveDir = 0;
       return;
     }
-    this.moveDir = d > 0 ? 1 : 0;
+    this.moveDir = d;
+    if (this.isLocalBattle && this.localPlayers[0]) {
+      this.localPlayers[0].moveDir = d;
+    }
   }
 
   /* --------------------------------------------------------------- helpers */
@@ -586,7 +770,7 @@ export class Game implements GenHost, RenderHost {
 
   /* ------------------------------------------------------------ simulation */
   step() {
-    if (this.phase === 'paused') return;
+    if (this.phase === 'paused' || this.phase === 'over') return;
 
     // decaying juice always runs
     this.shake *= 0.9;
@@ -632,7 +816,9 @@ export class Game implements GenHost, RenderHost {
       this.texts.update();
       if (this.deathTimer > DEATH_REPORT_FRAME && !this.deathReported) {
         this.deathReported = true;
-        this.onDeath?.(this.stats);
+        if (!this.isLocalBattle && !this.isMultiplayer) {
+          this.onDeath?.(this.stats);
+        }
       }
       return;
     }
@@ -658,7 +844,8 @@ export class Game implements GenHost, RenderHost {
       else if (this.eventKind === 'tundra') target *= 0.82;
     }
     if (this.padFlight <= 0) {
-      if (this.moveDir > 0) target *= 1.22;
+      if (this.moveDir > 0) target *= 1.35;
+      else if (this.moveDir < 0) target *= 0.7;
       this.vx += (target - this.vx) * 0.14;
     } else {
       this.padFlight--;
@@ -747,12 +934,29 @@ export class Game implements GenHost, RenderHost {
     this.texts.update();
 
     /* ---- camera */
-    const camTarget = this.px - anchorX();
+    let camTarget = this.px - anchorX();
+    const multiCam = this.multiCamTarget();
+    if (multiCam !== null) camTarget = multiCam;
     this.camX += (camTarget - this.camX) * 0.22;
     if (this.camX < 0) this.camX = 0;
 
     this.worldGen.generate(this.camX + VW * 2.2);
     if (this.frame % 20 === 0) this.cull();
+
+    /* ---- local battle multi-player update */
+    if (this.isLocalBattle && this.localPlayers.length > 0) {
+      if (this.localPlayers[0] && this.localPlayers[0].isAlive) {
+        this.localPlayers[0].px = this.px;
+        this.localPlayers[0].py = this.py;
+        this.localPlayers[0].vx = this.vx;
+        this.localPlayers[0].vy = this.vy;
+        this.localPlayers[0].score = this.score;
+        this.localPlayers[0].distance = this.distance;
+      }
+      for (let i = 1; i < this.localPlayers.length; i++) {
+        this.stepLocalPlayer(this.localPlayers[i], i);
+      }
+    }
 
     /* ---- score */
     if (this.phase === 'playing') {
@@ -802,7 +1006,69 @@ export class Game implements GenHost, RenderHost {
     }
 
     /* ---- death by pit */
-    if (this.py > PIT_DEATH_Y) this.die('pit');
+    if (this.py > PIT_DEATH_Y) {
+      if (this.isLocalBattle) {
+        if (this.localPlayers[0]?.isAlive) {
+          this.killLocalPlayer(0, 'pit');
+        }
+      } else if (this.phase === 'playing' || this.phase === 'ready') {
+        this.die('pit');
+      }
+    }
+
+    if (this.isMultiplayer && this.frame % 2 === 0) {
+      party.sendTick({
+        px: Math.round(this.px),
+        py: Math.round(this.py),
+        vx: Number(this.vx.toFixed(2)),
+        vy: Number(this.vy.toFixed(2)),
+        diving: this.diving,
+        frame: this.frame,
+        run: this.onGround ? Math.floor(this.frame / 6) % 4 : -1,
+        meters: Math.floor(this.distance / 10),
+        score: this.score,
+        skinId: this.activeSkin,
+        alive: true,
+      });
+    }
+  }
+
+  /**
+   * Shared-screen camera target for multiplayer: frames the local player and
+   * every alive opponent/teammate. Midpoint camera while everyone fits the
+   * viewport (clamped so the trailing player never leaves the left edge);
+   * beyond that the camera clamps to the leader at the solo anchor. Returns
+   * null in solo play so the behaviour stays byte-identical.
+   */
+  private multiCamTarget(): number | null {
+    let minX = this.px;
+    let maxX = this.px;
+    let n = 1;
+    if (this.isLocalBattle) {
+      for (let i = 1; i < this.localPlayers.length; i++) {
+        const p = this.localPlayers[i];
+        if (!p.isAlive) continue;
+        if (p.px < minX) minX = p.px;
+        if (p.px > maxX) maxX = p.px;
+        n++;
+      }
+    } else if (this.isMultiplayer) {
+      for (const opp of this.opponentStates.values()) {
+        if (!opp.isAlive || opp.px === undefined) continue;
+        if (opp.px < minX) minX = opp.px;
+        if (opp.px > maxX) maxX = opp.px;
+        n++;
+      }
+    }
+    if (n < 2) return null;
+    const spread = maxX - minX;
+    if (spread >= VW) return maxX - anchorX();
+    let t = (minX + maxX) * 0.5 - anchorX();
+    const lo = maxX - VW + 6;
+    const hi = minX - 6;
+    if (t < lo) return lo;
+    if (t > hi) return hi;
+    return t;
   }
 
   private doJump(dbl: boolean) {
@@ -945,16 +1211,6 @@ export class Game implements GenHost, RenderHost {
         this.addShake(0.5);
         this.freeze = 3;
         sfx.play('slam');
-        // shockwave kills nearby ground enemies
-        for (const e of this.enemies) {
-          if (e.dead || e.kind === 'flyer') continue;
-          if (
-            Math.abs(e.x + e.w / 2 - (this.px + PLAYER_W / 2)) < SLAM_RADIUS &&
-            Math.abs(e.y - this.py) < SLAM_VERT
-          ) {
-            this.killEnemy(e, SLAM_PTS, e.kind === 'spiker' ? 'SMASH' : 'SLAM');
-          }
-        }
         for (let i = 0; i < 18; i++) {
           const dir = i % 2 === 0 ? 1 : -1;
           this.particles.spawnP(
@@ -987,62 +1243,112 @@ export class Game implements GenHost, RenderHost {
   }
 
   private updateEntities(): boolean {
-    const pxc = this.px;
-    const pyc = this.py;
     const pw = PLAYER_W;
     const ph = PLAYER_H;
+
+    // Gather all active living runner positions
+    const runners: Array<{ px: number; py: number; isMain: boolean; addScore: (pts: number) => void }> = [];
+    if (this.isLocalBattle) {
+      for (let i = 0; i < this.localPlayers.length; i++) {
+        const lp = this.localPlayers[i];
+        if (lp && lp.isAlive) {
+          runners.push({
+            px: lp.px,
+            py: lp.py,
+            isMain: i === 0,
+            addScore: (pts: number) => {
+              lp.score += pts;
+              if (i === 0) this.score += pts;
+            },
+          });
+        }
+      }
+    } else if (this.phase === 'playing' || this.phase === 'ready') {
+      runners.push({
+        px: this.px,
+        py: this.py,
+        isMain: true,
+        addScore: (pts: number) => { this.score += pts; },
+      });
+    }
+
+    const pxc = this.px;
+    const pyc = this.py;
 
     /* pickups */
     for (const c of this.pickups) {
       if (c.dead) continue;
+      // A coin another tab already collected never enters this world — checked
+      // here (every frame, so the same frame it spawns) and at collection.
+      if (!c.gem && this.isMultiplayer && this.phase === 'playing' && coinSync.isCollected(coinId(c.x, c.y))) {
+        c.dead = true;
+        continue;
+      }
       c.t += 0.14;
       if (c.x < this.camX - 30 || c.x > this.camX + VW + 40) continue;
       const r = c.gem ? 9 : 8;
-      if (
-        Math.abs(c.x - (pxc + pw / 2)) < r + pw / 2 - 2 &&
-        Math.abs(c.y - (pyc + ph / 2)) < r + ph / 2 - 3
-      ) {
-        c.dead = true;
-        if (c.gem) {
-          this.gems++;
-          this.runGems++;
-          const currentLifetime = loadLifetimeStats();
-          currentLifetime.gems = (currentLifetime.gems || 0) + 1;
-          saveLifetimeStats(currentLifetime);
-          this.addCombo(c.x, c.y - 6, GEM_PTS, 'GEM');
-          this.particles.burst(c.x, c.y, 14, ['#7ef7ff', '#ffffff', '#3ef2c8'], 2.2, 0.05);
-          this.addShake(0.14);
-          sfx.play('gem');
-        } else {
-          this.coins++;
-          this.questCoins++;
-          const currentLifetime = loadLifetimeStats();
-          if (!currentLifetime.coinsDone) {
-            currentLifetime.coins = (currentLifetime.coins || 0) + 1;
-            if (currentLifetime.coins >= MILESTONES.COINS_TARGET) {
-              currentLifetime.coins = MILESTONES.COINS_TARGET;
-              currentLifetime.coinsDone = true;
+
+      for (const runner of runners) {
+        if (
+          Math.abs(c.x - (runner.px + pw / 2)) < r + pw / 2 - 2 &&
+          Math.abs(c.y - (runner.py + ph / 2)) < r + ph / 2 - 3
+        ) {
+          c.dead = true;
+          if (c.gem) {
+            this.gems++;
+            this.runGems++;
+            if (this.mode === 'solo') {
+              const currentLifetime = loadLifetimeStats();
+              currentLifetime.gems = (currentLifetime.gems || 0) + 1;
+              saveLifetimeStats(currentLifetime);
             }
-            saveLifetimeStats(currentLifetime);
+            runner.addScore(GEM_PTS);
+            this.addCombo(c.x, c.y - 6, GEM_PTS, 'GEM');
+            this.particles.burst(c.x, c.y, 14, ['#7ef7ff', '#ffffff', '#3ef2c8'], 2.2, 0.05);
+            this.addShake(0.14);
+            sfx.play('gem');
+          } else {
+            if (this.isMultiplayer && this.phase === 'playing') coinSync.report(coinId(c.x, c.y));
+            this.coins++;
+            this.questCoins++;
+            if (this.mode === 'solo') {
+              const currentLifetime = loadLifetimeStats();
+              if (!currentLifetime.coinsDone) {
+                currentLifetime.coins = (currentLifetime.coins || 0) + 1;
+                if (currentLifetime.coins >= MILESTONES.COINS_TARGET) {
+                  currentLifetime.coins = MILESTONES.COINS_TARGET;
+                  currentLifetime.coinsDone = true;
+                }
+                saveLifetimeStats(currentLifetime);
+              }
+            }
+            runner.addScore(COIN_PTS);
+            this.addCombo(c.x, c.y - 4, COIN_PTS);
+            this.particles.burst(c.x, c.y, 6, ['#ffd166', '#ffffff'], 1.7, 0.04);
+            sfx.play('coin');
           }
-          this.addCombo(c.x, c.y - 4, COIN_PTS);
-          this.particles.burst(c.x, c.y, 6, ['#ffd166', '#ffffff'], 1.7, 0.04);
-          sfx.play('coin');
+          break;
         }
       }
     }
 
-    /* power-ups */
+    /* power-ups — the power-up state lives on the main player only, so in a
+     * battle a P2-P4 grab must not silently buff P1 (or, once P1 is dead,
+     * activate a power-up on the corpse). Only the main runner may collect. */
     for (const power of this.powerups) {
       if (power.dead) continue;
       power.t += 0.12;
       if (power.x < this.camX - 30 || power.x > this.camX + VW + 40) continue;
-      if (
-        Math.abs(power.x - (pxc + pw / 2)) < 10 + pw / 2 - 2 &&
-        Math.abs(power.y - (pyc + ph / 2)) < 10 + ph / 2 - 3
-      ) {
-        power.dead = true;
-        this.activatePowerUp(power.kind, power.x, power.y);
+      for (const runner of runners) {
+        if (!runner.isMain) continue;
+        if (
+          Math.abs(power.x - (runner.px + pw / 2)) < 10 + pw / 2 - 2 &&
+          Math.abs(power.y - (runner.py + ph / 2)) < 10 + ph / 2 - 3
+        ) {
+          power.dead = true;
+          this.activatePowerUp(power.kind, power.x, power.y);
+          break;
+        }
       }
     }
 
@@ -1225,6 +1531,48 @@ export class Game implements GenHost, RenderHost {
       }
     }
 
+    /* local battle: enemy + spike contact for players 2-4. Stomping stays
+     * main-player-only, so any overlap here is a fatal hit. */
+    if (this.isLocalBattle) {
+      for (let i = 1; i < this.localPlayers.length; i++) {
+        const lp = this.localPlayers[i];
+        if (!lp.isAlive || lp.invuln > 0) continue;
+        const lx = lp.px;
+        const ly = lp.py;
+        let dead = false;
+        for (const e of this.enemies) {
+          if (e.dead) continue;
+          if (e.x < this.camX - 40 || e.x > this.camX + VW + 90) continue;
+          const hPadTop = e.kind === 'flyer' ? 2 : 1;
+          const hPadBottom = e.kind === 'flyer' ? 4 : 0;
+          const xPad = e.kind === 'flyer' ? 2 : 1;
+          if (
+            lx + pw > e.x + xPad &&
+            lx < e.x + e.w - xPad &&
+            ly + ph > e.y + hPadTop &&
+            ly < e.y + e.h - hPadBottom
+          ) {
+            this.killLocalPlayer(i, e.kind === 'spiker' ? 'spike' : 'hit');
+            dead = true;
+            break;
+          }
+        }
+        if (dead || !lp.isAlive) continue;
+        for (const s of this.spikes) {
+          if (s.x > this.camX + VW + 20 || s.x + s.n * 8 < this.camX - 20) continue;
+          if (
+            lx + pw - 2 > s.x + 1 &&
+            lx + 2 < s.x + s.n * 8 - 1 &&
+            ly + ph > s.y + 3 &&
+            ly < s.y + 10
+          ) {
+            this.killLocalPlayer(i, 'spike');
+            break;
+          }
+        }
+      }
+    }
+
     /* springs */
     for (const sp of this.springs) {
       // Skip off-screen pads entirely — don't tick their press animation.
@@ -1338,7 +1686,11 @@ export class Game implements GenHost, RenderHost {
     }
     if (this.propellerFlashing && this.propellerFlashTimer > 0) {
       this.propellerFlashTimer--;
-      if (this.propellerFlashTimer === 0 && this.onGround) {
+      // The flash is the power's last second — when it ends the hat is gone.
+      // Clearing only on landing let a mid-air expiry keep the slow-fall
+      // (hasPropeller) alive until the player touched down, i.e. infinite
+      // float while staying airborne.
+      if (this.propellerFlashTimer === 0) {
         this.propellerFlashing = false;
       }
     }
@@ -1411,6 +1763,7 @@ export class Game implements GenHost, RenderHost {
   }
 
   private die(cause: string) {
+    if (this.phase === 'over') return;
     if (this.phase !== 'playing' && this.phase !== 'ready') return;
     if (this.phase === 'playing' && cause !== 'pit') {
       if (this.shielded && this.absorbShieldHit()) return;
@@ -1421,9 +1774,18 @@ export class Game implements GenHost, RenderHost {
       this.reset();
       return;
     }
+
+    if (this.isLocalBattle) {
+      this.killLocalPlayer(0, cause);
+      return;
+    }
+
     this.phase = 'dead';
     this.deathTimer = 0;
     this.deathReported = false;
+    if (this.isMultiplayer) {
+      party.sendDeath(Math.floor(this.distance / 10), this.score);
+    }
     this.addShake(1);
     this.freeze = 8;
     this.flash = 0.95;
@@ -1447,6 +1809,221 @@ export class Game implements GenHost, RenderHost {
         0.97,
       );
     }
+  }
+
+  private stepLocalPlayer(p: LocalPlayerState, idx: number) {
+    if (!p.isAlive) return;
+
+    /* horizontal motion */
+    let target = this.runSpeed();
+    if (p.padFlight <= 0) {
+      if (p.moveDir > 0) target *= 1.35;
+      else if (p.moveDir < 0) target *= 0.7;
+      p.vx += (target - p.vx) * 0.14;
+    } else {
+      p.padFlight--;
+    }
+
+    /* jumping */
+    if (p.jumpBuf > 0) p.jumpBuf--;
+    if (p.coyote > 0) p.coyote--;
+    if (p.jumpBuf > 0) {
+      if (p.onGround || p.coyote > 0) {
+        p.jumpBuf = 0;
+        p.cut = false;
+        p.diving = false;
+        p.vy = -JUMP_V;
+        p.jumps = 1;
+        p.onGround = false;
+        p.coyote = 0;
+        p.sx = 0.75;
+        p.sy = 1.35;
+        sfx.play('jump');
+      } else if (p.jumps < 2) {
+        p.jumpBuf = 0;
+        p.cut = false;
+        p.diving = false;
+        p.vy = -DJUMP_V;
+        p.jumps = 2;
+        p.onGround = false;
+        p.sx = 0.7;
+        p.sy = 1.4;
+        p.spin = 1;
+        sfx.play('djump');
+      }
+    }
+    if (!p.jumpHeld && p.vy < -3 && !p.cut) {
+      p.vy *= 0.52;
+      p.cut = true;
+    }
+
+    /* gravity */
+    if (p.diveHeld && !p.onGround && !p.diving && p.vy > 0.5) {
+      p.diving = true;
+      p.spin = 0;
+      p.sx = 0.8;
+      p.sy = 1.25;
+    }
+    let g = GRAV_FALL;
+    if (p.diving) g = GRAV_DIVE;
+    else if (p.jumpHeld && p.vy < 0) g = GRAV_HOLD;
+    p.vy = Math.min(MAX_FALL, p.vy + g);
+
+    /* integrate */
+    const prevBottom = p.py + PLAYER_H;
+    p.px += p.vx;
+
+    // Platform collisions X
+    for (const plat of this.platforms) {
+      if (p.px + PLAYER_W > plat.x && p.px < plat.x + plat.w && p.py + PLAYER_H > plat.y && p.py < (plat.float ? plat.y + 8 : GROUND_BOTTOM)) {
+        if (p.vx > 0 && p.px + PLAYER_W - p.vx <= plat.x + WALL_MARGIN) {
+          if (p.vy < 0 || p.invuln > 0) {
+            p.px = plat.x - PLAYER_W - 1;
+            p.vx = 0;
+          } else {
+            this.killLocalPlayer(idx, 'wall');
+            return;
+          }
+        }
+      }
+    }
+
+    // Platform collisions Y
+    p.py += p.vy;
+    p.onGround = false;
+    let landing: Platform | null = null;
+    for (const plat of this.platforms) {
+      if (p.px + PLAYER_W <= plat.x - 2 || p.px >= plat.x + plat.w + 2) continue;
+      const bh = plat.float ? 8 : GROUND_BOTTOM - plat.y;
+      if (p.py + PLAYER_H > plat.y && p.py < plat.y + bh) {
+        if (p.vy >= 0 && (prevBottom <= plat.y + Math.max(6, p.vy + 2) || p.py + PLAYER_H <= plat.y + 7)) {
+          if (!landing || plat.y < landing.y) landing = plat;
+        }
+      }
+    }
+    if (landing !== null) {
+      p.py = landing.y - PLAYER_H;
+      p.onGround = true;
+      p.vy = 0;
+      p.padFlight = 0;
+      p.jumps = 0;
+      p.coyote = COYOTE;
+      p.diving = false;
+      p.spin = 0;
+    }
+
+    // Spikes collision
+    for (const sp of this.spikes) {
+      if (p.px + PLAYER_W > sp.x + 2 && p.px < sp.x + sp.n * 8 - 2 && p.py + PLAYER_H > sp.y + 2 && p.py < sp.y + 8) {
+        this.killLocalPlayer(idx, 'spike');
+        return;
+      }
+    }
+
+    // Springs collision
+    for (const spr of this.springs) {
+      const padY = spr.y + (spr.press > 0 ? 4 : 0);
+      if (p.vy >= 0 && p.px + PLAYER_W > spr.x && p.px < spr.x + (spr.mega ? 18 : 14) && p.py + PLAYER_H > padY && p.py + PLAYER_H < padY + 12) {
+        p.py = padY - PLAYER_H;
+        p.vy = spr.mega ? -MEGA_PAD_V : -PAD_V;
+        p.vx = spr.launchVx;
+        p.padFlight = 90;
+        p.jumps = 0;
+        p.cut = true;
+        p.diving = false;
+        spr.press = spr.mega ? 16 : 14;
+        p.sx = 0.6;
+        p.sy = 1.6;
+        sfx.play(spr.mega ? 'slam' : 'spring');
+      }
+    }
+
+    // Distance & Score
+    p.distance = Math.max(p.distance, p.px - this.startX);
+    p.score = Math.floor(p.distance / 8);
+    p.animT += p.vx * 0.09;
+    p.sx += (1 - p.sx) * 0.18;
+    p.sy += (1 - p.sy) * 0.18;
+
+    // Pit death
+    if (p.py > PIT_DEATH_Y) {
+      this.killLocalPlayer(idx, 'pit');
+    }
+  }
+
+  private killLocalPlayer(idx: number, _cause: string) {
+    const p = this.localPlayers[idx];
+    if (!p || !p.isAlive) return;
+    p.isAlive = false;
+    sfx.play('death');
+
+    for (let i = 0; i < 30; i++) {
+      const a = rnd(0, Math.PI * 2);
+      const sp = rnd(0.6, 4.2);
+      this.particles.spawnP(
+        p.px + PLAYER_W / 2,
+        p.py + PLAYER_H / 2,
+        Math.cos(a) * sp,
+        Math.sin(a) * sp - 1.4,
+        ri(20, 45),
+        i % 4 === 0 ? 2 : 1,
+        [p.color, '#ffd166', '#ffffff', '#ff4d6d'][i % 4],
+        0.18,
+        0.97,
+      );
+    }
+
+    const alive = this.localPlayers.filter((pl) => pl.isAlive);
+    if (alive.length === 0) {
+      this.finishLocalMatch();
+    }
+  }
+
+  private finishLocalMatch() {
+    this.phase = 'over';
+    this.matchOver = true;
+    this.deathTimer = 0;
+    const sorted = [...this.localPlayers].sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return b.distance - a.distance;
+    });
+
+    const leaderboard = sorted.map((p, idx) => ({
+      peerId: `p${idx + 1}`,
+      name: p.name,
+      skinId: p.skinId,
+      meters: Math.floor(p.distance / 10),
+      score: p.score,
+      rank: idx + 1,
+      isLocal: idx === 0,
+    }));
+
+    const winner = leaderboard[0];
+
+    const result: MatchResult = {
+      winnerName: winner ? winner.name : 'Nobody',
+      isWinner: true,
+      finalMeters: winner ? winner.meters : 0,
+      finalScore: winner ? winner.score : 0,
+      rank: 1,
+      totalPlayers: this.localPlayers.length,
+      mode: 'local',
+      leaderboard,
+    };
+
+    this.onMatchEnd?.(result);
+  }
+
+  /**
+   * Public match-over entry used by App when an ONLINE match ends via
+   * party.onMatchEnd. Idempotent — no-op if already 'over' or not in a battle.
+   */
+  enterMatchOver(): void {
+    if (this.phase === 'over') return;
+    if (this.mode !== 'local' && this.mode !== 'online') return;
+    this.phase = 'over';
+    this.matchOver = true;
+    this.deathTimer = 0;
   }
 
   private attractAI() {
@@ -1538,6 +2115,9 @@ export class Game implements GenHost, RenderHost {
     if (wantDive && !this.onGround && !this.diving && this.vy > -2) {
       this.pressDive();
     }
+    // Let the dive go once grounded — otherwise diveHeld stays latched and
+    // the gravity block would auto-dive on every subsequent fall.
+    if (this.onGround) this.releaseDive();
   }
 
   /* ------------------------------------------------------------- rendering */

@@ -36,6 +36,8 @@ import { SkinsModal } from './components/SkinsModal';
 import { SkinUnlockModal } from './components/SkinUnlockModal';
 import { FeedbackModal } from './components/FeedbackModal';
 import { SaveLoadModal } from './components/SaveLoadModal';
+import { BattleModal } from './components/BattleModal';
+import type { MatchResult } from './game/multiplayer/types';
 import {
   loadEquippedSkin,
   loadUnlockedSkins,
@@ -51,6 +53,7 @@ import {
   isDiscordRewardClaimed,
 } from './game/skins';
 import { inputManager } from './game/input';
+import { party } from './game/multiplayer/partyManager';
 
 const QUEST_SHARE_WIDTH = 1200;
 const QUEST_SHARE_HEIGHT = 500;
@@ -243,6 +246,8 @@ export function App() {
   /** Day the current run started — the whole run commits to this day. */
   const startDayKeyRef = useRef<string | null>(null);
   const restartHintTimer = useRef(0);
+  /** Last local-battle config so R / RESTART can replay the same battle. */
+  const localBattleConfigRef = useRef<{ skins: SkinId[]; names?: string[]; controls?: string[] } | null>(null);
   const questRecordCache = useRef<{ day: string; record: QuestRecord } | null>(null);
   const quests = getDailyQuests(questRecord.date);
 
@@ -261,6 +266,8 @@ export function App() {
   const [unlockedSkins, setUnlockedSkins] = useState<SkinId[]>(() => loadUnlockedSkins());
   const [lifetimeStats, setLifetimeStats] = useState<LifetimeStats>(() => loadLifetimeStats());
   const [skinsModalOpen, setSkinsModalOpen] = useState(false);
+  const [battleModalOpen, setBattleModalOpen] = useState(false);
+  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [saveLoadModal, setSaveLoadModal] = useState<'save' | 'load' | null>(null);
   const [skinToast, setSkinToast] = useState<string | null>(null);
@@ -331,10 +338,16 @@ export function App() {
     setUnlockedSkins(freshUnlocked);
     setEquippedSkin(freshEquipped);
     setBest(freshBest);
+    // The day-keyed record cache would serve stale pre-restore data.
+    questRecordCache.current = null;
     setQuestRecord(loadQuestRecord());
     setVolumes(loadVolumes());
     gameRef.current?.setSkin(freshEquipped);
-    triggerSkinToast('PROGRESS RESTORED!');
+    triggerSkinToast(
+      freshBest > 0
+        ? `PROGRESS RESTORED! BEST ${String(freshBest).padStart(6, '0')}`
+        : 'RESTORED — NO HIGHSCORE FOUND IN THIS SAVE'
+    );
   }, [triggerSkinToast]);
 
   // Konami Code listener
@@ -536,7 +549,9 @@ export function App() {
     setQuestToast(newlyCompleted);
 
     if (next.completed.length >= 3 && record.completed.length < 3) {
-      const nextLifetime = { ...lifetimeStats };
+      // Read fresh from storage — the React state may predate the run, and
+      // spreading a stale snapshot would roll back live-counted lifetime coins.
+      const nextLifetime = loadLifetimeStats();
       if (!nextLifetime.dailySetsDone) {
         nextLifetime.dailySets = (nextLifetime.dailySets || 0) + 1;
         nextLifetime.dailyStreak = (nextLifetime.dailyStreak || 0) + 1;
@@ -553,7 +568,7 @@ export function App() {
         sfx.play('gem');
       }
     }
-  }, [lifetimeStats, triggerSkinToast]);
+  }, [triggerSkinToast]);
 
   const handleQuestRollover = useCallback(() => {
     setQuestRecord(loadQuestRecord());
@@ -656,6 +671,44 @@ export function App() {
     setUi('playing');
   }, [commitQuestRun, musicOn, sfxOn, questAnnouncement, volumes.music, volumes.sfx]);
 
+  const startLocalBattle = useCallback((skins: SkinId[], names?: string[], controls?: string[]) => {
+    const g = gameRef.current;
+    if (!g) return;
+    localBattleConfigRef.current = {
+      skins: [...skins],
+      names: names ? [...names] : undefined,
+      controls: controls ? [...controls] : undefined,
+    };
+    setBattleModalOpen(false);
+    setMatchResult(null);
+    g.best = bestScore();
+    g.startLocalBattle(skins, names, controls);
+    setUi('playing');
+  }, []);
+
+  /** Battle-aware restart for R / RESTART / RETRY: replays the same local
+   *  battle, re-runs an active online match on its seed, and falls back to a
+   *  fresh solo run. Never starts a solo game out of a battle context, and
+   *  does nothing while the results modal is up. */
+  const restart = useCallback(() => {
+    const g = gameRef.current;
+    if (!g || matchResult) return;
+    if (g.mode === 'local') {
+      const cfg = localBattleConfigRef.current;
+      if (cfg) startLocalBattle(cfg.skins, cfg.names, cfg.controls);
+      return;
+    }
+    if (g.mode === 'online') {
+      if (party.state === 'in_game') {
+        g.best = bestScore();
+        g.startRun(g.matchSeed);
+        setUi('playing');
+      }
+      return;
+    }
+    start();
+  }, [matchResult, start, startLocalBattle]);
+
   const showRestartHint = useCallback(() => {
     setRestartHint(true);
     window.clearTimeout(restartHintTimer.current);
@@ -682,8 +735,10 @@ export function App() {
 
   const toMenu = useCallback(() => {
     const g = gameRef.current;
-    if (g) g.toReady();
+    // Commit the quest run BEFORE the engine resets its run stats, or the
+    // partial-run progress would be zeroed and lost on quit-to-menu.
     commitQuestRun();
+    if (g) g.toReady();
     setQuestRecord(loadQuestRecord());
     sfx.play('ui');
     setUi('start');
@@ -691,6 +746,11 @@ export function App() {
   }, [commitQuestRun]);
 
   const handleDeath = useCallback((s: Stats) => {
+    const g = gameRef.current;
+    if (g && g.mode !== 'solo') {
+      return; // Do NOT show solo GameOverScreen in battle mode
+    }
+
     commitQuestRun();
     setQuestRecord(loadQuestRecord());
     setStats(s);
@@ -756,9 +816,35 @@ export function App() {
     };
   }, [pause]);
 
+  /* -------------------------------------------------------------- multiplayer match end & deep link */
+  useEffect(() => {
+    const g = gameRef.current;
+    if (g) {
+      g.onMatchEnd = (res) => {
+        setMatchResult(res);
+        setBattleModalOpen(true);
+        setUi('results');
+      };
+    }
+    party.onMatchEnd = (res) => {
+      // Freeze the world behind the results modal for online matches too
+      // (local battles already enter phase 'over' inside the engine).
+      gameRef.current?.enterMatchOver();
+      setMatchResult(res);
+      setBattleModalOpen(true);
+      setUi('results');
+    };
+
+    if (typeof window !== 'undefined' && window.location.hash.startsWith('#battle=')) {
+      setBattleModalOpen(true);
+    }
+    return () => {
+      party.onMatchEnd = undefined;
+    };
+  }, []);
+
   return (
     <div className="fixed inset-0 h-full h-[100dvh] w-full w-[100dvw] flex min-h-0 min-w-0 items-center justify-center overflow-hidden bg-[#08040f] font-pixel">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(62,242,200,0.10),transparent_60%)]" />
       <div className="relative h-full min-h-0 min-w-0 w-full">
         <GameCanvas
           gameRef={gameRef}
@@ -779,8 +865,9 @@ export function App() {
             }
           }}
           onRestartHint={showRestartHint}
+          onRestart={restart}
           onQuestProgress={handleQuestProgress}
-          modalOpen={showFeedbackModal || skinsModalOpen || !!unlockedSkinPopup}
+          modalOpen={battleModalOpen || showFeedbackModal || skinsModalOpen || !!unlockedSkinPopup || !!saveLoadModal}
         />
         {restartHint && (ui === 'playing' || ui === 'paused') && (
           <div className="pointer-events-none absolute inset-x-0 top-[36%] z-30 flex justify-center">
@@ -812,6 +899,11 @@ export function App() {
               setUnlockedSkins(loadUnlockedSkins());
               setSkinsModalOpen(true);
             }}
+            onOpenBattle={() => {
+              setLifetimeStats(loadLifetimeStats());
+              setUnlockedSkins(loadUnlockedSkins());
+              setBattleModalOpen(true);
+            }}
             onExportSave={handleExportSave}
             onImportSave={handleImportSave}
             onCheckUpdate={handleCheckUpdate}
@@ -821,7 +913,7 @@ export function App() {
           <PauseScreen
             stats={live}
             onResume={resume}
-            onRestart={start}
+            onRestart={restart}
             onMenu={toMenu}
             musicVol={volumes.music}
             sfxVol={volumes.sfx}
@@ -840,7 +932,7 @@ export function App() {
             stats={stats}
             best={best}
             newBest={newBest}
-            onRestart={start}
+            onRestart={restart}
             onMenu={toMenu}
             onShare={handleShareScore}
             touch={touch}
@@ -851,7 +943,7 @@ export function App() {
         )}
         {questToast.length > 0 && <QuestCompletionToast quests={quests} completed={questToast} touch={touch} />}
         {skinToast && (
-          <div className="fixed top-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 border-2 border-[#3ef2c8] bg-[#0d0619]/95 px-4 py-2 font-pixel text-[#3ef2c8] shadow-[4px_4px_0_#08040f]">
+          <div className="fixed top-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 border-2 border-[#3ef2c8] bg-[#0e071e]/95 px-4 py-2 font-pixel text-[#3ef2c8] shadow-[4px_4px_0_#06020c]">
             <span className="text-[8px] tablet:text-[10px] uppercase">{skinToast}</span>
           </div>
         )}
@@ -884,6 +976,22 @@ export function App() {
             touch={touch}
           />
         )}
+        {(battleModalOpen || matchResult) && (
+          <BattleModal
+            onClose={() => {
+              setBattleModalOpen(false);
+              setMatchResult(null);
+              // Leaving the results screen returns to the title menu and
+              // restarts the attract demo (engine is in phase 'over').
+              if (ui === 'results') toMenu();
+            }}
+            onStartLocalBattle={startLocalBattle}
+            localSkin={equippedSkin}
+            unlockedSkins={unlockedSkins}
+            matchResult={matchResult}
+            onClearMatchResult={() => setMatchResult(null)}
+          />
+        )}
         {showFeedbackModal && (
           <FeedbackModal onClose={() => setShowFeedbackModal(false)} />
         )}
@@ -896,12 +1004,12 @@ export function App() {
           />
         )}
         {swUpdate && ui !== 'playing' && (
-          <div className="fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 border-2 border-[#ffd166] bg-[#140a26]/95 px-3 py-1.5 font-pixel text-[#ffd166] shadow-[3px_3px_0_#08040f]">
-            <span className="text-[7px] tablet:text-[9px]">UPDATE READY</span>
+          <div className="fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 border-2 border-[#ffd166] bg-[#0e071e]/95 px-3 py-1.5 font-pixel text-[#ffd166] shadow-[3px_3px_0_#06020c]">
+            <span className="text-[8px] tablet:text-[10px]">UPDATE READY</span>
             <button
               type="button"
               onClick={handleApplyUpdate}
-              className="border border-[#ffd166] bg-[#ffd166]/20 px-2 py-0.5 text-[7px] text-[#ffffff] transition-colors hover:bg-[#ffd166]/40 tablet:text-[9px]"
+              className="border-2 border-[#ffd166] bg-[#ffd166]/20 px-2 py-0.5 text-[8px] text-[#ffffff] transition-colors hover:bg-[#ffd166]/40 tablet:text-[10px]"
             >
               RELOAD
             </button>

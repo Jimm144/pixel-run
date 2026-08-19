@@ -26,6 +26,7 @@ export const GAME_STORAGE_KEYS = [
   'pixeldash.lifetime_stats',
   'pixeldash.unlocked_skins',
   'pixeldash.equipped_skin',
+  'pixeldash.local_battle_config.v1',
 ];
 
 async function getEncryptionKey(): Promise<CryptoKey | null> {
@@ -210,7 +211,33 @@ export async function copySaveCodeToClipboard(givenContent?: string): Promise<bo
   return false;
 }
 
-export async function restoreSaveFromString(raw: string): Promise<{ success: boolean; error?: string }> {
+export interface RestoreResult {
+  success: boolean;
+  error?: string;
+  /** number of localStorage keys actually written */
+  imported?: number;
+  /** restored high score, when the save carried one; null when it did not */
+  best?: number | null;
+}
+
+function restoredResult(applied: number): RestoreResult {
+  if (applied <= 0) {
+    return { success: false, error: 'NO PIXEL RUN DATA IN THIS SAVE' };
+  }
+  let best: number | null = null;
+  try {
+    const raw = localStorage.getItem('pixeldash.best.v2');
+    if (raw) {
+      const parsed = JSON.parse(raw) as { score?: unknown };
+      if (typeof parsed?.score === 'number' && Number.isFinite(parsed.score) && parsed.score >= 0) {
+        best = Math.floor(parsed.score);
+      }
+    }
+  } catch {}
+  return { success: true, imported: applied, best };
+}
+
+export async function restoreSaveFromString(raw: string): Promise<RestoreResult> {
   try {
     // Aggressively clean input
     let clean = raw
@@ -237,7 +264,7 @@ export async function restoreSaveFromString(raw: string): Promise<{ success: boo
     }
 
     // Helper: apply storage entries to localStorage
-    const applyStorage = (storageObj: Record<string, string>): boolean => {
+    const applyStorage = (storageObj: Record<string, string>): number => {
       let applied = 0;
       for (const [key, val] of Object.entries(storageObj)) {
         if (typeof key === 'string' && key.startsWith('pixeldash.') && typeof val === 'string') {
@@ -245,7 +272,7 @@ export async function restoreSaveFromString(raw: string): Promise<{ success: boo
           applied++;
         }
       }
-      return applied > 0;
+      return applied;
     };
 
     // TIER 1: Direct JSON parsing
@@ -253,7 +280,8 @@ export async function restoreSaveFromString(raw: string): Promise<{ success: boo
       try {
         const parsed = JSON.parse(clean);
         if (parsed?.storage && typeof parsed.storage === 'object') {
-          if (applyStorage(parsed.storage)) return { success: true };
+          const applied = applyStorage(parsed.storage);
+          if (applied > 0) return restoredResult(applied);
         }
       } catch {}
     }
@@ -287,7 +315,8 @@ export async function restoreSaveFromString(raw: string): Promise<{ success: boo
       if (text.startsWith('{') && text.endsWith('}')) {
         const parsed = JSON.parse(text);
         if (parsed?.storage && typeof parsed.storage === 'object') {
-          if (applyStorage(parsed.storage)) return { success: true };
+          const applied = applyStorage(parsed.storage);
+          if (applied > 0) return restoredResult(applied);
         }
       }
     } catch {}
@@ -308,7 +337,8 @@ export async function restoreSaveFromString(raw: string): Promise<{ success: boo
           const jsonStr = dec.decode(decrypted);
           const parsed = JSON.parse(jsonStr);
           if (parsed?.storage && typeof parsed.storage === 'object') {
-            if (applyStorage(parsed.storage)) return { success: true };
+            const applied = applyStorage(parsed.storage);
+            if (applied > 0) return restoredResult(applied);
           }
         }
       } catch {}
@@ -327,7 +357,8 @@ export async function restoreSaveFromString(raw: string): Promise<{ success: boo
         extracted[key] = typeof rawVal === 'string' ? rawVal : JSON.stringify(rawVal);
       }
       if (Object.keys(extracted).length > 0) {
-        if (applyStorage(extracted)) return { success: true };
+        const applied = applyStorage(extracted);
+        if (applied > 0) return restoredResult(applied);
       }
     } catch {}
 

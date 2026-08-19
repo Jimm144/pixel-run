@@ -42,7 +42,7 @@ body.keyboard-active .nav-focus,
 body.gamepad-active .nav-focus {
   outline: 2px solid #3ef2c8 !important;
   outline-offset: 2px !important;
-  box-shadow: 0 0 0 2px #08040f, 0 0 10px rgba(62, 242, 200, 0.5) !important;
+  box-shadow: 0 0 0 2px #08040f !important;
   z-index: 20 !important;
 }
 
@@ -71,18 +71,14 @@ input {
 
 /* CRT flavour ------------------------------------------------------------- */
 .scanlines {
-  background: repeating-linear-gradient(
-    0deg,
-    rgba(0, 0, 0, 0.26) 0px,
-    rgba(0, 0, 0, 0.26) 1px,
-    rgba(0, 0, 0, 0) 1px,
-    rgba(0, 0, 0, 0) 3px
-  );
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='3'%3E%3Crect width='1' height='1' fill='%23000000' opacity='0.26'/%3E%3C/svg%3E");
+  background-repeat: repeat;
   opacity: 0.45;
 }
 
+/* Flat dark layer — no gradients, keeps the CRT dimming without soft light. */
 .vignette {
-  background: radial-gradient(ellipse at 50% 50%, rgba(0, 0, 0, 0) 52%, rgba(0, 0, 0, 0.6) 100%);
+  background: rgba(0, 0, 0, 0.3);
 }
 
 @media (pointer: fine) {
