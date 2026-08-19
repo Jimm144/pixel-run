@@ -28,7 +28,7 @@ function getPartyHttpBase(): string {
   if (isLocal) {
     return 'http://localhost:1999';
   }
-  return 'https://pixelrun.partykit.dev';
+  return 'https://pixel-run.jimm144.partykit.dev';
 }
 
 function generateRoomCode(): string {
