@@ -12,14 +12,13 @@ import type {
   PublicLobbyInfo,
 } from './types';
 
-// PeerJS is a ~60 kB UMD build. Loading it from a CDN only when a room is
-// actually used keeps the single-file bundle small and the page load fast —
-// multiplayer needs a network connection anyway, so the CDN dependency is
-// not a new constraint. The type-only import above is erased at build time.
-const PEERJS_CDN_URLS = [
-  'https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js',
-  'https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js',
-];
+// PeerJS is an ~87 kB UMD build. It's shipped as a same-origin vendor file
+// (public/vendor/peerjs.min.js) and loaded only when a room is actually
+// used, keeping the single-file bundle small and the page load fast. The
+// CDN URLs are a fallback for hosts that can't serve the vendor file (e.g.
+// itch.io single-file embeds). The type-only import above is erased at
+// build time.
+const PEERJS_CDN_URLS = ['vendor/peerjs.min.js', 'https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js', 'https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js'];
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -219,12 +218,14 @@ export class PartyManager {
     // Cross-network join watchdog: if no room state arrives in time the room
     // is gone (host device offline) — back out instead of pinging an empty
     // room forever. Any room_state (ws or bc/MQTT) clears the flag.
+    // 25s gives a disconnected host's persistent MQTT session one full
+    // keepalive-grace + reconnect cycle so queued join pings can land.
     window.setTimeout(() => {
       if (this.awaitingFirstRoomState && this.state === 'in_room' && this.roomId === cleanCode) {
         this.leave();
         this.onStatusMsg?.('ROOM NOT FOUND - IT MAY HAVE CLOSED');
       }
-    }, 12000);
+    }, 25000);
 
     return true;
   }

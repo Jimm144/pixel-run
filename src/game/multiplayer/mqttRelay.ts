@@ -8,14 +8,12 @@ import type { MqttClient } from 'mqtt';
 // already guard against with peerId checks).
 const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
 
-// mqtt.js is a ~120 kB UMD build. Loading it from a CDN only when a room is
-// actually used keeps the single-file bundle small and the page load fast —
-// multiplayer needs a network connection anyway, so the CDN dependency is
-// not a new constraint. The type-only import above is erased at build time.
-const MQTT_CDN_URLS = [
-  'https://unpkg.com/mqtt@5.15.2/dist/mqtt.min.js',
-  'https://cdn.jsdelivr.net/npm/mqtt@5.15.2/dist/mqtt.min.js',
-];
+// mqtt.js is a ~370 kB UMD build. It's shipped as a same-origin vendor file
+// (public/vendor/mqtt.min.js) and loaded only when a room is actually used,
+// keeping the single-file bundle small and the page load fast. The CDN URLs
+// are a fallback for hosts that can't serve the vendor file (e.g. itch.io
+// single-file embeds). The type-only import above is erased at build time.
+const MQTT_CDN_URLS = ['vendor/mqtt.min.js', 'https://unpkg.com/mqtt@5.15.2/dist/mqtt.min.js', 'https://cdn.jsdelivr.net/npm/mqtt@5.15.2/dist/mqtt.min.js'];
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -144,7 +142,11 @@ export class MqttRelay {
       keepalive: 30,
       connectTimeout: 8000,
       reconnectPeriod: 3000,
-      clean: true,
+      // Persistent session: short drops (tab throttling, network blips) keep
+      // the broker-side subscriptions alive within the keepalive grace window,
+      // and QoS1 messages sent during the drop (e.g. a joiner's bc_join) are
+      // queued and delivered on reconnect instead of being lost.
+      clean: false,
     });
     this.client = client;
 
