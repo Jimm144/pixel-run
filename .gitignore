@@ -2,3 +2,5 @@ node_modules/
 dist/
 vite.log
 vite.dev.log
+
+# PartyKit local dev state.partykit/
