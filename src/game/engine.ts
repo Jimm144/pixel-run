@@ -830,6 +830,7 @@ export class Game implements GenHost, RenderHost {
     if (!alive) return;
 
     if (this.phase === 'ready') this.attractAI();
+    if (this.phase === 'playing' || this.phase === 'ready') this.updatePowerUpTimers();
     if (this.phase === 'playing') {
       this.updateBiomeEvent();
       const currentSpeed = Math.abs(this.vx) || this.runSpeed();
