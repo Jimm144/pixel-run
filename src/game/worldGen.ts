@@ -34,6 +34,8 @@ interface GenState {
  *  possible pad arc, so the integration always reaches the landing surface. */
 const TRAJECTORY_FRAMES = 150;
 
+const POWERUP_KINDS: PowerUpKind[] = ['shield', 'shoes', 'triple', 'propeller'];
+
 /**
  * Procedural world builder: emits platforms, pickups, power-ups, enemies,
  * spikes and springs into the host's arrays. Uses GenHost's seeded PRNG
@@ -169,7 +171,7 @@ export class WorldGen {
   }
 
   private pickPowerUp(): PowerUpKind {
-    const kinds: PowerUpKind[] = ['shield', 'shoes', 'triple', 'propeller'];
+    const kinds = POWERUP_KINDS;
     let kind = kinds[this.ri(0, kinds.length - 1)];
     if (kind === this.lastPowerUpKind) kind = kinds[(kinds.indexOf(kind) + this.ri(1, kinds.length - 1)) % kinds.length];
     this.lastPowerUpKind = kind;

@@ -162,6 +162,13 @@ interface PooledTone {
   freeAt: number;
 }
 
+/** 2^(i/12) for semitones -16..24 — scheduleMusic converts its MIDI-style
+ *  note offsets to frequencies with a lookup instead of per-note Math.pow. */
+const SEMI = new Float64Array(41);
+for (let i = 0; i < SEMI.length; i++) SEMI[i] = Math.pow(2, (i - 16) / 12);
+/** Combo-pitch scale steps (pentatonic sweep), hoisted out of play(). */
+const COMBO_SCALES = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
+
 export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -513,18 +520,22 @@ export class Sfx {
     const t = Math.max(ctx.currentTime + 0.005, ctx.currentTime + delay);
 
     if (type === 'kick') {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      gain.gain.value = 0.0001;
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(150, t);
-      osc.frequency.exponentialRampToValueAtTime(40, t + 0.1);
-      gain.gain.setValueAtTime(0.7, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
-      osc.connect(gain);
-      gain.connect(this.musicGain);
-      osc.start(t);
-      osc.stop(t + 0.12);
+      // Kick rides the pooled tone voices like the melodic parts do — the
+      // oscillator is never stopped, the gain envelope gates each hit.
+      const n = this.acquireTone(t);
+      if (n) {
+        try {
+          n.osc.type = 'sine';
+          n.osc.frequency.cancelScheduledValues(t);
+          n.osc.frequency.setValueAtTime(150, t);
+          n.osc.frequency.exponentialRampToValueAtTime(40, t + 0.1);
+          n.gain.gain.cancelScheduledValues(t);
+          n.gain.gain.setValueAtTime(0.7, t);
+          n.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+          n.freeAt = t + 0.15;
+          this.musicTonePool.push(n);
+        } catch {}
+      }
     } else if (type === 'snare') {
       const src = ctx.createBufferSource();
       src.buffer = this.noiseBuf;
@@ -588,14 +599,14 @@ export class Sfx {
       // melody — warm triangle / square lead
       const melodyNote = pattern.melody[step];
       if (melodyNote !== -1) {
-        const freq = base * Math.pow(2, melodyNote / 12);
+        const freq = base * SEMI[melodyNote + 16];
         this.musicTone('triangle', freq, freq, interval * 0.82, noteVol * 1.2, delay);
       }
 
       // bass — triangle, lower octave
       const bassNote = pattern.bass[step];
       if (bassNote !== -1) {
-        const freq = base * Math.pow(2, bassNote / 12);
+        const freq = base * SEMI[bassNote + 16];
         this.musicTone('triangle', freq, freq, interval * 1.4, 0.10, delay);
       }
 
@@ -612,7 +623,7 @@ export class Sfx {
       // arpeggio — quiet melodic tone
       const arpNote = pattern.arp[step];
       if (arpNote !== -1) {
-        const freq = base * Math.pow(2, arpNote / 12);
+        const freq = base * SEMI[arpNote + 16];
         this.musicTone('triangle', freq, freq, interval * 0.35, noteVol * 0.5, delay);
       }
 
@@ -711,7 +722,7 @@ export class Sfx {
         break;
       case 'combo': {
         const note = Math.min(16, param);
-        const f = 330 * Math.pow(1.0595, [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24][note % 11] ?? 0);
+        const f = 330 * Math.pow(1.0595, COMBO_SCALES[note % 11] ?? 0);
         this.tone('triangle', f, f, 0.08, 0.08);
         break;
       }

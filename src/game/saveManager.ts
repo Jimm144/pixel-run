@@ -29,6 +29,116 @@ export const GAME_STORAGE_KEYS = [
   'pixeldash.local_battle_config.v1',
 ];
 
+/**
+ * Silent progress survival across URL changes.
+ *
+ * localStorage is per-origin, so when the game's address changes (site
+ * move, new domain, github.io fallback, localhost testing) the old
+ * progress stays behind on the old address and reads as "lost". To stop
+ * that, the permanent progress keys are mirrored into a small cookie.
+ * Cookies are scoped to the DOMAIN, not the exact URL: a cookie written
+ * for `.localplayer.dev` is readable from ANY future subdomain of
+ * localplayer.dev, so a moved site finds its old progress automatically.
+ * `restoreCookieBackup()` is called synchronously at boot (before React
+ * state initializers run) and fills in ONLY the keys this origin is
+ * missing, so newer local progress is never overwritten.
+ */
+const COOKIE_BACKUP_NAME = 'pixelrun_backup';
+/** Cookie value must stay well under the 4 KB per-cookie limit. */
+const COOKIE_BACKUP_MAX_CHARS = 3000;
+
+/** Permanent progress keys that survive a site move. Omitted on purpose:
+ *  scores.v1 / quests history can grow large and are day/replay record;
+ *  volumes are not progress. */
+const COOKIE_BACKUP_KEYS = [
+  'pixeldash.best.v2',
+  'pixeldash.best',
+  'pixeldash.lastrun.v1',
+  'pixeldash.lifetime_stats',
+  'pixeldash.unlocked_skins',
+  'pixeldash.equipped_skin',
+  'pixeldash.total_runs.v1',
+  'pixeldash.runs',
+  'pixeldash.discord_reward_claimed',
+];
+
+function encodeCookieValue(value: string): string {
+  return bufferToBase64(new TextEncoder().encode(value));
+}
+
+function decodeCookieValue(b64: string): string {
+  return new TextDecoder().decode(base64ToBuffer(b64));
+}
+
+function readCookie(name: string): string | null {
+  try {
+    const prefix = `${name}=`;
+    for (const part of document.cookie.split(';')) {
+      const piece = part.trim();
+      if (piece.startsWith(prefix)) return piece.slice(prefix.length);
+    }
+  } catch {}
+  return null;
+}
+
+function setCookie(name: string, value: string): void {
+  try {
+    // Years-long lifetime, refreshed constantly while playing.
+    const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString();
+    // Domain=.localplayer.dev lets any localplayer.dev subdomain read it
+    // after a move. When the page is NOT on localplayer.dev (github.io
+    // pages, localhost, itch.io embed) setting that domain throws — the
+    // host-only fallback then still covers same-address future visits.
+    const base = `${name}=${value}; expires=${expires}; path=/; SameSite=Lax`;
+    let domainOk = false;
+    try {
+      document.cookie = `${base}; domain=.localplayer.dev`;
+      domainOk = true;
+    } catch {}
+    if (!domainOk) {
+      document.cookie = base;
+    }
+  } catch {}
+}
+
+/** Mirrors the permanent progress keys into the domain cookie. Safe to
+ *  call any time; throttled by the caller. */
+export function backupProgressCookie(): void {
+  try {
+    const record: Record<string, string> = {};
+    for (const key of COOKIE_BACKUP_KEYS) {
+      const val = localStorage.getItem(key);
+      if (val !== null) record[key] = val;
+    }
+    const json = JSON.stringify(record);
+    if (json.length <= COOKIE_BACKUP_MAX_CHARS) {
+      setCookie(COOKIE_BACKUP_NAME, encodeCookieValue(json));
+    }
+  } catch {}
+}
+
+/** Fills in ONLY the progress keys this origin is missing from the cookie
+ *  backup. Returns the number of keys restored. Must run synchronously
+ *  before React state initializers so restored values are picked up on the
+ *  first render. */
+export function restoreCookieBackup(): number {
+  try {
+    const raw = readCookie(COOKIE_BACKUP_NAME);
+    if (!raw) return 0;
+    const parsed = JSON.parse(decodeCookieValue(raw)) as Record<string, string>;
+    let restored = 0;
+    for (const [key, val] of Object.entries(parsed)) {
+      if (typeof key === 'string' && key.startsWith('pixeldash.') && typeof val === 'string' && localStorage.getItem(key) === null) {
+        localStorage.setItem(key, val);
+        restored++;
+      }
+    }
+    return restored;
+  } catch {
+    return 0;
+  }
+}
+
 async function getEncryptionKey(): Promise<CryptoKey | null> {
   try {
     if (typeof crypto === 'undefined' || !crypto.subtle) return null;

@@ -36,6 +36,7 @@ import { SkinsModal } from './components/SkinsModal';
 import { SkinUnlockModal } from './components/SkinUnlockModal';
 import { FeedbackModal } from './components/FeedbackModal';
 import { SaveLoadModal } from './components/SaveLoadModal';
+import { backupProgressCookie, restoreCookieBackup } from './game/saveManager';
 import { BattleModal } from './components/BattleModal';
 import type { MatchResult } from './game/multiplayer/types';
 import {
@@ -59,6 +60,11 @@ const QUEST_SHARE_WIDTH = 1200;
 const QUEST_SHARE_HEIGHT = 500;
 const DISCORD_PROMO_DISMISSED_KEY = 'pixeldash.discord_promo_dismissed';
 const SHARE_URL = 'https://pixelrun.localplayer.dev/';
+
+// Restore the domain-cookie progress backup BEFORE any React state
+// initializer reads localStorage, so a returning player on a moved/new
+// address starts with their progress instead of a blank profile.
+restoreCookieBackup();
 
 function shareInteger(value: number, fallback = 0) {
   if (!Number.isFinite(value)) return fallback;
@@ -299,6 +305,7 @@ export function App() {
       triggerSkinToast('GLADIATOR', 'gladiator');
       sfx.play('gem');
     }
+    backupProgressCookie();
   }, [triggerSkinToast]);
 
   const dismissDiscordPromo = useCallback(() => {
@@ -329,6 +336,8 @@ export function App() {
     setSaveLoadModal('load');
   }, []);
 
+  // Refresh every bit of React state from storage after a save import so the
+  // UI reflects the restored data (and mirrors it into the cookie backup).
   const handleRestoreComplete = useCallback(() => {
     const freshLifetime = loadLifetimeStats();
     const freshUnlocked = loadUnlockedSkins();
@@ -348,6 +357,7 @@ export function App() {
         ? `PROGRESS RESTORED! BEST ${String(freshBest).padStart(6, '0')}`
         : 'RESTORED — NO HIGHSCORE FOUND IN THIS SAVE'
     );
+    backupProgressCookie();
   }, [triggerSkinToast]);
 
   // Konami Code listener
@@ -432,20 +442,51 @@ export function App() {
       if ('serviceWorker' in navigator) {
         const reg = swRegRef.current || (await navigator.serviceWorker.getRegistration());
         if (reg) {
-          await reg.update();
-          if (reg.waiting) {
+          // Update already staged — apply it immediately.
+          if (reg.waiting && navigator.serviceWorker.controller) {
             reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+            window.location.reload();
+            return;
+          }
+          triggerSkinToast('CHECKING FOR UPDATES...');
+          await reg.update();
+          // reg.update() resolves without telling us whether anything new
+          // arrived; wait a short window for updatefound -> installed.
+          const updated = await new Promise<boolean>((resolve) => {
+            const worker = reg.installing;
+            if (worker) {
+              const onState = () => {
+                if (worker.state === 'installed') {
+                  worker.removeEventListener('statechange', onState);
+                  resolve(true);
+                } else if (worker.state === 'redundant') {
+                  worker.removeEventListener('statechange', onState);
+                  resolve(false);
+                }
+              };
+              worker.addEventListener('statechange', onState);
+            }
+            reg.addEventListener('updatefound', () => {
+              const w = reg.installing;
+              if (w) {
+                w.addEventListener('statechange', () => {
+                  if (w.state === 'installed') resolve(true);
+                });
+              }
+            });
+            setTimeout(() => resolve(false), 5000);
+          });
+          if (updated) {
+            const staged = reg.waiting || reg.installing;
+            staged?.postMessage({ type: 'SKIP_WAITING' });
             window.location.reload();
             return;
           }
         }
       }
-      triggerSkinToast('CHECKING FOR UPDATES...');
-      setTimeout(() => {
-        window.location.reload();
-      }, 800);
+      triggerSkinToast('UP TO DATE!');
     } catch {
-      window.location.reload();
+      triggerSkinToast('CHECK FAILED — TRY AGAIN');
     }
   }, [triggerSkinToast]);
 
@@ -801,6 +842,7 @@ export function App() {
     }
 
     setUi('over');
+    backupProgressCookie();
   }, [commitQuestRun, lifetimeStats, triggerSkinToast]);
 
   /* -------------------------------------------------------------- auto-pause */
@@ -825,6 +867,22 @@ export function App() {
       window.removeEventListener('blur', onBlur);
     };
   }, [pause]);
+
+  /* ------------------------------------------- cookie progress backup net */
+  // Mirror progress into the domain cookie every 30s while the page is open
+  // and on tab close / background, so an unexpected site move never loses
+  // more than the last half minute of progress. Cheap: <1 KB write.
+  useEffect(() => {
+    const timer = window.setInterval(() => backupProgressCookie(), 30_000);
+    const onUnload = () => backupProgressCookie();
+    window.addEventListener('beforeunload', onUnload);
+    document.addEventListener('visibilitychange', onUnload);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('beforeunload', onUnload);
+      document.removeEventListener('visibilitychange', onUnload);
+    };
+  }, []);
 
   /* -------------------------------------------------------------- multiplayer match end & deep link */
   useEffect(() => {

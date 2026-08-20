@@ -332,7 +332,7 @@ export function BattleModal({
 
   const handleJoinCode = async (codeToJoin?: string) => {
     const code = (codeToJoin || inputCode).trim().toUpperCase();
-    if (!code) {
+    if (code.length !== 4) {
       setStatusMsg('ENTER 4-LETTER ROOM CODE');
       return;
     }

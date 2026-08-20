@@ -69,14 +69,23 @@ export function drawPlayerSprite(
   const run = opts.run !== undefined ? opts.run : onGround ? Math.floor(frame / 6) % 4 : -1;
   const air = !onGround || run === -1;
 
-  ctx.save();
-  ctx.translate(Math.round(cx), Math.round(cy));
-  if (scale !== 1) {
-    ctx.scale(scale, scale);
+  // The in-game renderer pre-translates and calls with (0, 0, scale 1) —
+  // skip the identity save/translate/restore entirely on that common path.
+  const needsTransform = cx !== 0 || cy !== 0 || scale !== 1;
+  if (needsTransform) {
+    ctx.save();
+    ctx.translate(Math.round(cx), Math.round(cy));
+    if (scale !== 1) {
+      ctx.scale(scale, scale);
+    }
   }
 
+  let lastFill = '';
   const f = (x: number, y: number, w: number, h: number, col: string) => {
-    ctx.fillStyle = col;
+    if (col !== lastFill) {
+      ctx.fillStyle = col;
+      lastFill = col;
+    }
     ctx.fillRect(Math.round(x - PLAYER_W / 2), Math.round(y - PLAYER_H / 2), w, h);
   };
 
@@ -828,5 +837,5 @@ export function drawPlayerSprite(
     }
   }
 
-  ctx.restore();
+  if (needsTransform) ctx.restore();
 }

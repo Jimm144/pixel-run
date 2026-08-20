@@ -137,6 +137,9 @@ export class Game implements GenHost, RenderHost {
   }
   p2: LocalPlayerState | undefined = undefined;
   localPlayers: LocalPlayerState[] = [];
+  /** Pickup/stomp bonus for P2-P4 (P1's lives in this.bonus). Indexed by
+   *  local player slot; re-zeroed by reset()/startLocalBattle. */
+  lpBonus!: number[];
   opponentStates = new Map<string, OpponentInfo>();
 
   /* ---- input */
@@ -369,6 +372,7 @@ export class Game implements GenHost, RenderHost {
       gems: 0,
       runGems: 0,
       moonPhase: 0,
+      lpBonus: [],
     };
   }
 
@@ -436,6 +440,7 @@ export class Game implements GenHost, RenderHost {
     const colors = ['#3ef2c8', '#ffd166', '#ff70a6', '#7ef7ff'];
 
     this.localPlayers = [];
+    this.lpBonus = new Array(count).fill(0);
     for (let i = 0; i < count; i++) {
       this.localPlayers.push({
         px: anchorX() - i * 14,
@@ -836,7 +841,6 @@ export class Game implements GenHost, RenderHost {
       const currentSpeed = Math.abs(this.vx) || this.runSpeed();
       const speedScale = currentSpeed / 2.1;
       sfx.setMusic(this.zone.bg, this.diff(), speedScale);
-      this.updatePowerUpTimers();
     }
 
     /* ---- horizontal motion */
@@ -1020,7 +1024,10 @@ export class Game implements GenHost, RenderHost {
       }
     }
 
-    if (this.isMultiplayer && this.frame % 2 === 0) {
+    // phase guard: a death this frame (pit check above, or collision inside
+    // updateEntities) must never emit an alive:true tick — on remotes it can
+    // land after bc_death and overwrite the death meters/score.
+    if (this.isMultiplayer && this.phase === 'playing' && survivedEntities && this.frame % 2 === 0) {
       party.sendTick({
         px: Math.round(this.px),
         py: Math.round(this.py),
@@ -1261,8 +1268,15 @@ export class Game implements GenHost, RenderHost {
             py: lp.py,
             isMain: i === 0,
             addScore: (pts: number) => {
-              lp.score += pts;
-              if (i === 0) this.score += pts;
+              if (i === 0) {
+                lp.score += pts;
+                this.score += pts;
+              } else {
+                // stepLocalPlayer recomputes p.score from distance every
+                // frame, so direct score adds would be wiped — bank the
+                // pickup/stomp points here instead.
+                this.lpBonus[i] = (this.lpBonus[i] || 0) + pts;
+              }
             },
           });
         }
@@ -1301,21 +1315,23 @@ export class Game implements GenHost, RenderHost {
           if (c.gem) {
             this.gems++;
             this.runGems++;
-            if (this.mode === 'solo') {
+            // A real run only — the attract demo (phase 'ready') runs in solo
+            // mode and must not farm lifetime gems from the menu.
+            if (this.mode === 'solo' && this.phase === 'playing') {
               const currentLifetime = loadLifetimeStats();
               currentLifetime.gems = (currentLifetime.gems || 0) + 1;
               saveLifetimeStats(currentLifetime);
             }
             runner.addScore(GEM_PTS);
-            this.addCombo(c.x, c.y - 6, GEM_PTS, 'GEM');
+            if (runner.isMain) this.addCombo(c.x, c.y - 6, GEM_PTS, 'GEM');
             this.particles.burst(c.x, c.y, 14, ['#7ef7ff', '#ffffff', '#3ef2c8'], 2.2, 0.05);
             this.addShake(0.14);
             sfx.play('gem');
           } else {
             if (this.isMultiplayer && this.phase === 'playing') coinSync.report(coinId(c.x, c.y));
             this.coins++;
-            this.questCoins++;
-            if (this.mode === 'solo') {
+            if (runner.isMain) this.questCoins++;
+            if (this.mode === 'solo' && this.phase === 'playing') {
               const currentLifetime = loadLifetimeStats();
               if (!currentLifetime.coinsDone) {
                 currentLifetime.coins = (currentLifetime.coins || 0) + 1;
@@ -1327,7 +1343,7 @@ export class Game implements GenHost, RenderHost {
               }
             }
             runner.addScore(COIN_PTS);
-            this.addCombo(c.x, c.y - 4, COIN_PTS);
+            if (runner.isMain) this.addCombo(c.x, c.y - 4, COIN_PTS);
             this.particles.burst(c.x, c.y, 6, ['#ffd166', '#ffffff'], 1.7, 0.04);
             sfx.play('coin');
           }
@@ -1562,7 +1578,7 @@ export class Game implements GenHost, RenderHost {
             const smash = e.kind === 'spiker' && lp.diving;
             if (landingStomp || smash) {
               e.dead = true;
-              lp.score += smash ? SLAM_PTS : STOMP_PTS;
+              this.lpBonus[i] = (this.lpBonus[i] || 0) + (smash ? SLAM_PTS : STOMP_PTS);
               lp.vy = -(lp.jumpHeld ? 8.2 : 6.4);
               lp.diving = false;
               this.particles.burst(e.x + e.w / 2, e.y + e.h / 2, 14, [this.zone.slimeBody, this.zone.accent, '#ffffff'], 2.6, 0.16);
@@ -1960,10 +1976,11 @@ export class Game implements GenHost, RenderHost {
 
     // Distance & Score
     p.distance = Math.max(p.distance, p.px - this.startX);
-    p.score = Math.floor(p.distance / 8);
+    p.score = Math.floor(p.distance / 8) + (this.lpBonus[idx] || 0);
     p.animT += p.vx * 0.09;
     p.sx += (1 - p.sx) * 0.18;
     p.sy += (1 - p.sy) * 0.18;
+    if (p.spin > 0) p.spin = Math.max(0, p.spin - 0.075);
 
     // Pit death
     if (p.py > PIT_DEATH_Y) {
@@ -2015,7 +2032,7 @@ export class Game implements GenHost, RenderHost {
       meters: Math.floor(p.distance / 10),
       score: p.score,
       rank: idx + 1,
-      isLocal: idx === 0,
+      isLocal: p === this.localPlayers[0],
     }));
 
     const winner = leaderboard[0];
@@ -2023,7 +2040,7 @@ export class Game implements GenHost, RenderHost {
 
     const result: MatchResult = {
       winnerName: winner ? winner.name : 'Nobody',
-      isWinner: winner ? winner.isLocal : false,
+      isWinner: localEntry ? localEntry.rank === 1 : false,
       finalMeters: winner ? winner.meters : 0,
       finalScore: winner ? winner.score : 0,
       rank: localEntry ? localEntry.rank : leaderboard.length,

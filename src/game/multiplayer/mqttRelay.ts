@@ -8,6 +8,12 @@ import type { MqttClient } from 'mqtt';
 // already guard against with peerId checks).
 const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
 
+// Stable per page load (not per connection attempt): mqtt.js reconnects
+// with the same options, and with clean:false the broker keeps the session
+// keyed by this id — regenerating it would orphan the session and the
+// QoS1 messages queued in it on every reconnect.
+const CLIENT_ID = `pxrun_${Math.random().toString(36).substring(2, 10)}`;
+
 // mqtt.js is a ~370 kB UMD build. It's shipped as a same-origin vendor file
 // (public/vendor/mqtt.min.js) and loaded only when a room is actually used,
 // keeping the single-file bundle small and the page load fast. The CDN URLs
@@ -69,6 +75,10 @@ export class MqttRelay {
   private connectedOnce = false;
   private failoverTimer: number | null = null;
   private closed = false;
+  /** Reentrancy guard: openClient is async (loads mqtt.js first); without
+   *  this, a failover firing while a connect attempt is still loading could
+   *  spawn two clients. */
+  private opening = false;
 
   connected = false;
 
@@ -96,7 +106,18 @@ export class MqttRelay {
   }
 
   publish(topic: string, payload: unknown, qos: 0 | 1 = 1, retain = false) {
-    if (!this.client || !this.client.connected) return;
+    if (!this.client) return;
+    // QoS 0 ticks are latest-wins telemetry: while the socket is down they
+    // would be stale by the time they arrive (and queueing ~15/s would flood
+    // the outgoing store), so drop them.
+    // QoS 1 control messages are queued by mqtt.js' outgoing store and
+    // delivered on reconnect — this is what keeps a joiner alive across a
+    // blip: its bc_join pings buffer up and land the moment the broker
+    // connection is back. With clean:false the broker-side session queues
+    // them too, so they survive even the *host's* outage. (The old guard
+    // dropped them before mqtt.js could buffer them, silently defeating the
+    // persistent-session design.)
+    if (qos === 0 && !this.client.connected) return;
     try {
       this.client.publish(topic, typeof payload === 'string' ? payload : JSON.stringify(payload), { qos, retain });
     } catch {
@@ -123,7 +144,16 @@ export class MqttRelay {
   }
 
   private async openClient() {
-    if (this.closed) return;
+    if (this.closed || this.opening) return;
+    this.opening = true;
+    try {
+      await this.openClientInner();
+    } finally {
+      this.opening = false;
+    }
+  }
+
+  private async openClientInner() {
     const url = BROKERS[this.brokerIndex % BROKERS.length];
     this.connectedOnce = false;
 
@@ -138,7 +168,7 @@ export class MqttRelay {
     if (this.closed) return;
 
     const client = lib.connect(url, {
-      clientId: `pxrun_${Math.random().toString(36).substring(2, 10)}`,
+      clientId: CLIENT_ID,
       keepalive: 30,
       connectTimeout: 8000,
       reconnectPeriod: 3000,

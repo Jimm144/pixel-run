@@ -33,6 +33,15 @@ import {
  *  that the steps read as one smooth fade. */
 const FADE_STEPS = 12;
 
+/** Blood-moon sky stops (drawn only during the final moon phase). Hoisted so
+ *  drawSky never allocates the tuple on the day/night frame path. */
+const ECLIPSE_SKY: [string, string, string, string] = ['#0a0208', '#1c0514', '#3d0a24', '#661436'];
+/** Scratch tuple reused by drawSky for the per-frame blended sky stops —
+ *  sampleSky only reads it, so it's safe to overwrite each frame. */
+const SKY_STOPS: [string, string, string, string] = ['', '', '', ''];
+/** Moon phase angles: Full, Waning Gibbous, Half, Waning Crescent, Eclipse. */
+const MOON_PHASE_ANGLES = [0, Math.PI * 0.33, Math.PI * 0.5, Math.PI * 0.67, Math.PI];
+
 /**
  * Everything that paints a frame: all draw* methods, the baked sprite caches
  * (sun, power-up icons, band tiles, platform art, sky bands, HUD strings) and
@@ -53,15 +62,13 @@ export class Renderer {
    *  crossfades the two, so there are no per-fade-step rebakes. */
   private platI = 0;
   private platNI = 1;
-  /** Platform art keyed by `zoneIndex|seed|w|float|y` — one bake per pure
-   *  biome per platform, reused until the zone pair changes. */
-  private platformCaches = new Map<string, HTMLCanvasElement>();
+  /** Platform art keyed by pure zone index (WeakMap<Platform, canvas>) — one
+   *  bake per pure biome per platform. WeakMap keys keep the cache from
+   *  pinning culled platforms and avoid rebuilding a string key per platform
+   *  per frame. */
+  private platformCaches = new Map<number, WeakMap<Platform, HTMLCanvasElement>>();
   private stars: [x: number, y: number, phase: number, size: number][] = [];
   private motes: [x: number, y: number, spd: number, phase: number][] = [];
-  /** Pre-baked silhouette strip (512px wide). Built once per shape/colour,
-   *  then scrolled with integer drawImage offsets — no live sampling, no
-   *  subpixel crawl, no antialiased diagonals. */
-  private bandCache = new Map<string, HTMLCanvasElement>();
   /** Sun disc, baked whenever the sky palette changes. */
   private sunSprite: HTMLCanvasElement | null = null;
   /** Moon phase sprites (Full -> Waning Gibbous -> Half -> Crescent -> Eclipse), baked whenever the sky palette changes. */
@@ -120,7 +127,6 @@ export class Renderer {
    *  caches (band tiles are baked VH-tall); platform art is rebuilt for
    *  safety even though its height comes from the constant ground line. */
   invalidateViewport() {
-    this.bandCache.clear();
     this.platformCaches.clear();
     // Re-seed the motes so a viewport shrink doesn't leave most of them
     // below the visible area (they were sampled once against the old VH),
@@ -174,15 +180,6 @@ export class Renderer {
     const r = 24;
     this.moonPhaseSprites = [];
 
-    // Progressive phase angles: Full (0), Waning Gibbous (0.33π), Half Moon (0.5π), Waning Crescent (0.67π), Blood Eclipse (π)
-    const phaseAngles = [
-      0,
-      Math.PI * 0.33,
-      Math.PI * 0.5,
-      Math.PI * 0.67,
-      Math.PI,
-    ];
-
     for (let phase = 0; phase < 5; phase++) {
       const cv = document.createElement('canvas');
       cv.width = size;
@@ -201,7 +198,7 @@ export class Renderer {
       c.globalAlpha = 1;
 
       // 2. Moon illuminated surface with curved phase terminator & craters
-      const angle = phaseAngles[phase];
+      const angle = MOON_PHASE_ANGLES[phase];
 
       for (let y = -r; y <= r; y++) {
         const hw = Math.round(Math.sqrt(Math.max(0, r * r - y * y)));
@@ -536,18 +533,16 @@ export class Renderer {
     const baseSky = this.g.zone.sky;
     const nightSky = this.g.zone.skyNight;
     const isEclipse = isMoon && moonPhase === 4;
-    const eclipseSky: [string, string, string, string] = ['#0a0208', '#1c0514', '#3d0a24', '#661436'];
 
-    const targetSky = isEclipse ? eclipseSky : nightSky;
-    const activeStops: [string, string, string, string] = [
-      mix(baseSky[0], targetSky[0], nightT),
-      mix(baseSky[1], targetSky[1], nightT),
-      mix(baseSky[2], targetSky[2], nightT),
-      mix(baseSky[3], targetSky[3], nightT),
-    ];
+    const targetSky = isEclipse ? ECLIPSE_SKY : nightSky;
+    const s = SKY_STOPS;
+    s[0] = mix(baseSky[0], targetSky[0], nightT);
+    s[1] = mix(baseSky[1], targetSky[1], nightT);
+    s[2] = mix(baseSky[2], targetSky[2], nightT);
+    s[3] = mix(baseSky[3], targetSky[3], nightT);
 
     for (let i = 0; i < 15; i++) {
-      c.fillStyle = sampleSky(activeStops, (i + 0.5) / 15);
+      c.fillStyle = sampleSky(s, (i + 0.5) / 15);
       c.fillRect(0, i * bh, VW, bh + 1);
     }
 
@@ -1082,8 +1077,12 @@ export class Renderer {
   // pure-biome bakes crossfade over a transition, so the art never re-bakes
   // at fade steps and every platform in a frame shares one palette.
   private getPlatformCache(p: Platform, k: number, Z: Zone): HTMLCanvasElement {
-    const key = `${k}|${p.seed}|${p.w}|${p.float}|${p.y}`;
-    let cv = this.platformCaches.get(key);
+    let byZone = this.platformCaches.get(k);
+    if (!byZone) {
+      byZone = new WeakMap();
+      this.platformCaches.set(k, byZone);
+    }
+    let cv = byZone.get(p);
     if (cv) return cv;
     const w = Math.max(1, Math.round(p.w) + 1);
     const pad = PLATFORM_CACHE_PAD;
@@ -1227,16 +1226,14 @@ export class Renderer {
       }
     }
 
-    this.platformCaches.set(key, cv);
+    byZone.set(p, cv);
     return cv;
   }
 
   /** Drop platform bakes from earlier biomes once a zone boundary passes. */
   private prunePlatformCaches() {
-    const a = this.platI + '|';
-    const b = this.platNI + '|';
-    for (const key of this.platformCaches.keys()) {
-      if (!key.startsWith(a) && !key.startsWith(b)) this.platformCaches.delete(key);
+    for (const zi of this.platformCaches.keys()) {
+      if (zi !== this.platI && zi !== this.platNI) this.platformCaches.delete(zi);
     }
   }
 
@@ -2003,27 +2000,33 @@ export class Renderer {
       const midX = Math.round(W / 2);
       // Below the combo bar (y = 56, bar 65-72) on mobile / narrow screens.
       const vsY = mobile || isNarrow ? 78 : 26;
-      const parts = this.g.localPlayers.map((p, idx) => ({
-        txt: `${p.name ? p.name.substring(0, 7) : `P${idx + 1}`}:${p.isAlive ? p.score : 'DEAD'}`,
-        col: p.isAlive ? (idx === 0 ? '#3ef2c8' : idx === 1 ? '#ffd166' : idx === 2 ? '#ff70a6' : '#7ef7ff') : '#6b5880',
-      }));
-
+      const lp = this.g.localPlayers;
       const sep = ' | ';
       let totalW = 0;
-      parts.forEach((part, i) => {
-        totalW += textWidth(part.txt, 1);
-        if (i < parts.length - 1) totalW += textWidth(sep, 1);
-      });
+      for (let i = 0; i < lp.length; i++) {
+        const txt = `${lp[i].name ? lp[i].name.substring(0, 7) : `P${i + 1}`}:${lp[i].isAlive ? lp[i].score : 'DEAD'}`;
+        totalW += textWidth(txt, 1);
+        if (i < lp.length - 1) totalW += textWidth(sep, 1);
+      }
       let curX = midX - Math.floor(totalW / 2);
-
-      parts.forEach((part, i) => {
-        drawText(c, part.txt, curX, vsY, 1, part.col, '#150a24');
-        curX += textWidth(part.txt, 1);
-        if (i < parts.length - 1) {
+      for (let i = 0; i < lp.length; i++) {
+        const txt = `${lp[i].name ? lp[i].name.substring(0, 7) : `P${i + 1}`}:${lp[i].isAlive ? lp[i].score : 'DEAD'}`;
+        const col = lp[i].isAlive
+          ? i === 0
+            ? '#3ef2c8'
+            : i === 1
+              ? '#ffd166'
+              : i === 2
+                ? '#ff70a6'
+                : '#7ef7ff'
+          : '#6b5880';
+        drawText(c, txt, curX, vsY, 1, col, '#150a24');
+        curX += textWidth(txt, 1);
+        if (i < lp.length - 1) {
           drawText(c, sep, curX, vsY, 1, '#ffffff', '#150a24');
           curX += textWidth(sep, 1);
         }
-      });
+      }
     } else if (this.g.mode === 'online' && this.g.opponentStates && this.g.opponentStates.size > 0) {
       const midX = Math.round(W / 2);
       const vsY = mobile || isNarrow ? 78 : 26;
