@@ -19,12 +19,12 @@ class CoinSync {
   private collected = new Set<string>();
   private listeners = new Set<(id: string) => void>();
 
-  /** Point the channel at a room (null for solo). Re-arms only on change. */
+  /** Point the channel at a room (null for solo). Re-arms channel on change, always resets collected coins for a fresh match. */
   setRoom(roomId: string | null) {
     const key = roomId ? `pixelrun_coins_${roomId.toLowerCase()}` : '';
+    this.collected.clear();
     if (key === this.roomKey) return;
     this.roomKey = key;
-    this.collected.clear();
     if (this.bc) {
       this.bc.onmessage = null;
       this.bc.close();
@@ -40,6 +40,11 @@ class CoinSync {
     } catch {
       this.bc = null;
     }
+  }
+
+  /** Reset all collected coin IDs for a fresh round */
+  clear() {
+    this.collected.clear();
   }
 
   isCollected(id: string) {

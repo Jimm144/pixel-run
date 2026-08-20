@@ -22,6 +22,8 @@ type SfxName =
   | 'gem'
   | 'stomp'
   | 'slam'
+  | 'hit'
+  | 'chime'
   | 'spring'
   | 'death'
   | 'combo'
@@ -710,6 +712,15 @@ export class Sfx {
       case 'slam':
         this.tone('sawtooth', 200, 50, 0.22, 0.24);
         this.noise(0.22, 0.22, 500);
+        break;
+      case 'hit':
+        this.tone('sawtooth', 180, 60, 0.15, 0.2);
+        this.noise(0.12, 0.18, 400);
+        break;
+      case 'chime':
+        this.tone('triangle', 587.33, 587.33, 0.12, 0.15);
+        this.tone('triangle', 880, 880, 0.16, 0.15, 0.08);
+        this.tone('sine', 1174.66, 1174.66, 0.22, 0.12, 0.14);
         break;
       case 'spring':
         this.tone('sine', 220, 620, 0.18, 0.22);

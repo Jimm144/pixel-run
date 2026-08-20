@@ -89,6 +89,10 @@ export interface LocalPlayerState {
   sx: number;
   sy: number;
   color: string;
+  jumpShoes?: number;
+  tripleJump?: number;
+  propellerHat?: number;
+  magnet?: number;
 }
 
 export type PartyClientMessage =

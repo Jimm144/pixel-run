@@ -184,12 +184,51 @@ class InputManager {
       { passive: true },
     );
 
-    // Start Gamepad Polling Loop
-    this.pollGamepads();
+    // Track connected gamepads and only poll when active
+    if (typeof window !== 'undefined') {
+      window.addEventListener('gamepadconnected', () => {
+        this.startGamepadPolling();
+      });
+      window.addEventListener('gamepaddisconnected', () => {
+        this.checkGamepadConnection();
+      });
+      this.checkGamepadConnection();
+    }
   }
+
+  private isPollingGamepads = false;
+
+  private checkGamepadConnection() {
+    if (typeof navigator !== 'undefined' && navigator.getGamepads) {
+      try {
+        const gamepads = navigator.getGamepads();
+        for (let i = 0; i < gamepads.length; i++) {
+          if (gamepads[i]?.connected) {
+            this.startGamepadPolling();
+            return;
+          }
+        }
+      } catch {}
+    }
+  }
+
+  private startGamepadPolling() {
+    if (this.isPollingGamepads) return;
+    this.isPollingGamepads = true;
+    requestAnimationFrame(this.pollGamepads);
+  }
+
+  private lastKeyTime = 0;
+  private lastGamepadActionTime = 0;
 
   private handleKey(key: string) {
     if (!key) return;
+    const now = performance.now();
+    if (now - this.lastKeyTime > 1500) {
+      this.konamiIndex = 0;
+    }
+    this.lastKeyTime = now;
+
     const expected = this.keySequence[this.konamiIndex];
     const matches =
       expected &&
@@ -238,6 +277,12 @@ class InputManager {
   }
 
   private dispatchAction(action: GamepadAction) {
+    const now = performance.now();
+    if (now - this.lastGamepadActionTime > 1500) {
+      this.gamepadKonamiIndex = 0;
+    }
+    this.lastGamepadActionTime = now;
+
     // Check Gamepad Konami code
     if (this.gamepadSequence[this.gamepadKonamiIndex] === action) {
       this.gamepadKonamiIndex++;
@@ -381,9 +426,23 @@ class InputManager {
       this.prevDown = down;
       this.prevLeft = left;
       this.prevRight = right;
-    }
 
-    requestAnimationFrame(this.pollGamepads);
+      let hasActive = false;
+      for (let i = 0; i < gamepads.length; i++) {
+        if (gamepads[i]?.connected) {
+          hasActive = true;
+          break;
+        }
+      }
+
+      if (hasActive) {
+        requestAnimationFrame(this.pollGamepads);
+      } else {
+        this.isPollingGamepads = false;
+      }
+    } else {
+      this.isPollingGamepads = false;
+    }
   };
 }
 

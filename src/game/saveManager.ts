@@ -87,15 +87,14 @@ function setCookie(name: string, value: string): void {
     const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString();
     // Domain=.localplayer.dev lets any localplayer.dev subdomain read it
     // after a move. When the page is NOT on localplayer.dev (github.io
-    // pages, localhost, itch.io embed) setting that domain throws — the
-    // host-only fallback then still covers same-address future visits.
+    // pages, localhost, itch.io embed), write host-only cookie so progress
+    // persists on subsequent visits to the same origin.
     const base = `${name}=${value}; expires=${expires}; path=/; SameSite=Lax`;
-    let domainOk = false;
-    try {
+    const host = typeof window !== 'undefined' && window.location ? window.location.hostname : '';
+    const isLocalPlayerDomain = host === 'localplayer.dev' || host.endsWith('.localplayer.dev');
+    if (isLocalPlayerDomain) {
       document.cookie = `${base}; domain=.localplayer.dev`;
-      domainOk = true;
-    } catch {}
-    if (!domainOk) {
+    } else {
       document.cookie = base;
     }
   } catch {}

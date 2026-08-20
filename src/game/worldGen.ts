@@ -34,7 +34,7 @@ interface GenState {
  *  possible pad arc, so the integration always reaches the landing surface. */
 const TRAJECTORY_FRAMES = 150;
 
-const POWERUP_KINDS: PowerUpKind[] = ['shield', 'shoes', 'triple', 'propeller'];
+const POWERUP_KINDS: PowerUpKind[] = ['shield', 'shoes', 'triple', 'propeller', 'magnet'];
 
 /**
  * Procedural world builder: emits platforms, pickups, power-ups, enemies,

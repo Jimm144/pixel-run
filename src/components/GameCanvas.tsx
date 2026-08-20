@@ -14,13 +14,14 @@ interface Props {
   onToggleMute: () => void;
   onRestartHint: () => void;
   onRestart: () => void;
+  onMenu?: () => void;
   onQuestProgress: (stats: QuestRunStats) => void;
   ui: UI;
   showTouch: boolean;
   modalOpen?: boolean;
 }
 
-export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onToggleMute, onRestartHint, onRestart, onQuestProgress, ui, showTouch, modalOpen }: Props) {
+export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onToggleMute, onRestartHint, onRestart, onMenu, onQuestProgress, ui, showTouch, modalOpen }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   /** Zone accent for the touch pause button — follows the biome. */
@@ -45,6 +46,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
     onToggleMute,
     onRestartHint,
     onRestart,
+    onMenu,
   });
 
   /* ---------------------------------------------------- engine + main loop */
@@ -213,7 +215,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
 
       {showTouch && (
         <>
-          <div className="absolute top-4 right-4 z-20 tablet:top-8 tablet:right-8">
+          <div className="absolute top-[max(1rem,env(safe-area-inset-top))] right-[max(1rem,env(safe-area-inset-right))] z-20 tablet:top-8 tablet:right-8">
             <button
               type="button"
               aria-label="Pause"
@@ -228,7 +230,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
               <PauseIcon className="h-5 w-5 tablet:h-6 tablet:w-6" />
             </button>
           </div>
-          <div className="absolute bottom-4 left-4 z-20 tablet:bottom-8 tablet:left-8">
+          <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] z-20 tablet:bottom-8 tablet:left-8">
             <button
               type="button"
               aria-label="Dive"
@@ -241,7 +243,15 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
               <span className="pointer-events-none absolute -bottom-[4px] -left-[4px] h-2 w-2 bg-[#ffd166]" />
               <span className="pointer-events-none absolute -bottom-[4px] -right-[4px] h-2 w-2 bg-[#ffd166]" />
               <svg aria-hidden="true" viewBox="0 0 32 32" className="h-9 w-9 tablet:h-12 tablet:w-12" fill="currentColor" shapeRendering="crispEdges">
-                <path d="M12 4h8v14h7L16 29 5 18h7V4z" />
+                {/* Pixel arrow shaft */}
+                <rect x="12" y="4" width="8" height="12" />
+                {/* Stepped pixel arrow head */}
+                <rect x="6" y="16" width="20" height="2" />
+                <rect x="8" y="18" width="16" height="2" />
+                <rect x="10" y="20" width="12" height="2" />
+                <rect x="12" y="22" width="8" height="2" />
+                <rect x="14" y="24" width="4" height="2" />
+                <rect x="15" y="26" width="2" height="2" />
               </svg>
             </button>
           </div>

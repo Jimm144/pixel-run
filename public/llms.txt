@@ -17,9 +17,10 @@
 - Four daily quests track run or daily totals for coins, meters, score, enemies, power-ups and jumps.
 - Special quests include clean runs, biome effects, simultaneous power-ups and reaching a x10 combo.
 - Best run, last run and daily quest progress are stored in browser localStorage.
+- Supports 2-4 player Local Battle (split-controls/gamepads) and real-time Online Multiplayer via WebRTC & MQTT relay.
 
 ## Technical facts
 
-- TypeScript, React, Vite and an HTML5 Canvas renderer.
-- Music and sound effects use the Web Audio API.
+- TypeScript, React, Vite, Tailwind CSS v4 and an HTML5 Canvas renderer.
+- Music and sound effects use procedural Web Audio API synthesis.
 - The project is licensed under GPL-3.0.

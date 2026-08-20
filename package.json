@@ -6,9 +6,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/bump-sw-version.mjs && vite build",
     "preview": "vite preview",
-    "party": "partykit dev"
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "mqtt": "^5.15.2",
@@ -22,7 +25,6 @@
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "5.1.1",
-    "partykit": "^0.0.115",
     "tailwindcss": "4.1.17",
     "terser": "^5.50.0",
     "typescript": "5.9.3",

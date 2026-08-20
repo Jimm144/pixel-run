@@ -4,6 +4,7 @@ import { ParticleSystem } from './particles';
 import { FloatTexts } from './texts';
 import { SKINS, type SkinDef } from './skins';
 import { drawPlayerSprite } from './playerSprite';
+import { party } from './multiplayer/partyManager';
 import {
   clamp,
   COIN_HW,
@@ -332,6 +333,25 @@ export class Renderer {
       c.fillRect(8, 13, 2, 2);
       c.fillStyle = '#6e2fa8';
       c.fillRect(7, 15, 4, 1);
+    } else if (kind === 'magnet') {
+      // 5. Electro-Magnet: Horseshoe U-magnet with red/cyan poles
+      c.fillStyle = '#ff4d6d'; // Red North Pole
+      c.fillRect(4, 4, 3, 3);
+      c.fillStyle = '#00f0ff'; // Cyan South Pole
+      c.fillRect(11, 4, 3, 3);
+      c.fillStyle = '#ffffff';
+      c.fillRect(4, 4, 3, 1);
+      c.fillRect(11, 4, 3, 1);
+
+      c.fillStyle = '#2c1f4d'; // Magnet body curve
+      c.fillRect(4, 7, 3, 5);
+      c.fillRect(11, 7, 3, 5);
+      c.fillRect(5, 12, 8, 3);
+
+      c.fillStyle = '#00f0ff'; // Highlight
+      c.fillRect(5, 7, 1, 4);
+      c.fillRect(12, 7, 1, 4);
+      c.fillRect(6, 13, 6, 1);
     } else {
       // 4. Propeller Beanie: dual aerodynamic rotor blades + cap dome & golden brim
       c.fillStyle = '#ffffff';
@@ -1594,6 +1614,14 @@ export class Renderer {
       c.fillStyle = '#ffffff';
       c.fillRect(cx - 1, cy - 15, 2, 2);
     }
+    if (this.g.magnet > 0) {
+      const pulse = Math.sin(this.g.frame * 0.25) * 1.5;
+      c.strokeStyle = '#00f0ff';
+      c.lineWidth = 1;
+      c.globalAlpha = 0.35 + Math.sin(this.g.frame * 0.2) * 0.25;
+      c.strokeRect(cx - 8 - pulse, cy - 8 - pulse, 16 + pulse * 2, 16 + pulse * 2);
+      c.globalAlpha = 1;
+    }
   }
 
   private drawPlayer() {
@@ -1605,7 +1633,8 @@ export class Renderer {
     const mid = this.g.px + PLAYER_W / 2;
     let land = Infinity;
     for (const p of this.g.platforms) {
-      if (mid < p.x - 1 || mid > p.x + p.w + 1) continue;
+      if (p.x > mid + 2) break;
+      if (p.x + p.w + 1 < mid) continue;
       if (p.y >= foot - 2 && p.y < land) land = p.y;
     }
     if (land < Infinity && land - foot > 5) {
@@ -1892,7 +1921,6 @@ export class Renderer {
       const width = textWidth(text, 1) + 12;
       if (x + width > W - 6) return;
       const col = POWERUP_COLORS[kind];
-      // Same art as the pickup sprites, at half scale for the HUD row.
       c.drawImage(this.powerupSprite(kind), x, y, 9, 9);
       if (text) drawText(c, text, x + 11, y + 1, 1, col, '#150a24');
       x += width + 4;
@@ -1901,6 +1929,7 @@ export class Renderer {
     if (this.g.jumpShoes > 0) status(this.g.jumpShoes, 'shoes');
     if (this.g.tripleJump > 0) status(this.g.tripleJump, 'triple');
     if (this.g.propellerHat > 0 || this.g.propellerFlashing) status(this.g.propellerHat, 'propeller');
+    if (this.g.magnet > 0) status(this.g.magnet, 'magnet');
   }
 
   private drawHud() {
@@ -1986,19 +2015,29 @@ export class Renderer {
 
     drawText(c, gtxt, gx0 + 9, gy, 1, '#3ef2c8', '#150a24');
 
-    // 4. COMBO BAR
-    // On mobile / narrow screens, place below the top row (y = 56) centered in the open sky.
-    // On wide desktop, place top center (y = 8).
+    // 4. ONLINE PING BADGE
+    if (this.g.mode === 'online' || (this.g.opponentStates && this.g.opponentStates.size > 0)) {
+      const pingMs = party.pingMs;
+      const pingTxt = pingMs > 0 ? `${pingMs}MS` : '<20MS';
+      const pingCol = pingMs < 75 ? '#3ef2c8' : pingMs < 150 ? '#ffd166' : '#ff4d6d';
+      const pW = textWidth(pingTxt, 1) + 8;
+      const pX = W - rightMargin - pW;
+      const pY = 38;
+      c.fillStyle = pingCol;
+      c.fillRect(pX, pY + 2, 3, 3);
+      drawText(c, pingTxt, pX + 5, pY, 1, pingCol, '#150a24');
+    }
+
+    // 5. COMBO
     if (mobile || isNarrow) {
       this.drawCombo(Math.round(W / 2), 56);
     } else {
       this.drawCombo(Math.round(W / 2), 8);
     }
 
-    // 5. BATTLE LIVE STATUS
+    // 7. BATTLE LIVE STATUS
     if (this.g.mode === 'local' && this.g.localPlayers && this.g.localPlayers.length > 0) {
       const midX = Math.round(W / 2);
-      // Below the combo bar (y = 56, bar 65-72) on mobile / narrow screens.
       const vsY = mobile || isNarrow ? 78 : 26;
       const lp = this.g.localPlayers;
       const sep = ' | ';

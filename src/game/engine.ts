@@ -1,4 +1,5 @@
 import { sfx } from './audio';
+import { haptics } from '../utils/haptics';
 import { shade, ZONES, type BgKind, type Zone } from './palette';
 import { ParticleSystem } from './particles';
 import type { QuestRunStats } from './quests';
@@ -34,7 +35,6 @@ import {
   SLAM_PTS,
   STOMP_PTS,
   VW,
-  WALL_MARGIN,
   ZONE_LEN_M,
   type Enemy,
   type GenHost,
@@ -197,6 +197,7 @@ export class Game implements GenHost, RenderHost {
   propellerHat!: number;
   propellerFlashing!: boolean;
   propellerFlashTimer!: number;
+  magnet!: number;
   invuln!: number;
   padFlight!: number;
   sx!: number;
@@ -247,6 +248,10 @@ export class Game implements GenHost, RenderHost {
   gems!: number;
   runGems = 0;
   moonPhase!: number;
+  deathCause = 'pit';
+  seenSpiker = false;
+  pendingGems = 0;
+  pendingCoins = 0;
 
   /* ---- seeded determinism */
   rng: Mulberry32 = new Mulberry32();
@@ -329,6 +334,7 @@ export class Game implements GenHost, RenderHost {
       propellerHat: 0,
       propellerFlashing: false,
       propellerFlashTimer: 0,
+      magnet: 0,
       invuln: 0,
       padFlight: 0,
       sx: 1,
@@ -373,11 +379,16 @@ export class Game implements GenHost, RenderHost {
       runGems: 0,
       moonPhase: 0,
       lpBonus: [],
+      deathCause: 'pit',
+      seenSpiker: false,
+      pendingGems: 0,
+      pendingCoins: 0,
     };
   }
 
   /* ------------------------------------------------------------- lifecycle */
   reset(seed?: number) {
+    this.flushLifetimeStats();
     this.matchSeed = seed !== undefined ? seed : (Math.random() * 0x7fffffff) >>> 0;
     this.rng = new Mulberry32(this.matchSeed);
     // Re-arm the cross-tab coin channel for the current room (no-op unless it changed).
@@ -611,6 +622,7 @@ export class Game implements GenHost, RenderHost {
       kills: this.kills,
       combo: this.bestCombo,
       moonPhase: this.questMaxMoonPhase,
+      cause: this.deathCause,
     };
   }
 
@@ -679,12 +691,17 @@ export class Game implements GenHost, RenderHost {
 
   /* --------------------------------------------------------------- helpers */
   diff() {
-    const d = clamp(this.distance / 15000, 0, 1);
-    return this.phase === 'ready' ? Math.min(d, 0.1) : d;
+    if (this.phase === 'ready') return 0.1;
+    const base = clamp(this.distance / 15000, 0, 1);
+    const ultra = this.distance > 15000 ? Math.min(0.5, Math.log10(1 + (this.distance - 15000) / 30000)) : 0;
+    return Math.min(1.5, base + ultra);
   }
   runSpeed() {
-    const late = this.phase === 'ready' ? 0 : clamp((this.distance - 10500) / 15000, 0, 1);
-    return 2.1 + 1.4 * this.diff() + 0.8 * late;
+    if (this.phase === 'ready') return 2.1;
+    const base = 2.1 + 1.4 * Math.min(1, this.distance / 15000);
+    const late = clamp((this.distance - 10500) / 15000, 0, 0.8);
+    const ultra = this.distance > 25000 ? Math.min(0.9, Math.log10(1 + (this.distance - 25000) / 40000) * 1.5) : 0;
+    return base + late + ultra;
   }
   mult() {
     return Math.min(10, 1 + Math.floor(this.combo / 4));
@@ -781,13 +798,11 @@ export class Game implements GenHost, RenderHost {
     if (this.phase === 'paused' || this.phase === 'over') return;
 
     // decaying juice always runs
-    this.shake *= 0.9;
+    this.shake *= 0.88;
     if (this.shake < 0.002) this.shake = 0;
-    const s = this.shake * this.shake * 7;
-    this.shakeX = rnd(-s, s);
-    // Keep impact feedback mostly horizontal; full vertical shake makes the
-    // entire world appear to drop on narrow/mobile viewports.
-    this.shakeY = rnd(-s * 0.28, s * 0.28);
+    const s = this.shake * this.shake * 4;
+    this.shakeX = 0;
+    this.shakeY = rnd(-s, s);
     if (this.flash > 0) this.flash = Math.max(0, this.flash - 0.06);
 
     if (this.freeze > 0) {
@@ -841,15 +856,21 @@ export class Game implements GenHost, RenderHost {
       const currentSpeed = Math.abs(this.vx) || this.runSpeed();
       const speedScale = currentSpeed / 2.1;
       sfx.setMusic(this.zone.bg, this.diff(), speedScale);
+      if (this.frame % 300 === 0) {
+        this.flushLifetimeStats();
+      }
     }
 
     /* ---- horizontal motion */
     let target = this.runSpeed();
     if (this.phase === 'ready') target *= 0.82;
     if (this.phase === 'playing' && this.eventTimer > 0) {
-      if (this.eventKind === 'jungle') target *= 1.04;
-      else if (this.eventKind === 'desert') target *= 0.96;
-      else if (this.eventKind === 'tundra') target *= 0.82;
+      const rampIn = Math.min(1, (this.eventMax - this.eventTimer) / 60);
+      const rampOut = Math.min(1, this.eventTimer / 60);
+      const weight = Math.min(rampIn, rampOut);
+      if (this.eventKind === 'jungle') target *= 1 + 0.04 * weight;
+      else if (this.eventKind === 'desert') target *= 1 - 0.04 * weight;
+      else if (this.eventKind === 'tundra') target *= 1 - 0.18 * weight;
     }
     if (this.padFlight <= 0) {
       if (this.moveDir > 0) target *= 1.35;
@@ -991,9 +1012,14 @@ export class Game implements GenHost, RenderHost {
       const m = Math.floor(this.distance / 10);
       if (m >= this.nextMilestone) {
         this.bonus += 100;
-        this.texts.popText(this.px, this.py - 24, this.nextMilestone + 'M!', '#3ef2c8', 1);
+        this.texts.popText(this.px, this.py - 24, this.nextMilestone + 'M!', '#3ef2c8', 1.4);
         this.nextMilestone += 250;
-        this.addShake(0.16);
+        this.addShake(0.24);
+        this.flash = 0.22;
+        this.flashCol = '#3ef2c8';
+        this.particles.burst(this.px + PLAYER_W / 2, this.py + PLAYER_H / 2, 20, ['#3ef2c8', '#ffffff', '#ffd166'], 2.8, 0.05);
+        sfx.play('gem');
+        haptics.milestone();
       }
       if (this.comboT > 0) {
         this.comboT--;
@@ -1104,11 +1130,13 @@ export class Game implements GenHost, RenderHost {
         this.particles.spawnP(bx, by - 6, Math.cos(a) * 1.7, Math.sin(a) * 1.2, 18, 1, this.zone.accent, 0.02, 0.9);
       }
       sfx.play('djump');
+      haptics.djump();
     } else {
       for (let i = 0; i < 6; i++) {
         this.particles.spawnP(bx, by, rnd(-1.4, 0.4), -rnd(0.2, 0.9), 16, 1, '#ffffff', 0.05, 0.93);
       }
       sfx.play('jump');
+      haptics.jump();
     }
   }
 
@@ -1118,20 +1146,13 @@ export class Game implements GenHost, RenderHost {
     for (const p of this.platforms) {
       if (p.float) continue;
       const bh = GROUND_BOTTOM - p.y;
-      // Corner ledge forgiveness: if player's feet are within 6px of the platform top,
-      // allow stepping up/landing on the ledge instead of fatal wall collision.
       if (
         this.px + pw > p.x &&
         this.px < p.x + p.w &&
-        this.py + ph > p.y + 6 &&
+        this.py + ph > p.y + 3 &&
         this.py < p.y + bh
       ) {
-        if (this.vx > 0 && this.px + pw - this.vx <= p.x + WALL_MARGIN) {
-          if (this.vy < 0) {
-            this.px = p.x - pw - 1;
-            this.vx = 0;
-            continue;
-          }
+        if (this.vx > 0) {
           if (this.absorbShieldHit()) {
             this.px = p.x - pw - 1;
             this.vx = 0;
@@ -1160,10 +1181,10 @@ export class Game implements GenHost, RenderHost {
     let landing: Platform | null = null;
     let bonked = false;
     for (const p of this.platforms) {
-      if (this.px + pw <= p.x - 2 || this.px >= p.x + p.w + 2) continue;
+      if (this.px + pw <= p.x || this.px >= p.x + p.w) continue;
       const bh = p.float ? 8 : GROUND_BOTTOM - p.y;
-      if (this.py + ph > p.y && this.py < p.y + bh) {
-        if (this.vy >= 0 && (prevBottom <= p.y + Math.max(6, this.vy + 2) || this.py + ph <= p.y + 7)) {
+      if (this.py + ph >= p.y && this.py < p.y + bh) {
+        if (this.vy >= 0 && prevBottom <= p.y + Math.max(3, this.vy + 1)) {
           // If surfaces overlap, land on the first surface crossed, not on
           // whichever platform happened to be iterated last.
           if (!landing || p.y < landing.y) landing = p;
@@ -1219,8 +1240,8 @@ export class Game implements GenHost, RenderHost {
         }
       }
       if (wasDiving) {
-        this.addShake(0.5);
-        this.freeze = 3;
+        this.sx = 1.12;
+        this.sy = 0.92;
         sfx.play('slam');
         for (let i = 0; i < 18; i++) {
           const dir = i % 2 === 0 ? 1 : -1;
@@ -1251,6 +1272,8 @@ export class Game implements GenHost, RenderHost {
     this.addCombo(e.x + e.w / 2, e.y - 8, pts, label);
     this.particles.burst(e.x + e.w / 2, e.y + e.h / 2, 14, [this.zone.slimeBody, this.zone.accent, '#ffffff'], 2.6, 0.16);
     sfx.play(e.kind === 'spiker' ? 'slam' : 'stomp');
+    if (e.kind === 'spiker') haptics.diveSlam();
+    else haptics.stomp();
   }
 
   private updateEntities(): boolean {
@@ -1258,7 +1281,7 @@ export class Game implements GenHost, RenderHost {
     const ph = PLAYER_H;
 
     // Gather all active living runner positions
-    const runners: Array<{ px: number; py: number; isMain: boolean; addScore: (pts: number) => void }> = [];
+    const runners: Array<{ px: number; py: number; isMain: boolean; playerIdx: number; addScore: (pts: number) => void }> = [];
     if (this.isLocalBattle) {
       for (let i = 0; i < this.localPlayers.length; i++) {
         const lp = this.localPlayers[i];
@@ -1267,6 +1290,7 @@ export class Game implements GenHost, RenderHost {
             px: lp.px,
             py: lp.py,
             isMain: i === 0,
+            playerIdx: i,
             addScore: (pts: number) => {
               if (i === 0) {
                 lp.score += pts;
@@ -1286,6 +1310,7 @@ export class Game implements GenHost, RenderHost {
         px: this.px,
         py: this.py,
         isMain: true,
+        playerIdx: 0,
         addScore: (pts: number) => { this.score += pts; },
       });
     }
@@ -1306,6 +1331,26 @@ export class Game implements GenHost, RenderHost {
       if (c.x < this.camX - 30 || c.x > this.camX + VW + 40) continue;
       const r = c.gem ? 9 : 8;
 
+      // Magnetic attraction pull when magnet powerup is active
+      for (const runner of runners) {
+        const isMagnetActive = runner.isMain
+          ? this.magnet > 0
+          : (this.localPlayers[runner.playerIdx]?.magnet || 0) > 0;
+        if (isMagnetActive) {
+          const dx = (runner.px + pw / 2) - c.x;
+          const dy = (runner.py + ph / 2) - c.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > 0 && dist < 95) {
+            const pull = Math.min(6.5, 90 / (dist + 5));
+            c.x += (dx / dist) * pull;
+            c.y += (dy / dist) * pull;
+            if (this.frame % 4 === 0) {
+              this.particles.spawnP(c.x, c.y, rnd(-0.6, 0.6), rnd(-0.6, 0.6), 10, 1, '#00f0ff', 0, 0.88);
+            }
+          }
+        }
+      }
+
       for (const runner of runners) {
         if (
           Math.abs(c.x - (runner.px + pw / 2)) < r + pw / 2 - 2 &&
@@ -1318,29 +1363,20 @@ export class Game implements GenHost, RenderHost {
             // A real run only — the attract demo (phase 'ready') runs in solo
             // mode and must not farm lifetime gems from the menu.
             if (this.mode === 'solo' && this.phase === 'playing') {
-              const currentLifetime = loadLifetimeStats();
-              currentLifetime.gems = (currentLifetime.gems || 0) + 1;
-              saveLifetimeStats(currentLifetime);
+              this.pendingGems++;
             }
             runner.addScore(GEM_PTS);
             if (runner.isMain) this.addCombo(c.x, c.y - 6, GEM_PTS, 'GEM');
             this.particles.burst(c.x, c.y, 14, ['#7ef7ff', '#ffffff', '#3ef2c8'], 2.2, 0.05);
             this.addShake(0.14);
             sfx.play('gem');
+            haptics.gem();
           } else {
             if (this.isMultiplayer && this.phase === 'playing') coinSync.report(coinId(c.x, c.y));
             this.coins++;
             if (runner.isMain) this.questCoins++;
             if (this.mode === 'solo' && this.phase === 'playing') {
-              const currentLifetime = loadLifetimeStats();
-              if (!currentLifetime.coinsDone) {
-                currentLifetime.coins = (currentLifetime.coins || 0) + 1;
-                if (currentLifetime.coins >= MILESTONES.COINS_TARGET) {
-                  currentLifetime.coins = MILESTONES.COINS_TARGET;
-                  currentLifetime.coinsDone = true;
-                }
-                saveLifetimeStats(currentLifetime);
-              }
+              this.pendingCoins++;
             }
             runner.addScore(COIN_PTS);
             if (runner.isMain) this.addCombo(c.x, c.y - 4, COIN_PTS);
@@ -1352,21 +1388,19 @@ export class Game implements GenHost, RenderHost {
       }
     }
 
-    /* power-ups — the power-up state lives on the main player only, so in a
-     * battle a P2-P4 grab must not silently buff P1 (or, once P1 is dead,
-     * activate a power-up on the corpse). Only the main runner may collect. */
+    /* power-ups — all runners (P1-P4 in local battle, main player in solo/online)
+     * can collect power-ups */
     for (const power of this.powerups) {
       if (power.dead) continue;
       power.t += 0.12;
       if (power.x < this.camX - 30 || power.x > this.camX + VW + 40) continue;
       for (const runner of runners) {
-        if (!runner.isMain) continue;
         if (
           Math.abs(power.x - (runner.px + pw / 2)) < 10 + pw / 2 - 2 &&
           Math.abs(power.y - (runner.py + ph / 2)) < 10 + ph / 2 - 3
         ) {
           power.dead = true;
-          this.activatePowerUp(power.kind, power.x, power.y);
+          this.activatePlayerPowerUp(runner.playerIdx, power.kind, power.x, power.y);
           break;
         }
       }
@@ -1481,36 +1515,57 @@ export class Game implements GenHost, RenderHost {
       const hPadBottom = e.kind === 'flyer' ? 4 : 0;
       const xPad = e.kind === 'flyer' ? 2 : 1;
 
-      if (
+      if (e.kind === 'spiker' && !this.seenSpiker && e.x <= this.camX + VW - 20) {
+        this.seenSpiker = true;
+      }
+
+      // Generous downward sweep when diving so diving reliably crushes enemies without fatal clipping
+      const isDiveSweep = this.diving && (
+        pxc + pw > e.x - 2 &&
+        pxc < e.x + e.w + 2 &&
+        pyc + ph >= e.y &&
+        prevFeet <= e.y + e.h + 10
+      );
+
+      const isNormalOverlap =
         pxc + pw > e.x + xPad &&
         pxc < e.x + e.w - xPad &&
         pyc + ph > e.y + hPadTop &&
-        pyc < e.y + e.h - hPadBottom
-      ) {
-        if (e.kind === 'spiker') {
-          if (this.diving) {
-            this.killEnemy(e, SLAM_PTS, 'SMASH');
-            stompedThisFrame = true;
-          } else {
+        pyc < e.y + e.h - hPadBottom;
+
+      if (isDiveSweep || isNormalOverlap) {
+        if (this.diving) {
+          this.killEnemy(e, SLAM_PTS, e.kind === 'spiker' ? 'SMASH' : 'SLAM');
+          stompedThisFrame = true;
+        } else if (e.kind === 'spiker') {
+          if (!stompedThisFrame) {
             if (this.absorbShieldHit()) {
               const pushDir = pxc + pw / 2 < e.x + e.w / 2 ? -1 : 1;
               this.shieldPush(pushDir);
               shieldTriggered = true;
               break;
             }
-            this.die('spike');
+            this.die('spiker');
             return false;
           }
         } else {
-          // Stomping: descending onto enemy, diving, or falling near flyer top
-          const stomping =
-            (fallVy > 0 && prevFeet <= e.y + e.h) ||
-            (e.kind === 'flyer' && fallVy >= -0.5 && pyc + ph <= e.y + e.h + 2);
+          // Reliable stomp detection: descending, near jump apex, or feet touching upper portion of enemy
+          const isDescending = fallVy >= -0.8;
+          const isAboveMidpoint = pyc + ph <= e.y + e.h * 0.85;
+          const wasAbove = prevFeet <= e.y + 4;
+          const isFlyerStomp = e.kind === 'flyer' && (isDescending || pyc + ph <= e.y + e.h + 2);
 
-          if (stomping || this.diving) {
-            this.killEnemy(e, this.diving ? SLAM_PTS : STOMP_PTS, this.diving ? 'SLAM' : undefined);
+          const stomping =
+            stompedThisFrame ||
+            isFlyerStomp ||
+            isDescending ||
+            isAboveMidpoint ||
+            wasAbove;
+
+          if (stomping) {
+            this.killEnemy(e, STOMP_PTS);
             stompedThisFrame = true;
-          } else if (!stompedThisFrame) {
+          } else {
             if (this.absorbShieldHit()) {
               const pushDir = pxc + pw / 2 < e.x + e.w / 2 ? -1 : 1;
               this.shieldPush(pushDir);
@@ -1528,10 +1583,9 @@ export class Game implements GenHost, RenderHost {
       this.diving = false;
       this.jumps = Math.min(this.jumps, 1);
       this.cut = false;
-      this.sx = 1.35;
-      this.sy = 0.7;
-      this.freeze = 4;
-      this.addShake(0.34);
+      this.sx = 1.12;
+      this.sy = 0.9;
+      this.freeze = 0;
     }
 
     /* spikes */
@@ -1539,9 +1593,9 @@ export class Game implements GenHost, RenderHost {
       for (const s of this.spikes) {
         if (s.x > this.camX + VW + 20 || s.x + s.n * 8 < this.camX - 20) continue;
         if (
-          pxc + pw - 2 > s.x + 1 &&
-          pxc + 2 < s.x + s.n * 8 - 1 &&
-          pyc + ph > s.y + 3 &&
+          pxc + pw - 4 > s.x + 2 &&
+          pxc + 4 < s.x + s.n * 8 - 2 &&
+          pyc + ph > s.y + 5 &&
           pyc < s.y + 10
         ) {
           if (this.absorbShieldHit()) break;
@@ -1699,6 +1753,13 @@ export class Game implements GenHost, RenderHost {
       this.eventMax = ri(900, 1500);
       this.eventTimer = this.eventMax;
       this.eventSeed = ri(1, 99999);
+      const banner =
+        this.eventKind === 'tundra'
+          ? 'BLIZZARD APPROACHING!'
+          : this.eventKind === 'desert'
+          ? 'SANDSTORM AHEAD!'
+          : 'RAIN INCOMING!';
+      this.texts.popText(this.px + 40, this.py - 24, banner, '#ffd166', 1.4);
       break;
     }
   }
@@ -1711,6 +1772,7 @@ export class Game implements GenHost, RenderHost {
     }
     if (this.jumpShoes > 0) this.jumpShoes--;
     if (this.tripleJump > 0) this.tripleJump--;
+    if (this.magnet > 0) this.magnet--;
     if (this.propellerHat > 0) {
       this.propellerHat--;
       // The final second is the expiry warning blink; at zero the hat is gone.
@@ -1731,12 +1793,72 @@ export class Game implements GenHost, RenderHost {
     }
   }
 
+  private flushLifetimeStats() {
+    if (this.mode !== 'solo') return;
+    if (this.pendingGems === 0 && this.pendingCoins === 0) return;
+    try {
+      const stats = loadLifetimeStats();
+      if (this.pendingGems > 0) {
+        stats.gems = (stats.gems || 0) + this.pendingGems;
+        this.pendingGems = 0;
+      }
+      if (this.pendingCoins > 0) {
+        if (!stats.coinsDone) {
+          stats.coins = (stats.coins || 0) + this.pendingCoins;
+          if (stats.coins >= MILESTONES.COINS_TARGET) {
+            stats.coins = MILESTONES.COINS_TARGET;
+            stats.coinsDone = true;
+          }
+        }
+        this.pendingCoins = 0;
+      }
+      saveLifetimeStats(stats);
+    } catch {}
+  }
+
+  private activatePlayerPowerUp(playerIdx: number, kind: PowerUpKind, x: number, y: number) {
+    if (playerIdx === 0) {
+      this.activatePowerUp(kind, x, y);
+      return;
+    }
+    const lp = this.localPlayers[playerIdx];
+    if (!lp || !lp.isAlive) return;
+
+    const labels: Record<PowerUpKind, string> = {
+      shield: 'SHIELD',
+      shoes: 'JUMP SHOES',
+      triple: 'TRIPLE JUMP',
+      propeller: 'PROPELLER',
+      magnet: 'MAGNET',
+    };
+
+    if (kind === 'shield') {
+      lp.shielded = true;
+      lp.invuln = 180;
+    } else if (kind === 'shoes') {
+      lp.jumpShoes = POWERUP_TIME;
+    } else if (kind === 'triple') {
+      lp.tripleJump = POWERUP_TIME;
+    } else if (kind === 'magnet') {
+      lp.magnet = POWERUP_TIME;
+    } else {
+      lp.propellerHat = POWERUP_TIME;
+    }
+
+    this.lpBonus[playerIdx] = (this.lpBonus[playerIdx] || 0) + POWERUP_PTS;
+    this.texts.popText(x, y - 20, `${lp.name}: ${labels[kind]}`, POWERUP_COLORS[kind], 1);
+    this.particles.burst(x, y, 14, [POWERUP_COLORS[kind], '#ffffff'], 2.2, 0.04);
+    sfx.play('powerup', kind === 'shield' ? 0 : kind === 'shoes' ? 1 : kind === 'triple' ? 2 : kind === 'magnet' ? 4 : 3);
+    haptics.powerup();
+  }
+
   private activatePowerUp(kind: PowerUpKind, x: number, y: number) {
     const labels: Record<PowerUpKind, string> = {
       shield: 'SHIELD',
       shoes: 'JUMP SHOES',
       triple: 'TRIPLE JUMP',
       propeller: 'PROPELLER',
+      magnet: 'MAGNET',
     };
     if (kind === 'shield') {
       this.shielded = true;
@@ -1744,6 +1866,7 @@ export class Game implements GenHost, RenderHost {
     }
     else if (kind === 'shoes') this.jumpShoes = POWERUP_TIME;
     else if (kind === 'triple') this.tripleJump = POWERUP_TIME;
+    else if (kind === 'magnet') this.magnet = POWERUP_TIME;
     else {
       // A fresh hat ends any expiry flash from the previous hat — otherwise
       // the next landing would wipe the new hat while it still has ~10s left.
@@ -1752,14 +1875,15 @@ export class Game implements GenHost, RenderHost {
       this.propellerFlashTimer = 0;
     }
     this.questPowerups++;
-    const activePowerups = Number(this.shielded) + Number(this.jumpShoes > 0) + Number(this.tripleJump > 0) + Number(this.propellerHat > 0 || this.propellerFlashing);
+    const activePowerups = Number(this.shielded) + Number(this.jumpShoes > 0) + Number(this.tripleJump > 0) + Number(this.magnet > 0) + Number(this.propellerHat > 0 || this.propellerFlashing);
     if (activePowerups >= 2) this.questTwoPowerups = true;
     this.addCombo(x, y - 8, POWERUP_PTS, labels[kind]);
     this.texts.popText(x, y - 20, labels[kind], POWERUP_COLORS[kind], 1);
     this.particles.burst(x, y, 14, [POWERUP_COLORS[kind], '#ffffff'], 2.2, 0.04);
     this.flash = 0.24;
     this.flashCol = POWERUP_COLORS[kind];
-    sfx.play('powerup', kind === 'shield' ? 0 : kind === 'shoes' ? 1 : kind === 'triple' ? 2 : 3);
+    sfx.play('powerup', kind === 'shield' ? 0 : kind === 'shoes' ? 1 : kind === 'triple' ? 2 : kind === 'magnet' ? 4 : 3);
+    haptics.powerup();
   }
 
   private shieldPush(dir: number) {
@@ -1798,6 +1922,8 @@ export class Game implements GenHost, RenderHost {
   }
 
   private die(cause: string) {
+    this.deathCause = cause;
+    this.flushLifetimeStats();
     if (this.phase === 'over') return;
     if (this.phase !== 'playing' && this.phase !== 'ready') return;
     if (this.phase === 'playing' && cause !== 'pit') {
@@ -1828,6 +1954,7 @@ export class Game implements GenHost, RenderHost {
     this.breakCombo();
     sfx.stopMusic();
     sfx.play('death');
+    haptics.death();
 
     for (let i = 0; i < 40; i++) {
       const a = rnd(0, Math.PI * 2);
@@ -1848,6 +1975,11 @@ export class Game implements GenHost, RenderHost {
 
   private stepLocalPlayer(p: LocalPlayerState, idx: number) {
     if (!p.isAlive) return;
+    if (p.invuln && p.invuln > 0) p.invuln--;
+    if (p.jumpShoes && p.jumpShoes > 0) p.jumpShoes--;
+    if (p.tripleJump && p.tripleJump > 0) p.tripleJump--;
+    if (p.propellerHat && p.propellerHat > 0) p.propellerHat--;
+    if (p.magnet && p.magnet > 0) p.magnet--;
 
     /* horizontal motion */
     let target = this.runSpeed();
@@ -1860,6 +1992,8 @@ export class Game implements GenHost, RenderHost {
     }
 
     /* jumping */
+    const jumpScale = (p.jumpShoes && p.jumpShoes > 0) ? 1.18 : 1;
+    const maxJumps = (p.tripleJump && p.tripleJump > 0) ? 3 : 2;
     if (p.jumpBuf > 0) p.jumpBuf--;
     if (p.coyote > 0) p.coyote--;
     if (p.jumpBuf > 0) {
@@ -1867,19 +2001,19 @@ export class Game implements GenHost, RenderHost {
         p.jumpBuf = 0;
         p.cut = false;
         p.diving = false;
-        p.vy = -JUMP_V;
+        p.vy = -JUMP_V * jumpScale;
         p.jumps = 1;
         p.onGround = false;
         p.coyote = 0;
         p.sx = 0.75;
         p.sy = 1.35;
         sfx.play('jump');
-      } else if (p.jumps < 2) {
+      } else if (p.jumps < maxJumps) {
         p.jumpBuf = 0;
         p.cut = false;
         p.diving = false;
-        p.vy = -DJUMP_V;
-        p.jumps = 2;
+        p.vy = -DJUMP_V * jumpScale;
+        p.jumps++;
         p.onGround = false;
         p.sx = 0.7;
         p.sy = 1.4;
@@ -1902,6 +2036,7 @@ export class Game implements GenHost, RenderHost {
     let g = GRAV_FALL;
     if (p.diving) g = GRAV_DIVE;
     else if (p.jumpHeld && p.vy < 0) g = GRAV_HOLD;
+    else if (p.jumpHeld && p.vy > 0 && p.propellerHat && p.propellerHat > 0) g = 0.16;
     p.vy = Math.min(MAX_FALL, p.vy + g);
 
     /* integrate */
@@ -1910,9 +2045,17 @@ export class Game implements GenHost, RenderHost {
 
     // Platform collisions X
     for (const plat of this.platforms) {
-      if (p.px + PLAYER_W > plat.x && p.px < plat.x + plat.w && p.py + PLAYER_H > plat.y && p.py < (plat.float ? plat.y + 8 : GROUND_BOTTOM)) {
-        if (p.vx > 0 && p.px + PLAYER_W - p.vx <= plat.x + WALL_MARGIN) {
-          if (p.vy < 0 || p.invuln > 0) {
+      if (plat.float) continue;
+      const bh = GROUND_BOTTOM - plat.y;
+      if (p.px + PLAYER_W > plat.x && p.px < plat.x + plat.w && p.py + PLAYER_H > plat.y + 3 && p.py < plat.y + bh) {
+        if (p.vx > 0) {
+          if (p.shielded) {
+            p.shielded = false;
+            p.invuln = 60;
+            p.px = plat.x - PLAYER_W - 1;
+            p.vx = -1.5;
+            p.vy = -3;
+          } else if (p.invuln && p.invuln > 0) {
             p.px = plat.x - PLAYER_W - 1;
             p.vx = 0;
           } else {
@@ -1928,10 +2071,10 @@ export class Game implements GenHost, RenderHost {
     p.onGround = false;
     let landing: Platform | null = null;
     for (const plat of this.platforms) {
-      if (p.px + PLAYER_W <= plat.x - 2 || p.px >= plat.x + plat.w + 2) continue;
+      if (p.px + PLAYER_W <= plat.x || p.px >= plat.x + plat.w) continue;
       const bh = plat.float ? 8 : GROUND_BOTTOM - plat.y;
-      if (p.py + PLAYER_H > plat.y && p.py < plat.y + bh) {
-        if (p.vy >= 0 && (prevBottom <= plat.y + Math.max(6, p.vy + 2) || p.py + PLAYER_H <= plat.y + 7)) {
+      if (p.py + PLAYER_H >= plat.y && p.py < plat.y + bh) {
+        if (p.vy >= 0 && prevBottom <= plat.y + Math.max(3, p.vy + 1)) {
           if (!landing || plat.y < landing.y) landing = plat;
         }
       }
@@ -1948,10 +2091,18 @@ export class Game implements GenHost, RenderHost {
     }
 
     // Spikes collision
-    for (const sp of this.spikes) {
-      if (p.px + PLAYER_W > sp.x + 2 && p.px < sp.x + sp.n * 8 - 2 && p.py + PLAYER_H > sp.y + 2 && p.py < sp.y + 8) {
-        this.killLocalPlayer(idx, 'spike');
-        return;
+    if (!p.invuln || p.invuln === 0) {
+      for (const sp of this.spikes) {
+        if (p.px + PLAYER_W - 4 > sp.x + 2 && p.px + 4 < sp.x + sp.n * 8 - 2 && p.py + PLAYER_H > sp.y + 5 && p.py < sp.y + 10) {
+          if (p.shielded) {
+            p.shielded = false;
+            p.invuln = 60;
+            p.vy = -5.4;
+            break;
+          }
+          this.killLocalPlayer(idx, 'spike');
+          return;
+        }
       }
     }
 

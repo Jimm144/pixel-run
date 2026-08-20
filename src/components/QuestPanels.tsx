@@ -63,6 +63,37 @@ function formatHms(ms: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+export function PixelGemIcon({ className = 'h-[8px] w-[6px]' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 6 8" className={`inline-block shrink-0 ${className}`} shapeRendering="crispEdges" aria-hidden="true">
+      {/* Dark outline */}
+      <rect x="0" y="1" width="6" height="6" fill="#08121e" />
+      <rect x="1" y="0" width="4" height="8" fill="#08121e" />
+      {/* Cyan jewel body */}
+      <rect x="1" y="1" width="4" height="6" fill="#3ef2c8" />
+      <rect x="0" y="2" width="6" height="4" fill="#3ef2c8" />
+      {/* Radiant highlight */}
+      <rect x="1" y="1" width="2" height="2" fill="#7ef7ff" />
+      {/* Sparkle glint */}
+      <rect x="1" y="2" width="1" height="1" fill="#ffffff" />
+    </svg>
+  );
+}
+
+export function PixelFlameIcon({ className = 'h-[8px] w-[7px]' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 7 8" className={`inline-block shrink-0 fill-[#ff4d6d] ${className}`} shapeRendering="crispEdges" aria-hidden="true">
+      <rect x="3" y="0" width="1" height="1" />
+      <rect x="2" y="1" width="3" height="1" />
+      <rect x="2" y="2" width="4" height="1" />
+      <rect x="1" y="3" width="5" height="2" />
+      <rect x="0" y="5" width="7" height="2" />
+      <rect x="1" y="7" width="5" height="1" />
+      <rect x="2" y="4" width="3" height="2" fill="#ffd166" />
+    </svg>
+  );
+}
+
 function QuestCard({ quest, record, run, compact }: { quest: QuestDefinition; record: QuestRecord; run: QuestRunStats; compact: boolean }) {
   const progress = getQuestProgress(quest, record, run);
   const color = QUEST_DIFFICULTY_COLORS[quest.difficulty];
@@ -78,7 +109,11 @@ function QuestCard({ quest, record, run, compact }: { quest: QuestDefinition; re
     >
       <div className="flex items-center justify-between gap-2 font-pixel text-[8px] leading-none">
         <span style={{ color: textColor }}>{progress.done ? 'COMPLETE' : quest.difficulty.toUpperCase()}</span>
-        <span className="text-[#9d8fd6]">{quest.scope === 'day' ? 'TODAY' : 'RUN'}</span>
+        <div className="flex items-center gap-1 font-pixel text-[8px]">
+          <span className="text-[#ffd166]">+{quest.reward}</span>
+          <PixelGemIcon />
+          <span className="ml-1 text-[#9d8fd6]">{quest.scope === 'day' ? 'TODAY' : 'RUN'}</span>
+        </div>
       </div>
       <p className={`${compact ? 'mt-1 line-clamp-2 text-[8px]' : 'mt-2 min-h-[33px] text-[8px]'} font-pixel leading-[1.4] text-[#e9e2ff] ${progress.done ? 'text-white' : ''}`}>
         {getQuestLabel(quest)}
@@ -102,8 +137,16 @@ export function DailyQuestPanel({ quests, record, run, compact = false, announce
     record.completedAt !== null && record.firstRunAt !== null ? formatDuration(record.completedAt - record.firstRunAt) : null;
   return (
     <Panel decorated={decorated} className={`w-full ${compact ? 'p-2.5' : 'p-4'} border-2 border-[#3ef2c8] bg-[#140a26]/95 ${announcement ? 'bg-[#140a26]/80' : ''}`}>
-      <div className={`${compact ? 'mb-2' : 'mb-3'} flex items-center justify-between gap-3`}>
-        <h2 className="font-pixel text-[12px] text-[#3ef2c8]">{announcement ? 'DAILY QUESTS' : 'QUESTS'}</h2>
+      <div className={`${compact ? 'mb-2' : 'mb-3'} flex items-center justify-between gap-2`}>
+        <div className="flex items-center gap-2">
+          <h2 className="font-pixel text-[12px] text-[#3ef2c8]">{announcement ? 'DAILY QUESTS' : 'QUESTS'}</h2>
+          {record.streak > 0 && (
+            <span className="inline-flex items-center gap-1 border border-[#ff4d6d]/70 bg-[#250a18] px-1.5 py-0.5 font-pixel text-[7px] text-[#ff4d6d] shadow-[1px_1px_0_#08040f]">
+              <PixelFlameIcon />
+              <span>{record.streak}D STREAK</span>
+            </span>
+          )}
+        </div>
         {!announcement && <span className="font-pixel text-[8px] text-[#9d8fd6]">NEXT {formatHms(remaining)}</span>}
       </div>
       <div className="grid grid-cols-2 gap-2">

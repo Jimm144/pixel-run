@@ -29,6 +29,7 @@ export interface GameInputOptions {
   onToggleMute: () => void;
   onRestartHint: () => void;
   onRestart: () => void;
+  onMenu?: () => void;
 }
 
 /** Which pointer currently owns the held dive — the play-area drag or the
@@ -42,10 +43,10 @@ type DiveOwner = 'wrap' | 'button' | null;
  * key-release cleanup. Listener closures only read refs, so they are
  * subscribed once and stay correct across re-renders and StrictMode remounts.
  */
-export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResume, onToggleMute, onRestartHint, onRestart }: GameInputOptions) {
+export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResume, onToggleMute, onRestartHint, onRestart, onMenu }: GameInputOptions) {
   const uiRef = useRef(ui);
   const modalOpenRef = useRef(Boolean(modalOpen));
-  const cbRef = useRef({ onStart, onPause, onResume, onToggleMute, onRestartHint, onRestart });
+  const cbRef = useRef({ onStart, onPause, onResume, onToggleMute, onRestartHint, onRestart, onMenu });
   // The "latest value" refs are written in an effect (not during render) so
   // the subscribed-once listeners below always read the freshest callbacks.
   useEffect(() => {
@@ -55,7 +56,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
     modalOpenRef.current = Boolean(modalOpen);
   }, [modalOpen]);
   useEffect(() => {
-    cbRef.current = { onStart, onPause, onResume, onToggleMute, onRestartHint, onRestart };
+    cbRef.current = { onStart, onPause, onResume, onToggleMute, onRestartHint, onRestart, onMenu };
   });
 
   const moveKeys = useRef(new Set<string>());
@@ -64,18 +65,9 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
   const diveId = useRef<number | null>(null);
   const diveOwner = useRef<DiveOwner>(null);
   const startY = useRef(0);
-  /** Timestamp of the last KeyR press — a second press within 0.8s confirms. */
-  const restartArmedAt = useRef(0);
 
   const handleRestart = () => {
-    const now = performance.now();
-    if (now - restartArmedAt.current <= 800) {
-      restartArmedAt.current = 0;
-      cbRef.current.onRestart();
-    } else {
-      restartArmedAt.current = now;
-      cbRef.current.onRestartHint();
-    }
+    cbRef.current.onRestart();
   };
 
   const applyMove = (g: Game) => {
@@ -356,9 +348,15 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
       if (isModalOpen) {
         const closeBtn = document.querySelector<HTMLButtonElement>(CLOSE_BUTTON_SELECTOR);
         if (closeBtn) closeBtn.click();
-      } else if (u === 'paused') {
-        cbRef.current.onResume();
+      } else if (u === 'paused' || u === 'over' || u === 'results') {
+        cbRef.current.onMenu?.();
       }
+      return;
+    }
+
+    if (code === 'KeyP' && u === 'paused' && !isModalOpen) {
+      e.preventDefault();
+      cbRef.current.onResume();
       return;
     }
 
@@ -518,6 +516,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
     window.addEventListener('lostpointercapture', onLostPointerCapture);
 
     let gpAnimId = 0;
+    let isPollingBattleGp = false;
     const prevGpButtons = [
       { jump: false, dive: false },
       { jump: false, dive: false },
@@ -527,49 +526,71 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
 
     const pollAllGamepads = () => {
       const g = gameRef.current;
+      const isModalOpen = modalOpenRef.current;
+      if (!g || g.phase !== 'playing' || isModalOpen || !g.isLocalBattle) {
+        isPollingBattleGp = false;
+        return;
+      }
+
       if (typeof navigator !== 'undefined' && navigator.getGamepads) {
         const gamepads = navigator.getGamepads();
-        if (g && g.phase === 'playing' && !modalOpenRef.current) {
-          if (g.isLocalBattle) {
-            const getPlayerForScheme = (scheme: string, fallbackIdx: number): number => {
-              if (g.playerControls && Array.isArray(g.playerControls)) {
-                const idx = g.playerControls.indexOf(scheme);
-                if (idx !== -1) return idx;
-              }
-              return fallbackIdx;
-            };
-
-            for (let i = 0; i < 4; i++) {
-              const gp = gamepads[i];
-              if (!gp) continue;
-              const pIdx = getPlayerForScheme(`gp${i}`, i);
-
-              const stickDown =
-                (typeof gp.axes[1] === 'number' && gp.axes[1] > 0.38) ||
-                (typeof gp.axes[3] === 'number' && gp.axes[3] > 0.38);
-              const jump = Boolean(gp.buttons[0]?.pressed || gp.buttons[2]?.pressed || gp.buttons[5]?.pressed || gp.buttons[12]?.pressed);
-              const dive = Boolean(gp.buttons[1]?.pressed || gp.buttons[4]?.pressed || gp.buttons[7]?.pressed || gp.buttons[13]?.pressed || stickDown);
-              const right = Boolean(gp.buttons[15]?.pressed || (typeof gp.axes[0] === 'number' && gp.axes[0] > 0.35));
-              const left = Boolean(gp.buttons[14]?.pressed || (typeof gp.axes[0] === 'number' && gp.axes[0] < -0.35));
-              const dir = right ? 1 : left ? -1 : 0;
-
-              if (jump && !prevGpButtons[i].jump) g.pressPlayerJump(pIdx);
-              else if (!jump && prevGpButtons[i].jump) g.releasePlayerJump(pIdx);
-
-              if (dive && !prevGpButtons[i].dive) g.pressPlayerDive(pIdx);
-              else if (!dive && prevGpButtons[i].dive) g.releasePlayerDive(pIdx);
-
-              g.setPlayerMove(pIdx, dir);
-
-              prevGpButtons[i].jump = jump;
-              prevGpButtons[i].dive = dive;
-            }
+        let connectedCount = 0;
+        const getPlayerForScheme = (scheme: string, fallbackIdx: number): number => {
+          if (g.playerControls && Array.isArray(g.playerControls)) {
+            const idx = g.playerControls.indexOf(scheme);
+            if (idx !== -1) return idx;
           }
+          return fallbackIdx;
+        };
+
+        for (let i = 0; i < 4; i++) {
+          const gp = gamepads[i];
+          if (!gp || !gp.connected) continue;
+          connectedCount++;
+          const pIdx = getPlayerForScheme(`gp${i}`, i);
+
+          const stickDown =
+            (typeof gp.axes[1] === 'number' && gp.axes[1] > 0.38) ||
+            (typeof gp.axes[3] === 'number' && gp.axes[3] > 0.38);
+          const jump = Boolean(gp.buttons[0]?.pressed || gp.buttons[2]?.pressed || gp.buttons[5]?.pressed || gp.buttons[12]?.pressed);
+          const dive = Boolean(gp.buttons[1]?.pressed || gp.buttons[4]?.pressed || gp.buttons[7]?.pressed || gp.buttons[13]?.pressed || stickDown);
+          const right = Boolean(gp.buttons[15]?.pressed || (typeof gp.axes[0] === 'number' && gp.axes[0] > 0.35));
+          const left = Boolean(gp.buttons[14]?.pressed || (typeof gp.axes[0] === 'number' && gp.axes[0] < -0.35));
+          const dir = right ? 1 : left ? -1 : 0;
+
+          if (jump && !prevGpButtons[i].jump) g.pressPlayerJump(pIdx);
+          else if (!jump && prevGpButtons[i].jump) g.releasePlayerJump(pIdx);
+
+          if (dive && !prevGpButtons[i].dive) g.pressPlayerDive(pIdx);
+          else if (!dive && prevGpButtons[i].dive) g.releasePlayerDive(pIdx);
+
+          g.setPlayerMove(pIdx, dir);
+
+          prevGpButtons[i].jump = jump;
+          prevGpButtons[i].dive = dive;
+        }
+
+        if (connectedCount === 0) {
+          isPollingBattleGp = false;
+          return;
         }
       }
+
       gpAnimId = requestAnimationFrame(pollAllGamepads);
     };
-    gpAnimId = requestAnimationFrame(pollAllGamepads);
+
+    const startBattleGpPolling = () => {
+      if (isPollingBattleGp) return;
+      const g = gameRef.current;
+      if (!g || g.phase !== 'playing' || modalOpenRef.current || !g.isLocalBattle) return;
+      isPollingBattleGp = true;
+      gpAnimId = requestAnimationFrame(pollAllGamepads);
+    };
+
+    const onGpConnected = () => {
+      startBattleGpPolling();
+    };
+    window.addEventListener('gamepadconnected', onGpConnected);
 
     const cleanupGamepad = inputManager.onGamepadUpdate((state) => {
       const g = gameRef.current;
@@ -638,13 +659,8 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
           if (isModalOpen) {
             const closeBtn = document.querySelector<HTMLButtonElement>(CLOSE_BUTTON_SELECTOR);
             if (closeBtn) closeBtn.click();
-          } else if (u === 'paused') {
-            cbRef.current.onResume();
-          } else if (u === 'over') {
-            const menuButton = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
-              (btn) => btn.textContent?.includes('MENU') && btn.offsetParent !== null
-            );
-            if (menuButton) menuButton.click();
+          } else if (u === 'paused' || u === 'over' || u === 'results') {
+            cbRef.current.onMenu?.();
           }
         }
       }
@@ -662,6 +678,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('pointercancel', onPointerUp);
       window.removeEventListener('lostpointercapture', onLostPointerCapture);
+      window.removeEventListener('gamepadconnected', onGpConnected);
       cleanupGamepad();
       cleanupAction();
     };

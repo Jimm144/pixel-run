@@ -3,7 +3,7 @@ import { party, MAX_PLAYERS } from '../game/multiplayer/partyManager';
 import type { MatchResult, OpponentInfo } from '../game/multiplayer/types';
 import { SKINS, type SkinId } from '../game/skins';
 import { drawPlayerSprite } from '../game/playerSprite';
-import { PixelButton } from './ui';
+import { PixelButton, PixelCloseIcon } from './ui';
 import { sfx } from '../game/audio';
 
 /* RULE: NEVER USE BLUR OR BACKDROP-BLUR ANYWHERE IN THE CODEBASE (PERF & RETRO PIXEL INTEGRITY) */
@@ -330,15 +330,40 @@ export function BattleModal({
     return () => cancelAnimationFrame(animId);
   }, [tab, localSkin, opponents, localSkins, playerCount]);
 
+  const [isJoining, setIsJoining] = useState(false);
+  const joinTimeoutRef = useRef<number | null>(null);
+
+  const handleCancelJoin = () => {
+    if (joinTimeoutRef.current) {
+      clearTimeout(joinTimeoutRef.current);
+      joinTimeoutRef.current = null;
+    }
+    setIsJoining(false);
+    party.leave();
+    setJoined(false);
+    setStatusMsg('JOIN CANCELLED');
+  };
+
   const handleJoinCode = async (codeToJoin?: string) => {
     const code = (codeToJoin || inputCode).trim().toUpperCase();
-    if (code.length !== 4) {
+    if (!/^[A-Z0-9]{4}$/.test(code)) {
       setStatusMsg('ENTER 4-LETTER ROOM CODE');
       return;
     }
     setJoined(false);
+    setIsJoining(true);
     setRoomCode(code);
     setStatusMsg(`SEARCHING FOR ROOM ${code}...`);
+
+    if (joinTimeoutRef.current) clearTimeout(joinTimeoutRef.current);
+    joinTimeoutRef.current = window.setTimeout(() => {
+      if (!party.roomId || party.state === 'idle') {
+        setIsJoining(false);
+        party.leave();
+        setStatusMsg('ROOM NOT FOUND - CHECK CODE OR RETRY');
+      }
+    }, 12000);
+
     await party.join(code, onlineName, localSkin);
   };
 
@@ -464,9 +489,7 @@ export function BattleModal({
             aria-label="Close"
             className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center border-2 border-[#ff4d6d] bg-[#ff4d6d]/20 font-pixel text-[10px] text-[#ff4d6d] shadow-[1px_1px_0_#08040f] hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px]"
           >
-            <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
-              <path d="M3 3l10 10M13 3L3 13" />
-            </svg>
+            <PixelCloseIcon className="h-3.5 w-3.5" />
           </button>
         </div>
 
@@ -667,14 +690,18 @@ export function BattleModal({
                     placeholder="CODE (E.G. ABCD)"
                     maxLength={4}
                     autoFocus
-                    className="flex-1 min-h-[42px] select-text border border-[#3ef2c8]/60 bg-[#080312] px-3 py-1 text-center font-pixel text-[10px] text-[#ffd166] uppercase focus:border-[#3ef2c8] focus:outline-none"
+                    className="flex-1 min-h-[44px] select-text border border-[#3ef2c8]/60 bg-[#080312] px-3 py-1 text-center font-pixel text-[10px] text-[#ffd166] uppercase focus:border-[#3ef2c8] focus:outline-none"
                   />
                   <button
                     type="button"
-                    onClick={() => handleJoinCode()}
-                    className="border-2 border-[#3ef2c8] bg-[#3ef2c8] min-h-[42px] px-4 py-1 text-[10px] text-[#08040f] hover:bg-[#6ef5d6] active:translate-x-[1px] active:translate-y-[1px]"
+                    onClick={isJoining ? handleCancelJoin : () => handleJoinCode()}
+                    className={`border-2 min-h-[44px] px-4 py-1 text-[10px] active:translate-x-[1px] active:translate-y-[1px] ${
+                      isJoining
+                        ? 'border-[#ff4d6d] bg-[#ff4d6d]/20 text-[#ff4d6d] hover:bg-[#ff4d6d]/40'
+                        : 'border-[#3ef2c8] bg-[#3ef2c8] text-[#08040f] hover:bg-[#6ef5d6]'
+                    }`}
                   >
-                    JOIN
+                    {isJoining ? 'CANCEL' : 'JOIN'}
                   </button>
                 </div>
               </div>

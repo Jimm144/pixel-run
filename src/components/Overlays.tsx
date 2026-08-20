@@ -2,13 +2,13 @@ import { useEffect, useRef } from 'react';
 import type { Stats } from '../game/engine';
 import { drawPlayerSprite } from '../game/playerSprite';
 import { DailyQuestPanel } from './QuestPanels';
-import { PauseIcon, PixelButton, Panel, Stat } from './ui';
+import { PauseIcon, PixelButton, Panel, Stat, PixelCloseIcon } from './ui';
 import type { QuestDefinition, QuestRecord, QuestRunStats } from '../game/quests';
 import { sfx } from '../game/audio';
 
 const pad = (n: number, l: number) => Math.max(0, Math.floor(n)).toString().padStart(l, '0');
 
-type ControlIconKind = 'jump' | 'dive' | 'boost' | 'pause' | 'hold' | 'double' | 'tap';
+type ControlIconKind = 'jump' | 'dive' | 'boost' | 'pause' | 'hold' | 'double' | 'tap' | 'konami';
 
 function ControlIcon({ kind }: { kind: ControlIconKind }) {
   return (
@@ -34,9 +34,11 @@ function ControlIcon({ kind }: { kind: ControlIconKind }) {
         )}
         {kind === 'boost' && (
           <>
-            <rect x="1" y="6" width="8" height="4" />
-            <rect x="9" y="5" width="4" height="6" />
-            <rect x="13" y="6" width="3" height="4" />
+            <rect x="2" y="6" width="9" height="4" />
+            <rect x="11" y="3" width="1" height="10" />
+            <rect x="12" y="4" width="1" height="8" />
+            <rect x="13" y="5" width="1" height="6" />
+            <rect x="14" y="6" width="1" height="4" />
           </>
         )}
         {kind === 'pause' && <PauseIcon className="h-3.5 w-3.5" />}
@@ -73,6 +75,17 @@ function ControlIcon({ kind }: { kind: ControlIconKind }) {
             <rect x="7" y="2" width="3" height="7" />
             <rect x="4" y="7" width="3" height="3" />
             <rect x="3" y="10" width="10" height="3" />
+          </>
+        )}
+        {kind === 'konami' && (
+          <>
+            {/* D-pad horizontal */}
+            <rect x="1" y="6" width="9" height="4" />
+            {/* D-pad vertical */}
+            <rect x="4" y="3" width="3" height="10" />
+            {/* A/B action buttons */}
+            <rect x="12" y="4" width="2" height="2" />
+            <rect x="14" y="8" width="2" height="2" />
           </>
         )}
       </svg>
@@ -142,10 +155,63 @@ function PixelArrow({ dir, className = '' }: { dir: 'up' | 'down' | 'left' | 'ri
   );
 }
 
-function PlayIcon({ className = 'h-[16px] w-[16px]' }: { className?: string }) {
+function PixelSpeakerIcon({ active = true, className = 'h-3.5 w-3.5 tablet:h-4 tablet:w-4' }: { active?: boolean; className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="currentColor">
-      <path d="M8 5v14l11-7z" />
+    <svg
+      viewBox="0 0 16 16"
+      className={`inline-block shrink-0 align-middle ${className}`}
+      fill="currentColor"
+      shapeRendering="crispEdges"
+      aria-hidden="true"
+    >
+      {/* Speaker box */}
+      <rect x="1" y="6" width="3" height="4" />
+      {/* Speaker cone flare */}
+      <rect x="4" y="5" width="1" height="6" />
+      <rect x="5" y="4" width="1" height="8" />
+      <rect x="6" y="3" width="1" height="10" />
+
+      {active ? (
+        <>
+          {/* Inner rounded circular wave (shifted right) */}
+          <rect x="9" y="5" width="1" height="1" />
+          <rect x="10" y="6" width="1" height="4" />
+          <rect x="9" y="10" width="1" height="1" />
+
+          {/* Outer rounded circular wave */}
+          <rect x="11" y="3" width="1" height="1" />
+          <rect x="12" y="4" width="1" height="2" />
+          <rect x="13" y="6" width="1" height="4" />
+          <rect x="12" y="10" width="1" height="2" />
+          <rect x="11" y="12" width="1" height="1" />
+        </>
+      ) : (
+        <>
+          {/* Symmetrical Mute X */}
+          <rect x="9" y="6" width="1" height="1" />
+          <rect x="13" y="6" width="1" height="1" />
+          <rect x="10" y="7" width="1" height="1" />
+          <rect x="12" y="7" width="1" height="1" />
+          <rect x="11" y="8" width="1" height="1" />
+          <rect x="10" y="9" width="1" height="1" />
+          <rect x="12" y="9" width="1" height="1" />
+          <rect x="9" y="10" width="1" height="1" />
+          <rect x="13" y="10" width="1" height="1" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function PixelPlayIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} fill="currentColor" shapeRendering="crispEdges" aria-hidden="true">
+      <rect x="3" y="2" width="2" height="12" />
+      <rect x="5" y="3" width="2" height="10" />
+      <rect x="7" y="4" width="2" height="8" />
+      <rect x="9" y="5" width="2" height="6" />
+      <rect x="11" y="6" width="2" height="4" />
+      <rect x="13" y="7" width="1" height="2" />
     </svg>
   );
 }
@@ -252,9 +318,7 @@ function DiscordPromo({ onClaim, onDismiss }: { onClaim: () => void; onDismiss: 
         onClick={onDismiss}
         className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center text-[#9da9ff] hover:text-white"
       >
-        <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
-          <path d="M3 3l10 10M13 3L3 13" />
-        </svg>
+        <PixelCloseIcon className="h-3 w-3" />
       </button>
       <div className="flex h-[76px] w-[68px] shrink-0 items-center justify-center border border-[#5865f2]/50 bg-[#0d102b]">
         <GladiatorPreview />
@@ -275,25 +339,32 @@ function DiscordPromo({ onClaim, onDismiss }: { onClaim: () => void; onDismiss: 
   );
 }
 
-function RetryIcon({ className = 'h-[16px] w-[16px]' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="currentColor">
-      <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4a8 8 0 1 0 8 8h-2.5a5.5 5.5 0 1 1-1.58-3.87L13.5 10.5H20V4l-2.35 2.35z" />
-    </svg>
-  );
-}
 
-function PixelReloadIcon({ className = 'h-[7px] w-[7px]' }: { className?: string }) {
+
+function PixelReloadIcon({ className = 'h-2.5 w-2.5 tablet:h-3 tablet:w-3' }: { className?: string }) {
   return (
-    <svg aria-hidden="true" viewBox="0 0 7 7" className={className} fill="currentColor" shapeRendering="crispEdges">
-      <rect x="2" y="0" width="3" height="1" />
-      <rect x="5" y="1" width="1" height="2" />
-      <rect x="5" y="3" width="1" height="1" />
-      <rect x="4" y="4" width="2" height="1" />
-      <rect x="2" y="5" width="3" height="1" />
-      <rect x="1" y="3" width="1" height="2" />
-      <rect x="0" y="0" width="2" height="2" />
-      <rect x="0" y="2" width="1" height="1" />
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 10 10"
+      className={`inline-block shrink-0 align-middle ${className}`}
+      fill="currentColor"
+      shapeRendering="crispEdges"
+    >
+      {/* Top arrow (clockwise to right) */}
+      <rect x="1" y="3" width="1" height="3" />
+      <rect x="2" y="2" width="1" height="1" />
+      <rect x="3" y="1" width="4" height="1" />
+      {/* Top arrowhead pointing right */}
+      <rect x="6" y="0" width="1" height="3" />
+      <rect x="7" y="1" width="1" height="1" />
+
+      {/* Bottom arrow (clockwise to left) */}
+      <rect x="8" y="4" width="1" height="3" />
+      <rect x="7" y="7" width="1" height="1" />
+      <rect x="3" y="8" width="4" height="1" />
+      {/* Bottom arrowhead pointing left */}
+      <rect x="3" y="7" width="1" height="3" />
+      <rect x="2" y="8" width="1" height="1" />
     </svg>
   );
 }
@@ -364,19 +435,19 @@ export function StartScreen({
             <div className="grid w-full grid-cols-2 gap-x-3 gap-y-2 tablet:grid-cols-3">
               {touch ? (
                 <>
-                  <ControlHint kind="tap" keys="TAP" />
-                  <ControlHint kind="hold" keys="HOLD" />
-                  <ControlHint kind="double" keys="2X TAP" />
-                  <ControlHint kind="dive" keys="DIVE" />
+                  <ControlHint kind="tap" keys="TAP TO JUMP" />
+                  <ControlHint kind="hold" keys="HOLD TO FLOAT" />
+                  <ControlHint kind="double" keys="2X TAP AIR JUMP" />
+                  <ControlHint kind="dive" keys="SWIPE DOWN DIVE" />
                 </>
               ) : (
                 <>
-                  <ControlHint kind="jump" keys="SPACE/W" />
-                  <ControlHint kind="hold" keys="HOLD" />
-                  <ControlHint kind="double" keys="SPACE X2" />
-                  <ControlHint kind="dive" keys="S / DOWN SLAM" />
-                  <ControlHint kind="boost" keys="D" />
-                  <ControlHint kind="pause" keys="P / ESC" />
+                  <ControlHint kind="jump" keys="SPACE / W: JUMP" />
+                  <ControlHint kind="hold" keys="HOLD: FLOAT" />
+                  <ControlHint kind="double" keys="2X JUMP: AIR" />
+                  <ControlHint kind="dive" keys="S / DOWN: DIVE" />
+                  <ControlHint kind="boost" keys="D: BOOST" />
+                  <ControlHint kind="pause" keys="P / ESC: PAUSE" />
                 </>
               )}
             </div>
@@ -386,10 +457,9 @@ export function StartScreen({
             </div>
           </div>
         </Panel>
+
         <DailyQuestPanel quests={quests} record={questRecord} run={questRun} compact decorated={false} onDayRollover={questOnDayRollover} onShare={questOnShare} />
-        {showDiscordPromo && onDiscordPromoClaim && onDiscordPromoDismiss && (
-          <DiscordPromo onClaim={onDiscordPromoClaim} onDismiss={onDiscordPromoDismiss} />
-        )}
+
         <div className="flex w-full max-w-[420px] gap-2 tablet:max-w-[500px]">
           <button
             onClick={(e) => { e.stopPropagation(); onToggleMusic(); }}
@@ -400,22 +470,8 @@ export function StartScreen({
                 : 'border-[#9d8fd6]/30 bg-[#0d0619] text-[#9d8fd6] hover:border-[#9d8fd6]/60'
             }`}
           >
-            <svg viewBox="0 0 16 16" className="h-3 w-3" fill="currentColor">
-              {musicOn ? (
-                <>
-                  <path d="M2 5h2l3-3v12l-3-3H2V5z" />
-                  <path d="M10 3.5a5 5 0 0 1 0 9" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                  <path d="M12 1.5a8 8 0 0 1 0 13" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                </>
-              ) : (
-                <>
-                  <path d="M2 5h2l3-3v12l-3-3H2V5z" />
-                  <line x1="11" y1="5" x2="15" y2="11" stroke="currentColor" strokeWidth="1.5" />
-                  <line x1="15" y1="5" x2="11" y2="11" stroke="currentColor" strokeWidth="1.5" />
-                </>
-              )}
-            </svg>
-            {musicOn ? 'MUSIC ON' : 'MUSIC OFF'}
+            <PixelSpeakerIcon active={musicOn} />
+            <span>{musicOn ? 'MUSIC ON' : 'MUSIC OFF'}</span>
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onToggleSfx(); }}
@@ -426,23 +482,11 @@ export function StartScreen({
                 : 'border-[#9d8fd6]/30 bg-[#0d0619] text-[#9d8fd6] hover:border-[#9d8fd6]/60'
             }`}
           >
-            <svg viewBox="0 0 16 16" className="h-3 w-3" fill="currentColor">
-              {sfxOn ? (
-                <>
-                  <path d="M2 5h2l3-3v12l-3-3H2V5z" />
-                  <path d="M10 5.5a2.5 2.5 0 0 1 0 5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-                </>
-              ) : (
-                <>
-                  <path d="M2 5h2l3-3v12l-3-3H2V5z" />
-                  <line x1="10" y1="5.5" x2="14" y2="10.5" stroke="currentColor" strokeWidth="1.5" />
-                  <line x1="14" y1="5.5" x2="10" y2="10.5" stroke="currentColor" strokeWidth="1.5" />
-                </>
-              )}
-            </svg>
-            {sfxOn ? 'SFX ON' : 'SFX OFF'}
+            <PixelSpeakerIcon active={sfxOn} />
+            <span>{sfxOn ? 'SFX ON' : 'SFX OFF'}</span>
           </button>
         </div>
+
         <div className="flex w-full max-w-[420px] items-stretch gap-2 tablet:max-w-[500px]">
           {onOpenBattle && (
             <button
@@ -459,7 +503,7 @@ export function StartScreen({
             onClick={onStart}
             className="flex flex-1 items-center justify-center gap-3 py-3.5 text-[10px] tablet:py-4 tablet:text-[12px]"
           >
-            <PlayIcon />
+            <PixelPlayIcon />
             <span>START RUN</span>
           </PixelButton>
           {onOpenSkins && (
@@ -474,6 +518,10 @@ export function StartScreen({
             </button>
           )}
         </div>
+
+        {showDiscordPromo && onDiscordPromoClaim && onDiscordPromoDismiss && (
+          <DiscordPromo onClaim={onDiscordPromoClaim} onDismiss={onDiscordPromoDismiss} />
+        )}
         <div className="flex items-center gap-3">
           <a
             href="https://github.com/Jimm144/pixel-run"
@@ -572,17 +620,7 @@ function VolumeStepper({ label, value, onChange }: { label: string; value: numbe
           }`}
           title={isMuted ? `Unmute ${label} (${Math.round(prevVolRef.current * 100)}%)` : `Mute ${label}`}
         >
-          <svg viewBox="0 0 16 16" className="h-2.5 w-2.5" fill="currentColor">
-            <path d="M2 5h2l3-3v12l-3-3H2V5z" />
-            {isMuted ? (
-              <>
-                <line x1="10" y1="5.5" x2="14" y2="10.5" stroke="currentColor" strokeWidth="1.5" />
-                <line x1="14" y1="5.5" x2="10" y2="10.5" stroke="currentColor" strokeWidth="1.5" />
-              </>
-            ) : (
-              <path d="M10 5.5a2.5 2.5 0 0 1 0 5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-            )}
-          </svg>
+          <PixelSpeakerIcon active={!isMuted} />
         </button>
         <span className="font-pixel text-[8px] text-[#9d8fd6]">{label}</span>
       </div>
@@ -626,6 +664,7 @@ export function PauseScreen({
   sfxVol,
   onMusicVol,
   onSfxVol,
+  touch = false,
 }: {
   onResume: () => void;
   onRestart: () => void;
@@ -636,6 +675,7 @@ export function PauseScreen({
   sfxVol: number;
   onMusicVol: (v: number) => void;
   onSfxVol: (v: number) => void;
+  touch?: boolean;
 }) {
   const handleMenu = onMenu ?? onQuit ?? (() => {});
 
@@ -664,11 +704,11 @@ export function PauseScreen({
             RESUME
           </PixelButton>
           <div className="grid grid-cols-2 gap-2">
-            <PixelButton variant="danger" onClick={onRestart} small className="py-2.5 tablet:py-3 tablet:text-[10px]">
-              RESTART
+            <PixelButton variant="danger" onClick={onRestart} small className="px-2 py-2.5 tablet:py-3 tablet:text-[10px] whitespace-nowrap">
+              {touch ? 'RETRY' : 'RETRY [R]'}
             </PixelButton>
-            <PixelButton variant="ghost" onClick={handleMenu} small className="py-2.5 tablet:py-3 tablet:text-[10px]">
-              MENU
+            <PixelButton variant="ghost" onClick={handleMenu} small className="px-2 py-2.5 tablet:py-3 tablet:text-[10px] whitespace-nowrap">
+              {touch ? 'MENU' : 'MENU [ESC]'}
             </PixelButton>
           </div>
         </div>
@@ -677,15 +717,31 @@ export function PauseScreen({
   );
 }
 
-function ShareIcon({ className = 'h-[16px] w-[16px]' }: { className?: string }) {
+function PixelShareIcon({ className = 'h-[14px] w-[14px]' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="square">
-      <path d="M4 12v8h16v-8" />
-      <polyline points="16 6 12 2 8 6" />
-      <line x1="12" y1="2" x2="12" y2="15" />
+    <svg viewBox="0 0 16 16" className={className} fill="currentColor" shapeRendering="crispEdges" aria-hidden="true">
+      {/* Up arrow tip */}
+      <rect x="7" y="1" width="2" height="1" />
+      <rect x="6" y="2" width="4" height="1" />
+      <rect x="5" y="3" width="6" height="1" />
+      {/* Up arrow shaft */}
+      <rect x="7" y="4" width="2" height="5" />
+      {/* Box bottom */}
+      <rect x="2" y="13" width="12" height="2" />
+      {/* Box sides */}
+      <rect x="2" y="8" width="2" height="5" />
+      <rect x="12" y="8" width="2" height="5" />
     </svg>
   );
 }
+
+const DEATH_CAUSE_LABELS: Record<string, string> = {
+  pit: 'FELL INTO THE ABYSS',
+  wall: 'CRUSHED BY A WALL',
+  spike: 'IMPALED ON SPIKES',
+  spiker: 'SPIKED (DIVE TO SMASH)',
+  hit: 'DEFEATED BY ENEMY',
+};
 
 /* ---------------------------------------------------------------- game over */
 export function GameOverScreen({
@@ -695,7 +751,7 @@ export function GameOverScreen({
   onRestart,
   onMenu,
   onShare,
-  touch: _touch,
+  touch,
 }: {
   stats: Stats;
   best: number;
@@ -705,15 +761,22 @@ export function GameOverScreen({
   onShare?: () => void;
   touch: boolean;
 }) {
+  const causeLabel = (stats.cause && DEATH_CAUSE_LABELS[stats.cause]) || 'RUN TERMINATED';
+
   return (
     <div
       className="absolute inset-0 z-10 flex items-start justify-center overflow-y-auto bg-[#08040f]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
       onPointerDown={() => sfx.unlock()}
     >
       <div className="my-auto flex w-full max-w-[380px] flex-col items-center gap-3 tablet:max-w-[460px]">
-        <h2 className="animate-shake-in font-pixel text-[20px] text-[#ff4d6d] drop-shadow-[0_4px_0_#08040f] tablet:text-[28px]">
-          WASTED
-        </h2>
+        <div className="text-center">
+          <h2 className="animate-shake-in font-pixel text-[20px] text-[#ff4d6d] drop-shadow-[0_4px_0_#08040f] tablet:text-[28px]">
+            WASTED
+          </h2>
+          <p className="mt-1 font-pixel text-[8px] tracking-wider text-[#ff4d6d]/80">
+            {causeLabel}
+          </p>
+        </div>
         <Panel className="w-full">
           <div className="mb-3 text-center">
             <p className="font-pixel text-[8px] text-[#9d8fd6]">
@@ -738,12 +801,11 @@ export function GameOverScreen({
         </Panel>
         <div className="flex w-full max-w-[380px] flex-col items-center gap-2 tablet:max-w-[460px]">
           <div className="flex w-full gap-2">
-            <PixelButton onClick={onRestart} className="flex flex-[2] items-center justify-center py-3 text-[10px] tablet:py-3.5 tablet:text-[12px]">
-              <RetryIcon className="mr-2 inline-block h-[16px] w-[16px] align-[-3px] tablet:h-[20px] tablet:w-[20px]" />
-              RETRY
+            <PixelButton onClick={onRestart} className="flex flex-[1.4] items-center justify-center py-3 text-[10px] tablet:py-3.5 tablet:text-[12px] whitespace-nowrap">
+              <span>{touch ? 'RETRY' : 'RETRY [R]'}</span>
             </PixelButton>
-            <PixelButton variant="ghost" onClick={onMenu} className="flex flex-1 items-center justify-center py-3 text-[10px] tablet:py-3.5 tablet:text-[12px]">
-              MENU
+            <PixelButton variant="ghost" onClick={onMenu} className="flex flex-1 items-center justify-center py-3 text-[10px] tablet:py-3.5 tablet:text-[12px] whitespace-nowrap">
+              <span>{touch ? 'MENU' : 'MENU [ESC]'}</span>
             </PixelButton>
           </div>
           {newBest && onShare && (
@@ -753,7 +815,7 @@ export function GameOverScreen({
               small
               className="w-full flex items-center justify-center py-2.5 border-[#ffd166]/70 bg-[#ffd166]/10 text-[#ffd166] hover:bg-[#ffd166]/20 hover:text-[#fff4b8] hover:border-[#ffd166] tablet:py-3"
             >
-              <ShareIcon className="mr-1.5 inline-block h-[12px] w-[12px] align-[-2px] tablet:h-[15px] tablet:w-[15px]" />
+              <PixelShareIcon className="mr-1.5 inline-block h-[12px] w-[12px] align-[-2px] tablet:h-[15px] tablet:w-[15px]" />
               SHARE SCORE
             </PixelButton>
           )}

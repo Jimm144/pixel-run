@@ -48,41 +48,126 @@
     <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
+    />
     <link
       href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
+    <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM context" />
+    <link rel="preload" as="image" href="./preview.png" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "VideoGame",
-        "name": "PIXEL RUN",
-        "url": "https://pixelrun.localplayer.dev/",
-        "image": "https://pixelrun.localplayer.dev/preview.png",
-        "description": "PIXEL RUN is a browser-based endless runner and 2D platform game. Run through jungle, desert, tundra and neon city biomes, jump over gaps, dive, defeat enemies, collect coins and power-ups, and complete daily quests.",
-        "genre": ["Endless runner", "Platform game", "Pixel art game"],
-        "gamePlatform": "Web browser",
-        "applicationCategory": "Game",
-        "operatingSystem": "Any",
-        "playMode": "SinglePlayer",
-        "inLanguage": "en",
-        "author": {
-          "@type": "Person",
-          "name": "Jimm144",
-          "url": "https://github.com/Jimm144"
-        },
-        "offers": {
-          "@type": "Offer",
-          "price": "0",
-          "priceCurrency": "USD"
-        },
-        "keywords": "browser endless runner, 2D platform game, pixel art game, HTML5 canvas game, daily quests"
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://pixelrun.localplayer.dev/#website",
+            "url": "https://pixelrun.localplayer.dev/",
+            "name": "PIXEL RUN",
+            "description": "Retro 2D endless runner and arcade platformer playable in your browser."
+          },
+          {
+            "@type": "VideoGame",
+            "@id": "https://pixelrun.localplayer.dev/#game",
+            "name": "PIXEL RUN",
+            "url": "https://pixelrun.localplayer.dev/",
+            "image": "https://pixelrun.localplayer.dev/preview.png",
+            "screenshot": "https://pixelrun.localplayer.dev/preview.png",
+            "description": "PIXEL RUN is a fast-paced retro 2D pixel-art endless runner. Run, stomp enemies, dive-smash spikers, dodge traps, collect power-ups and gems, unlock custom skins, and battle friends locally or online.",
+            "genre": ["Endless Runner", "Platformer", "Pixel Art", "Arcade"],
+            "gamePlatform": ["Web Browser", "Mobile Browser", "Desktop"],
+            "applicationCategory": "Game",
+            "operatingSystem": "Any",
+            "playMode": ["SinglePlayer", "MultiPlayer"],
+            "inLanguage": "en",
+            "author": {
+              "@type": "Person",
+              "name": "Jimm144",
+              "url": "https://github.com/Jimm144"
+            },
+            "sameAs": [
+              "https://github.com/Jimm144/pixel-run",
+              "https://discord.gg/Z3tZ23D6fA"
+            ],
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD",
+              "availability": "https://schema.org/InStock"
+            },
+            "keywords": "browser endless runner, 2D platform game, pixel art game, HTML5 canvas game, multiplayer platformer, daily quests"
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "https://pixelrun.localplayer.dev/#faq",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "How do you play PIXEL RUN?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Press SPACE or W or Tap to jump. Press SPACE twice in mid-air to double jump. Press S or Down Arrow or Swipe Down to dive-smash enemies and spikers. Hold D to boost speed or A to slow down."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can you play multiplayer in PIXEL RUN?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes! PIXEL RUN supports both Local Battle (2 to 4 players on one keyboard/gamepads) and Online Multiplayer lobbies via WebRTC and MQTT."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How do daily quests work?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Every day 4 new quests generate. Completing quests grants gems to unlock character skins. Clearing all 4 quests opens the daily chest for bonus gems and builds your daily streak."
+                }
+              }
+            ]
+          }
+        ]
       }
     </script>
     <script defer src="https://analytics.open-domains.com/script.js" data-website-id="87601e42-cdbe-4bfc-b27f-725c81a1eb33"></script>
   </head>
   <body>
+    <noscript>
+      <header>
+        <h1>PIXEL RUN - Retro 2D Endless Platformer</h1>
+        <p>Run, stomp, dive-smash, and survive across vibrant procedural pixel biomes!</p>
+      </header>
+      <main>
+        <section>
+          <h2>Game Controls</h2>
+          <ul>
+            <li><strong>Jump:</strong> Space / W / Up Arrow / Tap</li>
+            <li><strong>Double Jump:</strong> Press Jump again in mid-air</li>
+            <li><strong>Dive / Slam:</strong> S / Down Arrow / Swipe Down</li>
+            <li><strong>Speed Boost:</strong> Hold D / Right Arrow</li>
+            <li><strong>Brake:</strong> Hold A / Left Arrow</li>
+            <li><strong>Pause:</strong> P / Escape</li>
+          </ul>
+        </section>
+        <section>
+          <h2>Biomes & Power-ups</h2>
+          <p>Explore the Neon City, Overgrown Jungle, Desert Dunes, and Frozen Tundra. Collect Shields, Jump Shoes, Triple Jumps, and Propeller Hats to survive hostile creatures and hazards.</p>
+        </section>
+      </main>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

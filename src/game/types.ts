@@ -38,6 +38,7 @@ export interface Stats {
   combo: number;
   coins?: number;
   moonPhase?: number;
+  cause?: string;
 }
 
 /* ------------------------------------------------------------------ tuning */
@@ -60,12 +61,12 @@ export const COMBO_TIME = 150; // frames
 export const PLAYER_W = 10;
 export const PLAYER_H = 14;
 export const PLAYER_RUN_LEGS = [
-  [1, 10, 3, 4, 6, 10, 3, 4],
+  [2, 10, 3, 4, 6, 10, 3, 4],
   [2, 9, 3, 4, 5, 10, 3, 4],
-  [4, 10, 3, 4, 0, 10, 3, 4],
+  [6, 10, 3, 4, 2, 10, 3, 4],
   [2, 10, 3, 4, 5, 9, 3, 4],
 ];
-export type PowerUpKind = 'shield' | 'shoes' | 'triple' | 'propeller';
+export type PowerUpKind = 'shield' | 'shoes' | 'triple' | 'propeller' | 'magnet';
 export const POWERUP_TIME = 60 * 10;
 export const POWERUP_PTS = 75;
 export const POWERUP_COLORS: Record<PowerUpKind, string> = {
@@ -73,6 +74,7 @@ export const POWERUP_COLORS: Record<PowerUpKind, string> = {
   shoes: '#ffd166',
   triple: '#c98cff',
   propeller: '#ff7a90',
+  magnet: '#00f0ff',
 };
 
 export const COIN_PTS = 15;
@@ -292,6 +294,7 @@ export interface RenderHost {
   propellerHat: number;
   propellerFlashing: boolean;
   propellerFlashTimer: number;
+  magnet: number;
   invuln: number;
   animT: number;
   sx: number;

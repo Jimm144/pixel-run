@@ -1,4 +1,14 @@
 import type { BgKind } from './palette';
+import { loadLifetimeStats, saveLifetimeStats } from './skins';
+
+export function grantQuestGems(gems: number) {
+  if (gems <= 0) return;
+  try {
+    const stats = loadLifetimeStats();
+    stats.gems = (stats.gems || 0) + gems;
+    saveLifetimeStats(stats);
+  } catch {}
+}
 
 export type QuestDifficulty = 'easy' | 'medium' | 'hard' | 'special' | 'impossible';
 export type QuestScope = 'day' | 'run';
@@ -63,12 +73,14 @@ export const QUEST_DIFFICULTY_COLORS: Record<QuestDifficulty, string> = {
 const QUEST_KEY = 'pixeldash.quests.v2';
 const METRICS: QuestMetric[] = ['coins', 'meters', 'score', 'enemies', 'powerups'];
 
+export const CHEST_BONUS_GEMS = 5;
+
 const REWARDS: Record<QuestDifficulty, number> = {
-  easy: 100,
-  medium: 250,
-  hard: 500,
-  special: 750,
-  impossible: 1500,
+  easy: 1,
+  medium: 2,
+  hard: 3,
+  special: 4,
+  impossible: 5,
 };
 
 const TARGETS: Record<Exclude<QuestDifficulty, 'special'>, Record<QuestScope, Record<QuestMetric, number>>> = {
@@ -362,7 +374,7 @@ function openChestIfComplete(next: QuestRecord, quests: QuestDefinition[]) {
   if (next.chestOpen || quests.length === 0) return;
   if (quests.every((quest) => next.completed.includes(quest.id))) {
     next.chestOpen = true;
-    next.totalReward += 2000;
+    next.totalReward += CHEST_BONUS_GEMS;
     if (next.completedAt === null) next.completedAt = Date.now();
   }
 }
@@ -400,6 +412,7 @@ export function markQuestCompletions(record: QuestRecord, quests: QuestDefinitio
     completed: [...record.completed],
     completedByDifficulty: { ...record.completedByDifficulty },
   };
+  let newlyEarnedGems = 0;
   for (const id of ids) {
     if (next.completed.includes(id)) continue;
     const quest = quests.find((candidate) => candidate.id === id);
@@ -407,9 +420,17 @@ export function markQuestCompletions(record: QuestRecord, quests: QuestDefinitio
     next.completed.push(id);
     next.completedByDifficulty[quest.difficulty]++;
     next.totalReward += quest.reward;
+    newlyEarnedGems += quest.reward;
     noteCompletionDay(next);
   }
+  const wasChestOpen = next.chestOpen;
   openChestIfComplete(next, quests);
+  if (!wasChestOpen && next.chestOpen) {
+    newlyEarnedGems += CHEST_BONUS_GEMS;
+  }
+  if (newlyEarnedGems > 0) {
+    grantQuestGems(newlyEarnedGems);
+  }
   return next;
 }
 
@@ -481,15 +502,24 @@ export function applyQuestRun(record: QuestRecord, quests: QuestDefinition[], ru
     completedByDifficulty: { ...record.completedByDifficulty },
   };
 
+  let newlyEarnedGems = 0;
   for (const quest of quests) {
     if (next.completed.includes(quest.id)) continue;
     if (getQuestProgress(quest, record, run).done) {
       next.completed.push(quest.id);
       next.completedByDifficulty[quest.difficulty]++;
       next.totalReward += quest.reward;
+      newlyEarnedGems += quest.reward;
       noteCompletionDay(next);
     }
   }
+  const wasChestOpen = next.chestOpen;
   openChestIfComplete(next, quests);
+  if (!wasChestOpen && next.chestOpen) {
+    newlyEarnedGems += CHEST_BONUS_GEMS;
+  }
+  if (newlyEarnedGems > 0) {
+    grantQuestGems(newlyEarnedGems);
+  }
   return next;
 }

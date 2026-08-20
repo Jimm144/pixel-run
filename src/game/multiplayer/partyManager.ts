@@ -6,8 +6,6 @@ import type {
   MatchResult,
   MatchResultEntry,
   OpponentInfo,
-  PartyClientMessage,
-  PartyServerMessage,
   PlayerTickPayload,
   PublicLobbyInfo,
 } from './types';
@@ -58,24 +56,6 @@ async function loadPeerJs(): Promise<typeof Peer> {
 
 export const MAX_PLAYERS = 8;
 
-function getPartyWebSocketUrl(room: string): string {
-  const base = getPartyHttpBase();
-  const scheme = base.startsWith('https') ? 'wss' : 'ws';
-  return `${scheme}://${base.replace(/^https?:\/\//, '')}/parties/main/${room.toLowerCase()}`;
-}
-
-function getPartyHttpBase(): string {
-  // Any HTTP-served instance (localhost OR a LAN IP) talks to the party
-  // server on the same host — so a second device can join rooms against
-  // this machine's local PartyKit dev server. HTTPS pages (the deployed
-  // site) always use the hosted PartyKit backend.
-  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-  if (hostname && window.location.protocol === 'http:') {
-    return `http://${hostname}:1999`;
-  }
-  return 'https://pixel-run.jimm144.partykit.dev';
-}
-
 function generateRoomCode(): string {
   const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   let code = '';
@@ -86,7 +66,6 @@ function generateRoomCode(): string {
 }
 
 export class PartyManager {
-  socket: WebSocket | null = null;
   bc: BroadcastChannel | null = null;
   mqtt: MqttRelay | null = null;
   globalLobbiesBc: BroadcastChannel | null = null;
@@ -102,6 +81,7 @@ export class PartyManager {
   opponents = new Map<string, OpponentInfo>();
   matchResult: MatchResult | null = null;
   serverOnline = true;
+  pingMs = 0;
 
   // Local tab party tracking for zero-latency multi-tab testing
   private localTabPlayers = new Map<string, { peerId: string; name: string; skinId: SkinId; isHost: boolean; meters: number; score: number; isAlive: boolean; ready: boolean; ts: number; transport?: string }>();
@@ -115,18 +95,25 @@ export class PartyManager {
   private localTick: PlayerTickPayload | null = null;
   private localAlive = true;
   /** Local player's ready flag, mirrored over BC so same-browser tabs see it
-   *  even when the WebSocket is down (the server remains authoritative). */
+   *  even when the relay is down. */
   private localReady = false;
   private syncTimer: number | null = null;
   private lobbyTimer: number | null = null;
   private lastMqttLobbyPublish = 0;
   private storageListener: ((e: StorageEvent) => void) | null = null;
   private lobbyVisibilityListener: (() => void) | null = null;
-  private reconnectTimer: number | null = null;
-  private reconnectAttempts = 0;
+  /** Wall-clock deadline (ms) for the current online match, enforced by the
+   *  host: when it passes, the match ends and players are ranked by score.
+   *  Prevents a single AFK player from holding a lobby hostage forever. */
+  private matchDeadlineAt: number | null = null;
+  /** Host-side match watchdog: ends the match at the deadline even if nobody
+   *  dies (an AFK player never sends ticks/deaths), and broadcasts bc_timer
+   *  so every client can render the countdown. */
+  private matchTimer: number | null = null;
+  private lastMatchTimerSec = -1;
   // Storage-fallback tick coalescing (bc_tick is ~30x/s; cap storage writes).
   private lastTickStorageWrite = 0;
-  private pendingTickStorage: Record<string, unknown> | null = null;
+  private pendingTickStorage: (Record<string, unknown> & { ts: number; roomId?: string | null }) | null = null;
   /** True until the first room_state after join() — used to detect a dead
    *  room (host gone) so the joiner can bail out gracefully. */
   private awaitingFirstRoomState = false;
@@ -148,6 +135,9 @@ export class PartyManager {
   onMatchStart?: (seed: number, startAt: number) => void;
   onMatchEnd?: (result: MatchResult) => void;
   onStatusMsg?: (msg: string) => void;
+  /** Remaining match time (ms) as broadcast by the host (bc_timer). The UI
+   *  uses this to render the online battle countdown. */
+  onMatchTimer?: (remainingMs: number) => void;
 
   constructor() {
     this.initGlobalLobbies();
@@ -195,16 +185,21 @@ export class PartyManager {
     // Publish lobby if public
     this.publishLobbyHeartbeat();
 
-    // NOTE: the legacy PartyKit WebSocket backend is abandoned; the MQTT
-    // relay (plus BroadcastChannel for same-browser tabs) is the transport.
-
     return code;
   }
 
   async join(code: string, name: string, skin: SkinId): Promise<boolean> {
-    this.leave();
     const cleanCode = code.trim().toUpperCase();
-    if (!cleanCode) return false;
+    // Hard validation BEFORE leave()/channel setup: the code feeds MQTT topic
+    // segments (pixelrun/room/<code>) and the BroadcastChannel name, so an
+    // unvalidated value like "a/#" would subscribe to EVERY room on the
+    // public broker. Only 4 uppercase alphanumerics are ever valid.
+    if (!/^[A-Z0-9]{4}$/.test(cleanCode)) {
+      this.onStatusMsg?.('INVALID ROOM CODE');
+      return false;
+    }
+
+    this.leave();
 
     this.localName = name;
     this.localSkin = skin;
@@ -222,9 +217,6 @@ export class PartyManager {
 
     // Periodic join ping until connected
     this.startJoinPingLoop();
-
-    // NOTE: the legacy PartyKit WebSocket backend is abandoned; the MQTT
-    // relay (plus BroadcastChannel for same-browser tabs) is the transport.
 
     // Cross-network join watchdog, checked by the join ping loop (no extra
     // timer to leak): if the room never proves it exists — or the host stops
@@ -263,9 +255,9 @@ export class PartyManager {
   }
 
   /**
-   * Fetch public rooms from the PartyKit server (/lobby endpoint, works
-   * cross-device) merged with the same-browser localStorage fallback.
-   * Never throws: if the server is unreachable we degrade to local rooms.
+   * Public rooms announced over the MQTT lobby topic (cross-device) merged
+   * with the same-browser localStorage fallback. The dead PartyKit /lobby
+   * endpoint was removed — the MQTT announcements are the cross-device source.
    */
   async refreshPublicLobbies(): Promise<PublicLobbyInfo[]> {
     const merged = new Map<string, PublicLobbyInfo>();
@@ -282,32 +274,6 @@ export class PartyManager {
           maxPlayers: item.maxPlayers || MAX_PLAYERS,
         });
       }
-    }
-    try {
-      const res = await fetch(`${getPartyHttpBase()}/parties/main/lobby`, {
-        headers: { accept: 'application/json' },
-      });
-      if (res.ok) {
-        const serverList = (await res.json()) as Array<{
-          code: string;
-          hostName: string;
-          playerCount: number;
-          maxPlayers: number;
-          isPublic?: boolean;
-        }>;
-        for (const item of serverList) {
-          if (item && item.code && item.isPublic !== false) {
-            merged.set(item.code.toUpperCase(), {
-              code: item.code.toUpperCase(),
-              hostName: item.hostName || 'Runner',
-              playerCount: item.playerCount || 1,
-              maxPlayers: item.maxPlayers || MAX_PLAYERS,
-            });
-          }
-        }
-      }
-    } catch {
-      // Ignore — transport liveness owns serverOnline, not this fetch.
     }
     const ownCode = (this.roomId ?? '').toUpperCase();
     const result = Array.from(merged.values()).filter((l) => l.code !== ownCode);
@@ -613,8 +579,12 @@ export class PartyManager {
         };
         this.mqtt.onMessage = (topic, payload) => {
           try {
+            // Defensive type/size guard: only accept string payloads within
+            // the relay's size cap. A hostile broker (or a buggy client)
+            // must not feed garbage into the JSON handlers.
+            if (typeof payload !== 'string' || payload.length > 64 * 1024) return;
             if (topic.startsWith(LOBBY_TOPIC_PREFIX)) {
-              this.handleLobbyMessage(payload);
+              this.handleLobbyMessage(payload, topic);
             } else if (topic.startsWith(ROOM_TOPIC_PREFIX)) {
               // Tag with the topic so handleSyncMessage can drop deliveries
               // from a room we already left (in-flight packets outlive the
@@ -631,12 +601,20 @@ export class PartyManager {
     }
   }
 
-  private handleLobbyMessage(raw: string) {
+  private handleLobbyMessage(raw: string, topic?: string) {
     let entry: { code?: string; hostName?: string; playerCount?: number; maxPlayers?: number; isPublic?: boolean; ts?: number } | null = null;
     try {
       entry = raw ? JSON.parse(raw) : null;
     } catch {
       entry = null;
+    }
+    // Empty retained payload = a host clearing its room from the shared
+    // lobby. The code rides in the topic segment (pixelrun/lobby/<code>),
+    // not the body, so derive it from the topic.
+    if (!raw && topic) {
+      const seg = topic.slice(LOBBY_TOPIC_PREFIX.length);
+      if (seg) this.mqttLobbies.delete(seg.toUpperCase());
+      return;
     }
     if (!entry || !entry.code || entry.isPublic === false) {
       if (entry && entry.code) this.mqttLobbies.delete(String(entry.code).toUpperCase());
@@ -650,7 +628,7 @@ export class PartyManager {
       ts: entry.ts || Date.now(),
     });
     // Throttle: every active room republishes its lobby entry every ~4s, so
-    // without this the refresh (and its backend fetch) fires continuously.
+    // without this the refresh fires continuously.
     const now = Date.now();
     if (now - this.lastLobbyRefresh > 4000) {
       this.lastLobbyRefresh = now;
@@ -659,12 +637,11 @@ export class PartyManager {
   }
 
   private broadcast(data: Record<string, unknown>) {
-    // Tag control messages with their roomId so stale deliveries from a
-    // previous room (in-flight MQTT/BC packets after a leave or room switch)
-    // are dropped by handleSyncMessage instead of mutating the wrong room's
-    // state. Ticks stay lean — they self-supersede and are already guarded
-    // by peerId + state + topic.
-    const out = data.type === 'bc_tick' ? data : { ...data, roomId: this.roomId };
+    const out = {
+      ...data,
+      ts: (typeof data.ts === 'number' ? data.ts : Date.now()),
+      ...(data.type === 'bc_tick' ? {} : { roomId: this.roomId }),
+    };
 
     // 1. BroadcastChannel
     if (this.bc) {
@@ -811,6 +788,13 @@ export class PartyManager {
     const dataRoom = (data.roomId as string | undefined) ?? (data._topic as string | undefined)?.split('/').pop();
     if (typeof dataRoom === 'string' && dataRoom.toLowerCase() !== this.roomId.toLowerCase()) return;
 
+    if (typeof data.ts === 'number') {
+      const rtt = Date.now() - data.ts;
+      if (rtt >= 0 && rtt < 1000) {
+        this.pingMs = Math.round(this.pingMs > 0 ? this.pingMs * 0.75 + rtt * 0.25 : rtt);
+      }
+    }
+
     if (type === 'bc_join' && this.role === 'host') {
       const joinerId = data.peerId as string;
       const joinerName = (data.name as string) || 'Runner';
@@ -921,7 +905,22 @@ export class PartyManager {
     } else if (type === 'bc_tick' && this.state === 'in_game') {
       const senderId = data.peerId as string;
       const payload = data.payload as PlayerTickPayload;
-      if (senderId && senderId !== this.peerId && payload && typeof payload.px === 'number') {
+      // Type-guard the telemetry: NaN/Infinity or garbage payloads must never
+      // corrupt an opponent's live board (leaderboard sorting, alive checks).
+      if (
+        senderId &&
+        senderId !== this.peerId &&
+        payload &&
+        typeof payload === 'object' &&
+        typeof payload.px === 'number' &&
+        Number.isFinite(payload.px) &&
+        typeof payload.py === 'number' &&
+        Number.isFinite(payload.py) &&
+        typeof payload.meters === 'number' &&
+        Number.isFinite(payload.meters) &&
+        typeof payload.score === 'number' &&
+        Number.isFinite(payload.score)
+      ) {
         const opp = this.opponents.get(senderId);
         if (opp) {
           opp.px = payload.px;
@@ -951,35 +950,41 @@ export class PartyManager {
         if (opp) {
           opp.isAlive = false;
           // Corrupt/garbage payloads must not NaN the leaderboard.
-          if (typeof data.meters === 'number') opp.meters = data.meters;
-          if (typeof data.score === 'number') opp.score = data.score;
+          if (typeof data.meters === 'number' && Number.isFinite(data.meters)) opp.meters = data.meters;
+          if (typeof data.score === 'number' && Number.isFinite(data.score)) opp.score = data.score;
         }
       }
 
       // The host owns BC-only match ending, and must run the check for EVERY
       // death — including its own (senderId === this.peerId is skipped
       // above), or a match where the host dies last would never finish.
-      // Mirrors the server rule: the match ends once all opponents are dead
-      // (host alive or not).
+      // The match ends once all opponents are dead (host alive or not); the
+      // host-side match watchdog is the backstop for AFK players.
       if (this.role === 'host' && this.state === 'in_game') {
         const allOpponents = Array.from(this.opponents.values());
         if (allOpponents.length > 0 && allOpponents.every((o) => !o.isAlive)) {
           this.finishBcMatch();
         }
       }
+    } else if (type === 'bc_timer' && this.state === 'in_game') {
+      // Host broadcasts remaining match time (ms). Joiners use it to render
+      // the battle countdown; nothing else needs it locally.
+      const remaining = typeof data.remainingMs === 'number' && Number.isFinite(data.remainingMs) ? data.remainingMs : undefined;
+      if (remaining !== undefined) this.onMatchTimer?.(Math.max(0, remaining));
     } else if (type === 'bc_match_end') {
       const result = data.result as MatchResult;
-      // Guard against double end (BC and WebSocket both deliver match_end),
-      // and against results that arrive after we left the room (handleExit
-      // during the countdown) — the results modal must not pop over the menu.
+      // Guard against double end and against results that arrive after we
+      // left the room (handleExit during the countdown) — the results modal
+      // must not pop over the menu.
       if (result && this.state === 'in_game' && !this.matchResult) {
+        this.stopMatchTimer();
         this.state = 'ended';
         const localEntry = result.leaderboard.find((e) => e.peerId === this.peerId);
         result.isWinner = localEntry ? localEntry.rank === 1 : false;
         result.rank = localEntry ? localEntry.rank : result.totalPlayers;
-        // Mirror the WS handler: the leaderboard was built by the HOST with
-        // its own peerId, so joiner entries are never flagged — without this
-        // the "(YOU)" highlight is missing for BC-only joiners.
+        // The leaderboard was built by the HOST with its own peerId, so
+        // joiner entries are never flagged — without this the "(YOU)"
+        // highlight is missing for joiners.
         if (localEntry) localEntry.isLocal = true;
         this.matchResult = result;
         this.onMatchEnd?.(result);
@@ -988,6 +993,7 @@ export class PartyManager {
       // Only meaningful in or after a match: a stale rematch delivered after
       // leave() (state 'idle') must not resurrect a ghost lobby on the menu.
       if (this.state !== 'in_game' && this.state !== 'ended') return;
+      this.stopMatchTimer();
       if (this.role === 'host') {
         // The host also receives its OWN broadcast (async, after rematch()
         // already ran startMatch() and set 'in_game') — skip so the match is
@@ -1058,7 +1064,8 @@ export class PartyManager {
    * the host tab for foreign bc_death messages AND for the host's own death —
    * the host's own bc_death never comes back (self messages are skipped), so
    * without this a host who dies last would leave every tab hanging in
-   * 'in_game' with no results modal.
+   * 'in_game' with no results modal. The host-side match watchdog (startMatch
+   * timer) is the backstop for AFK players who never die.
    */
   private checkBcMatchEnd() {
     if (this.role !== 'host' || this.state !== 'in_game') return;
@@ -1067,7 +1074,54 @@ export class PartyManager {
     if (allDead) this.finishBcMatch();
   }
 
+  /** Online match time limit (ms) from bc_start: without it one AFK player
+   *  could hold the lobby hostage forever. */
+  private static MATCH_TIME_LIMIT_MS = 180000;
+
+  /**
+   * Host-side match watchdog: ends the match at the deadline (rank by score)
+   * even if nobody dies, and broadcasts bc_timer so every client can render
+   * the countdown. Runs on a plain interval so a dead host — whose ticks have
+   * stopped — still ends the match on time.
+   */
+  private startMatchTimer(deadlineAt: number) {
+    this.stopMatchTimer();
+    this.matchDeadlineAt = deadlineAt;
+    if (this.role !== 'host') return;
+    this.lastMatchTimerSec = -1;
+    let lastBroadcastAt = 0;
+    this.matchTimer = window.setInterval(() => {
+      if (this.role !== 'host' || this.state !== 'in_game') return;
+      const deadline = this.matchDeadlineAt;
+      if (!deadline) return;
+      const now = Date.now();
+      if (now >= deadline) {
+        this.stopMatchTimer();
+        this.finishBcMatch();
+        return;
+      }
+      const remaining = deadline - now;
+      const sec = Math.ceil(remaining / 1000);
+      // Whole-second updates for the final 10s, every ~5s before that.
+      if (sec !== this.lastMatchTimerSec && (sec <= 10 || now - lastBroadcastAt >= 5000)) {
+        this.lastMatchTimerSec = sec;
+        lastBroadcastAt = now;
+        this.broadcast({ type: 'bc_timer', remainingMs: remaining, deadlineAt: deadline });
+      }
+    }, 1000);
+  }
+
+  private stopMatchTimer() {
+    if (this.matchTimer !== null) {
+      window.clearInterval(this.matchTimer);
+      this.matchTimer = null;
+    }
+    this.matchDeadlineAt = null;
+    this.lastMatchTimerSec = -1;
+  }
+
   private finishBcMatch() {
+    this.stopMatchTimer();
     const list: Array<{ peerId: string; name: string; skinId: SkinId; meters: number; score: number }> = [];
 
     // Local player (live values mirrored from sendTick/sendDeath)
@@ -1129,274 +1183,34 @@ export class PartyManager {
     this.onMatchEnd?.(result);
   }
 
-  private connectWebSocket(roomId: string) {
-    try {
-      const wsUrl = getPartyWebSocketUrl(roomId);
-      const socket = new WebSocket(wsUrl);
-      this.socket = socket;
-
-      socket.onopen = () => {
-        this.serverOnline = true;
-        this.reconnectAttempts = 0;
-        this.send({
-          type: 'join',
-          clientId: this.peerId ?? '',
-          name: this.localName,
-          skinId: this.localSkin,
-        });
-
-        if (this.role === 'host' && this.isPublic) {
-          this.send({ type: 'visibility', isPublic: true });
-        }
-      };
-
-      socket.onmessage = (event) => {
-        this.handleServerMessage(event.data);
-      };
-
-      socket.onerror = () => {
-        this.serverOnline = false;
-      };
-
-      socket.onclose = () => {
-        this.serverOnline = false;
-        // Survive a dev-server restart / network blip: reconnect with
-        // backoff as long as we are still in this room. leave() nulls the
-        // socket and sets state 'idle', so a deliberate exit never
-        // reconnects (guarded by socket identity + roomId below).
-        if (this.socket === socket && this.roomId === roomId && this.state !== 'idle') {
-          this.scheduleReconnect(roomId, socket);
-        }
-      };
-    } catch {
-      this.serverOnline = false;
-    }
-  }
-
-  private scheduleReconnect(roomId: string, socket: WebSocket) {
-    // A WebSocket that NEVER opened won't start working by retrying forever
-    // (dead hosted backend). Cap at 5 attempts (~31s of backoff) — dev-server
-    // restarts still recover; a dead remote URL stops hammering.
-    if (this.reconnectAttempts >= 5) {
-      this.reconnectAttempts = 0;
-      return;
-    }
-    if (this.reconnectTimer !== null) return;
-    const delay = Math.min(1000 * 2 ** this.reconnectAttempts, 15000);
-    this.reconnectAttempts++;
-    this.reconnectTimer = window.setTimeout(() => {
-      this.reconnectTimer = null;
-      // Still in the same room with the same (dead) socket? A leave() or a
-      // re-host creates a new socket and/or roomId — a stale reconnect must
-      // never spawn a second socket.
-      if (this.socket === socket && this.roomId === roomId && this.state !== 'idle') {
-        this.connectWebSocket(roomId);
-      }
-    }, delay);
-  }
-
-  private handleServerMessage(raw: string) {
-    try {
-      const msg: PartyServerMessage = JSON.parse(raw);
-
-      switch (msg.type) {
-        case 'room_state': {
-          if (this.awaitingFirstRoomState) {
-            this.awaitingFirstRoomState = false;
-            // We tried to join a room that no longer exists (host left): the
-            // server silently promoted us to host of an empty room. Back out
-            // gracefully instead of stranding the user in a dead lobby.
-            if (
-              this.role === 'joiner' &&
-              msg.selfId !== null &&
-              msg.selfId === msg.hostId &&
-              msg.players.length === 1
-            ) {
-              this.leave();
-              this.onStatusMsg?.('ROOM NOT FOUND - IT MAY HAVE CLOSED');
-              return;
-            }
-          }
-          this.isPublic = msg.isPublic;
-          this.opponents.clear();
-
-          // The server echoes back OUR identity per connection (selfId);
-          // everything else in the list is an opponent.
-          const selfId = msg.selfId ?? this.peerId ?? '';
-
-          // The server is the source of truth for room membership. The host
-          // reconciles its BC/WebRTC player list against it so a joiner whose
-          // tab died without a bc_leave (or whose WS dropped) stops haunting
-          // the lobby — otherwise the ghost keeps being rebroadcast forever.
-          if (this.role === 'host') {
-            const serverIds = new Set<string>();
-            for (const p of msg.players) {
-              if (p.peerId === this.peerId) continue;
-              serverIds.add(p.peerId);
-              const existing = this.localTabPlayers.get(p.peerId);
-              this.localTabPlayers.set(
-                p.peerId,
-                existing
-                  ? { ...existing, name: p.name, skinId: p.skinId, isHost: p.isHost, meters: p.meters, score: p.score, isAlive: p.isAlive }
-                  : {
-                      peerId: p.peerId,
-                      name: p.name,
-                      skinId: p.skinId,
-                      isHost: p.isHost,
-                      meters: p.meters,
-                      score: p.score,
-                      isAlive: p.isAlive,
-                      ready: false,
-                      ts: Date.now(),
-                    }
-              );
-            }
-            for (const id of Array.from(this.localTabPlayers.keys())) {
-              // MQTT joiners live outside the WebSocket room — the server
-              // must never reconcile them away. Their ghosts are swept by
-              // the bc_join silence timer instead.
-              if (id !== this.peerId && !serverIds.has(id) && this.localTabPlayers.get(id)?.transport !== 'mqtt') {
-                this.localTabPlayers.delete(id);
-              }
-            }
-          }
-
-          for (const p of msg.players) {
-            if (p.peerId !== selfId) {
-              this.opponents.set(p.peerId, p);
-            }
-          }
-
-          this.onRoomStateChange?.(Array.from(this.opponents.values()));
-          break;
-        }
-
-        case 'match_start': {
-          // Host already triggered the countdown locally with the same seed
-          // (passed through the 'start' message) - ignore the server echo.
-          if (this.state !== 'in_game') {
-            this.state = 'in_game';
-            this.matchResult = null;
-            this.localAlive = true;
-            this.localTick = null;
-            this.localReady = false;
-            this.onMatchStart?.(msg.seed, msg.startAt);
-          }
-          break;
-        }
-
-        case 'ticks': {
-          if (this.state === 'in_game') {
-            for (const [peerId, payload] of Object.entries(msg.ticks)) {
-              const opp = this.opponents.get(peerId);
-              if (opp) {
-                opp.px = payload.px;
-                opp.py = payload.py;
-                opp.vx = payload.vx;
-                opp.vy = payload.vy;
-                opp.meters = payload.meters;
-                opp.score = payload.score;
-                opp.frame = payload.frame;
-                opp.run = payload.run;
-                opp.diving = payload.diving;
-                // Death is terminal until the next match (which resets
-                // opponents via room_state) — a tick must never resurrect,
-                // and post-death practice ticks must not overwrite the death
-                // meters/score recorded by player_death.
-                if (opp.isAlive) {
-                  opp.meters = payload.meters;
-                  opp.score = payload.score;
-                }
-                opp.isAlive = payload.alive === false ? false : opp.isAlive;
-                opp.ts = Date.now();
-              }
-            }
-          }
-          break;
-        }
-
-        case 'player_death': {
-          const opp = this.opponents.get(msg.peerId);
-          if (opp) {
-            opp.isAlive = false;
-            opp.meters = msg.meters;
-            opp.score = msg.score;
-          }
-          break;
-        }
-
-        case 'match_end': {
-          // Guard against double end (BC and WebSocket both deliver match_end).
-          // Also ignore results that arrive after we left the room (handleExit
-          // during the countdown) — the results modal must not pop over the menu.
-          if (this.state !== 'in_game' || this.matchResult) break;
-          this.state = 'ended';
-          const result = msg.result;
-          result.mode = 'online';
-
-          const localEntry =
-            result.leaderboard.find((e) => e.peerId === this.peerId) ??
-            result.leaderboard.find((e) => e.name === this.localName);
-          result.isWinner = localEntry ? localEntry.rank === 1 : false;
-          result.rank = localEntry ? localEntry.rank : result.totalPlayers;
-          if (localEntry) localEntry.isLocal = true;
-
-          this.matchResult = result;
-          this.onMatchEnd?.(result);
-          break;
-        }
-
-        case 'error': {
-          // Server rejected us (e.g. ROOM IS FULL): back out cleanly instead
-          // of waiting forever for a room_state that will never arrive.
-          this.leave();
-          this.onStatusMsg?.(msg.message || 'SERVER ERROR');
-          break;
-        }
-      }
-    } catch {
-      // Ignore
-    }
-  }
-
   setReady(ready: boolean) {
     this.localReady = ready;
-    // BC mirror so same-browser tabs see the ready flip even if the
-    // WebSocket is down (the server room_state stays authoritative).
     this.broadcast({ type: 'bc_ready', peerId: this.peerId, ready });
-    this.send({ type: 'ready', ready });
   }
 
   setRoomVisibility(isPublic: boolean) {
     this.isPublic = isPublic;
     this.publishLobbyHeartbeat();
-    this.send({ type: 'visibility', isPublic });
   }
 
   startMatch() {
-    // Guard against double-starts (rapid double-click on START, or a rematch
-    // echoed back while the match is already live): a second start would
-    // restart the local countdown with a NEW seed while the joiners already
-    // count down the first one — desynced worlds.
     if (this.state === 'in_game') return;
     const seed = Math.floor(Math.random() * 1000000);
     const startAt = Date.now() + 3000;
     this.localAlive = true;
     this.localTick = null;
 
-    // BroadcastChannel sync (same seed so local tabs match)
+    if (this.role === 'host') {
+      this.startMatchTimer(Date.now() + PartyManager.MATCH_TIME_LIMIT_MS);
+    }
+
+    // BroadcastChannel, WebRTC & MQTT Relay sync
     this.broadcast({
       type: 'bc_start',
       seed,
       startAt,
     });
 
-    // WebSocket sync: the host's seed is authoritative, so every client
-    // (including the host) simulates the SAME world.
-    this.send({ type: 'start', seed });
-
-    // Local host trigger (server echoes match_start which we ignore because
-    // state is already 'in_game').
     this.state = 'in_game';
     this.matchResult = null;
     this.onMatchStart?.(seed, startAt);
@@ -1404,17 +1218,12 @@ export class PartyManager {
 
   sendTick(payload: PlayerTickPayload) {
     if (this.state === 'in_game') {
-      // Freeze the local board entry at the death values: a post-death
-      // restart (R replays the seed as a practice run) sends fresh ticks,
-      // but they must never overwrite the death meters/score used by
-      // finishBcMatch to build the leaderboard.
       if (this.localAlive) this.localTick = payload;
       this.broadcast({
         type: 'bc_tick',
         peerId: this.peerId,
         payload,
       });
-      this.send({ type: 'tick', payload });
     }
   }
 
@@ -1444,7 +1253,6 @@ export class PartyManager {
         meters,
         score,
       });
-      this.send({ type: 'death', meters, score });
       // Host dies last: no foreign bc_death will arrive to end the match.
       this.checkBcMatchEnd();
     }
@@ -1452,13 +1260,13 @@ export class PartyManager {
 
   rematch() {
     this.broadcast({ type: 'bc_rematch' });
-    this.send({ type: 'rematch' });
     if (this.role === 'host') {
       this.startMatch();
     }
   }
 
   leave() {
+    this.stopMatchTimer();
     if (this.syncTimer) {
       clearInterval(this.syncTimer);
       this.syncTimer = null;
@@ -1466,10 +1274,6 @@ export class PartyManager {
     if (this.lobbyTimer) {
       clearInterval(this.lobbyTimer);
       this.lobbyTimer = null;
-    }
-    if (this.reconnectTimer !== null) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
     }
     if (this.lobbyVisibilityListener && typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', this.lobbyVisibilityListener);
@@ -1493,19 +1297,11 @@ export class PartyManager {
       this.bc = null;
     }
     if (this.mqtt) {
-      // Leave the room topic: the relay lives for the whole page, so without
-      // this the stale subscription would keep delivering the room's traffic
-      // (and a late bc_start could even start a ghost match — the state
-      // guards catch it, but transport-level hygiene is better). The next
-      // host()/join() re-targets the subscriptions.
       try {
         this.mqtt.setTopics([LOBBY_TOPIC_WILDCARD]);
       } catch {
         // Ignore
       }
-      // Drop OUR room from the shared lobby before leaving — per-room
-      // retained topic, so other rooms' announcements survive. Joiners
-      // never published an entry, so only hosts clear one.
       try {
         if (this.role === 'host' && this.roomId) {
           this.mqtt.publish(lobbyTopic(this.roomId), '', 1, true);
@@ -1513,18 +1309,7 @@ export class PartyManager {
       } catch {
         // Ignore
       }
-      // The relay itself lives for the whole page (one persistent broker
-      // connection); the next host()/join() re-targets its subscriptions.
       this.lastMqttLobbyPublish = 0;
-    }
-    if (this.socket) {
-      try {
-        this.send({ type: 'leave' });
-        this.socket.close();
-      } catch {
-        // Ignore
-      }
-      this.socket = null;
     }
     for (const conn of this.peerConnections.values()) {
       try {
@@ -1569,20 +1354,7 @@ export class PartyManager {
     if (!trimmed) return;
     if (trimmed === this.localName) return;
     this.localName = trimmed;
-    if (this.role) {
-      this.send({ type: 'rename', name: trimmed });
-      if (this.role === 'host') this.publishLobbyHeartbeat();
-    }
-  }
-
-  private send(msg: PartyClientMessage) {
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      try {
-        this.socket.send(JSON.stringify(msg));
-      } catch {
-        // Ignore
-      }
-    }
+    if (this.role === 'host') this.publishLobbyHeartbeat();
   }
 }
 

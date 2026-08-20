@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameCanvas } from './components/GameCanvas';
 import { GameOverScreen, PauseScreen, StartScreen } from './components/Overlays';
-import { DailyQuestAnnouncement, QuestCompletionToast } from './components/QuestPanels';
+import { QuestCompletionToast } from './components/QuestPanels';
 import { type UI } from './components/useGameInput';
 import { Game, type Stats } from './game/engine';
 import { dispose, setMusicVolume, setSfxVolume, sfx, unlock } from './game/audio';
@@ -245,13 +245,11 @@ export function App() {
   const [questRun, setQuestRun] = useState<QuestRunStats>(() => emptyQuestRunStats());
   const [questAnnouncement, setQuestAnnouncement] = useState(0);
   const [questToast, setQuestToast] = useState<string[]>([]);
-  const [restartHint, setRestartHint] = useState(false);
   const questCommittedRef = useRef(true);
   const questToastSeenRef = useRef(new Set<string>());
   const questShareBusyRef = useRef(false);
   /** Day the current run started — the whole run commits to this day. */
   const startDayKeyRef = useRef<string | null>(null);
-  const restartHintTimer = useRef(0);
   /** Last local-battle config so R / RESTART can replay the same battle. */
   const localBattleConfigRef = useRef<{ skins: SkinId[]; names?: string[]; controls?: string[] } | null>(null);
   const questRecordCache = useRef<{ day: string; record: QuestRecord } | null>(null);
@@ -319,17 +317,18 @@ export function App() {
     if (unlockedSkins.includes('gladiator')) setDiscordPromoVisible(false);
   }, [unlockedSkins]);
 
+  const pendingFeedbackPromptRef = useRef(false);
+
   const handleExportSave = useCallback(() => {
     const currentUnlocked = loadUnlockedSkins();
     if (!currentUnlocked.includes('safe_bob')) {
       const next = [...currentUnlocked, 'safe_bob' as SkinId];
       saveUnlockedSkins(next);
       setUnlockedSkins(next);
-      triggerSkinToast('SAFE BOB', 'safe_bob');
     }
     sfx.play('ui');
     setSaveLoadModal('save');
-  }, [triggerSkinToast]);
+  }, []);
 
   const handleImportSave = useCallback(() => {
     sfx.play('ui');
@@ -548,7 +547,6 @@ export function App() {
   useEffect(() => {
     return () => {
       dispose();
-      window.clearTimeout(restartHintTimer.current);
     };
   }, []);
 
@@ -701,8 +699,6 @@ export function App() {
     saveQuestRecord(current);
     questRecordCache.current = { day: startDayKeyRef.current, record: current };
     setQuestRecord(current);
-    setRestartHint(false);
-    window.clearTimeout(restartHintTimer.current);
     g.best = bestScore();
     g.startRun();
     questToastSeenRef.current.clear();
@@ -760,11 +756,7 @@ export function App() {
     start();
   }, [matchResult, start, startLocalBattle]);
 
-  const showRestartHint = useCallback(() => {
-    setRestartHint(true);
-    window.clearTimeout(restartHintTimer.current);
-    restartHintTimer.current = window.setTimeout(() => setRestartHint(false), 900);
-  }, []);
+  const showRestartHint = useCallback(() => {}, []);
 
   const pause = useCallback((fromUser = false) => {
     const g = gameRef.current;
@@ -794,6 +786,10 @@ export function App() {
     sfx.play('ui');
     setUi('start');
     setBest(bestScore());
+    if (pendingFeedbackPromptRef.current) {
+      pendingFeedbackPromptRef.current = false;
+      setShowFeedbackModal(true);
+    }
   }, [commitQuestRun]);
 
   const handleDeath = useCallback((s: Stats) => {
@@ -835,9 +831,10 @@ export function App() {
     }
 
     // Run feedback prompt trigger (10 runs, then every 200 runs unless never show)
+    // Deferred to title screen so it never covers Game Over stats.
     const runCount = incrementTotalRuns();
     if (shouldShowFeedbackPrompt(runCount)) {
-      setShowFeedbackModal(true);
+      pendingFeedbackPromptRef.current = true;
       saveLastFeedbackPromptRun(runCount);
     }
 
@@ -934,16 +931,10 @@ export function App() {
           }}
           onRestartHint={showRestartHint}
           onRestart={restart}
+          onMenu={toMenu}
           onQuestProgress={handleQuestProgress}
           modalOpen={battleModalOpen || showFeedbackModal || skinsModalOpen || !!unlockedSkinPopup || !!saveLoadModal}
         />
-        {restartHint && (ui === 'playing' || ui === 'paused') && (
-          <div className="pointer-events-none absolute inset-x-0 top-[36%] z-30 flex justify-center">
-            <div className="border-2 border-[#ff4d6d]/70 bg-[#140a26]/95 px-4 py-2 font-pixel text-[8px] text-[#ffd166] shadow-[4px_4px_0_#08040f] tablet:text-[10px]">
-              PRESS R AGAIN TO RESTART
-            </div>
-          </div>
-        )}
         {ui === 'start' && !skinsModalOpen && (
           <StartScreen
             best={best}
@@ -993,6 +984,7 @@ export function App() {
               if (v > 0) prevSfxVolRef.current = v;
               setVolumes((prev) => ({ ...prev, sfx: v }));
             }}
+            touch={touch}
           />
         )}
         {ui === 'over' && (
@@ -1005,9 +997,6 @@ export function App() {
             onShare={handleShareScore}
             touch={touch}
           />
-        )}
-        {ui === 'playing' && questAnnouncement > 0 && (
-          <DailyQuestAnnouncement quests={quests} record={questRecord} run={questRun} onDayRollover={handleQuestRollover} onShare={handleShareQuests} />
         )}
         {questToast.length > 0 && <QuestCompletionToast quests={quests} completed={questToast} touch={touch} />}
         {skinToast && (

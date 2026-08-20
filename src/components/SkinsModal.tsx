@@ -19,6 +19,7 @@ import {
 import { drawPlayerSprite } from '../game/playerSprite';
 import { inputManager, type GamepadAction } from '../game/input';
 import { sfx } from '../game/audio';
+import { PixelCloseIcon, PixelArrow } from './ui';
 
 interface SkinsModalProps {
   equippedSkin: SkinId;
@@ -45,54 +46,7 @@ function GemIcon({ className = 'h-3.5 w-3.5' }: { className?: string }) {
   );
 }
 
-function PixelArrow({ dir, className = '' }: { dir: 'up' | 'down' | 'left' | 'right'; className?: string }) {
-  if (dir === 'up') {
-    return (
-      <svg
-        viewBox="0 0 7 7"
-        className={`inline-block h-[7px] w-[7px] shrink-0 align-middle fill-current ${className}`}
-        shapeRendering="crispEdges"
-        aria-hidden="true"
-      >
-        <path d="M3 0h1v1H3V0z M2 1h3v1H2V1z M1 2h5v1H1V2z M0 3h7v1H0V3z M2 4h3v3H2V4z" />
-      </svg>
-    );
-  }
-  if (dir === 'down') {
-    return (
-      <svg
-        viewBox="0 0 7 7"
-        className={`inline-block h-[7px] w-[7px] shrink-0 align-middle fill-current ${className}`}
-        shapeRendering="crispEdges"
-        aria-hidden="true"
-      >
-        <path d="M2 0h3v3H2V0z M0 3h7v1H0V3z M1 4h5v1H1V4z M2 5h3v1H2V5z M3 6h1v1H3V6z" />
-      </svg>
-    );
-  }
-  if (dir === 'left') {
-    return (
-      <svg
-        viewBox="0 0 7 7"
-        className={`inline-block h-[7px] w-[7px] shrink-0 align-middle fill-current ${className}`}
-        shapeRendering="crispEdges"
-        aria-hidden="true"
-      >
-        <path d="M0 3h1v1H0V3z M1 2h1v3H1V2z M2 1h1v5H2V1z M3 0h1v7H3V0z M4 2h3v3H4V2z" />
-      </svg>
-    );
-  }
-  return (
-    <svg
-      viewBox="0 0 7 7"
-      className={`inline-block h-[7px] w-[7px] shrink-0 align-middle fill-current ${className}`}
-      shapeRendering="crispEdges"
-      aria-hidden="true"
-    >
-      <path d="M6 3h1v1H6V3z M5 2h1v3H5V2z M4 1h1v5H4V1z M3 0h1v7H3V0z M0 2h3v3H0V2z" />
-    </svg>
-  );
-}
+
 
 export function SkinsModal({
   equippedSkin,
@@ -195,6 +149,16 @@ export function SkinsModal({
     },
     [unlockedSkins, onEquip],
   );
+
+  const handleCardClick = (skinId: SkinId, idx: number, unlocked: boolean) => {
+    if (selectedSkinId === skinId && unlocked) {
+      handleEquip(skinId);
+      return;
+    }
+    setSelectedSkinId(skinId);
+    setFocusedIndex(idx);
+    setFocusSection('grid');
+  };
 
   // Full 2D Keyboard & Gamepad Navigation
   useEffect(() => {
@@ -486,13 +450,13 @@ export function SkinsModal({
       return (
         <div
           title={skin.unlock.desc}
-          className={`flex min-h-[20px] w-full items-center justify-center border px-1 py-1 text-center font-pixel text-[8px] leading-tight ${
+          className={`flex min-h-[20px] w-full items-center justify-center border px-1 py-1 text-center font-pixel text-[7px] leading-tight ${
           active
-            ? 'border-[#ff70a6]/60 bg-[#33081e] text-[#ff70a6]'
+            ? 'border-[#ff70a6]/80 bg-[#33081e] text-[#ff70a6]'
             : 'border-[#453c60] bg-[#1c162e] text-[#9d8fd6]'
         }`}
         >
-          {active ? 'EVENT LIVE' : 'LIMITED EVENT'}
+          {skin.unlock.desc}
         </div>
       );
     }
@@ -547,9 +511,7 @@ export function SkinsModal({
             aria-label="Close"
             className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center border-2 border-[#ff4d6d] bg-[#ff4d6d]/20 font-pixel text-[10px] text-[#ff4d6d] shadow-[1px_1px_0_#08040f] hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px]"
           >
-            <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square">
-              <path d="M3 3l10 10M13 3L3 13" />
-            </svg>
+            <PixelCloseIcon className="h-3.5 w-3.5" />
           </button>
         </div>
 
@@ -632,19 +594,19 @@ export function SkinsModal({
                   EQUIP
                 </button>
               ) : selectedSkin.id === 'question' ? (
-                <button
-                  type="button"
-                  onClick={() => inputManager.triggerKonami()}
-                  className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#ffd166] bg-[#ffd166]/20 px-2 font-pixel text-[8px] text-[#ffd166] shadow-[2px_2px_0_#08040f] hover:bg-[#ffd166]/40 active:translate-x-[1px] active:translate-y-[1px]"
-                >
-                  ???????
-                </button>
+                <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#453c60] bg-[#140a26] px-2 font-pixel text-[8px] text-[#9d8fd6] shadow-[2px_2px_0_#08040f]">
+                  ENTER SECRET CODE
+                </div>
               ) : selectedSkin.unlock.type === 'holiday' ? (
                 <div
                   title={selectedSkin.unlock.desc}
-                  className="flex min-h-[32px] md:min-h-[36px] w-full items-center justify-center border-2 border-[#453c60] bg-[#140a26] px-2 py-1 text-center font-pixel text-[8px] leading-tight text-[#9d8fd6] shadow-[2px_2px_0_#08040f]"
+                  className={`flex min-h-[32px] md:min-h-[36px] w-full items-center justify-center border-2 px-2 py-1 text-center font-pixel text-[7px] leading-tight shadow-[2px_2px_0_#08040f] ${
+                    isSkinAvailable(selectedSkin)
+                      ? 'border-[#ff70a6]/80 bg-[#33081e] text-[#ff70a6]'
+                      : 'border-[#453c60] bg-[#140a26] text-[#9d8fd6]'
+                  }`}
                 >
-                  {isSkinAvailable(selectedSkin) ? 'EVENT LIVE' : 'LIMITED EVENT'}
+                  {selectedSkin.unlock.desc}
                 </div>
               ) : selectedSkin.unlock.type === 'discord' ? (
                 <button
@@ -700,11 +662,9 @@ export function SkinsModal({
                   key={skin.id}
                   ref={(el) => { cardRefs.current[idx] = el; }}
                   type="button"
-                  onClick={() => {
-                    setSelectedSkinId(skin.id);
-                    setFocusedIndex(idx);
-                    setFocusSection('grid');
-                    if (unlocked && !equipped) {
+                  onClick={() => handleCardClick(skin.id, idx, unlocked)}
+                  onDoubleClick={() => {
+                    if (unlocked) {
                       handleEquip(skin.id);
                     }
                   }}
@@ -756,47 +716,41 @@ export function SkinsModal({
         </div>
 
         {/* Footer with Controls */}
-        <div className="mt-2 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 border-t-2 border-[#251842] pt-1.5 text-center font-pixel text-[8px] text-[#9d8fd6]">
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-t-2 border-[#251842] pt-1.5 text-center font-pixel text-[8px] text-[#9d8fd6]">
           {touch ? (
-            <>
-              <span>TAP: SELECT | DOUBLE TAP: EQUIP | SWIPE: BROWSE |</span>
-              <button
-                type="button"
-                onClick={() => inputManager.triggerKonami()}
-                className="inline-flex cursor-pointer items-center gap-[1px] text-[#453c60] transition-colors hover:text-[#453c60] active:translate-y-[1px]"
-                title="???"
-              >
-                <PixelArrow dir="up" />
-                <PixelArrow dir="up" />
-                <PixelArrow dir="down" />
-                <PixelArrow dir="down" />
-                <PixelArrow dir="left" />
-                <PixelArrow dir="right" />
-                <PixelArrow dir="left" />
-                <PixelArrow dir="right" />
-                <span className="ml-[1px]">???????</span>
-              </button>
-            </>
+            <span>TAP CARD: SELECT / PREVIEW · CLICK AGAIN: EQUIP</span>
           ) : (
-            <>
-              <span>ARROWS / D-PAD: SELECT | ENTER / A / X: EQUIP | ESC / B / O: CLOSE |</span>
-              <button
-                type="button"
-                onClick={() => inputManager.triggerKonami()}
-                className="inline-flex cursor-pointer items-center gap-[1px] text-[#453c60] transition-colors hover:text-[#453c60] active:translate-y-[1px]"
-                title="???"
-              >
-                <PixelArrow dir="up" />
-                <PixelArrow dir="up" />
-                <PixelArrow dir="down" />
-                <PixelArrow dir="down" />
-                <PixelArrow dir="left" />
-                <PixelArrow dir="right" />
-                <PixelArrow dir="left" />
-                <PixelArrow dir="right" />
-                <span className="ml-[1px]">???????</span>
-              </button>
-            </>
+            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+              <span className="inline-flex items-center gap-1">
+                <span>ARROWS</span>
+                <span className="inline-flex items-center gap-0.5">
+                  <PixelArrow dir="left" />
+                  <PixelArrow dir="right" />
+                  <PixelArrow dir="up" />
+                  <PixelArrow dir="down" />
+                </span>
+                <span>/ D-PAD: SELECT</span>
+              </span>
+              <span>·</span>
+              <span>ENTER / CLICK AGAIN: EQUIP</span>
+              <span>·</span>
+              <span>ESC: CLOSE</span>
+              <span>·</span>
+              <span className="inline-flex items-center gap-1">
+                <span>KONAMI:</span>
+                <span className="inline-flex items-center gap-0.5">
+                  <PixelArrow dir="up" />
+                  <PixelArrow dir="up" />
+                  <PixelArrow dir="down" />
+                  <PixelArrow dir="down" />
+                  <PixelArrow dir="left" />
+                  <PixelArrow dir="right" />
+                  <PixelArrow dir="left" />
+                  <PixelArrow dir="right" />
+                </span>
+                <span>BA</span>
+              </span>
+            </div>
           )}
         </div>
       </div>

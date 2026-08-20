@@ -113,15 +113,15 @@ export function drawPlayerSprite(
     // Legs 1px outline with 100% closed bottom horizontal edges
     if (diving) {
       // Diving legs
-      f(1, 10, 4, 1, WHT); // top
-      f(1, 13, 4, 1, WHT); // bottom
-      f(1, 10, 1, 4, WHT); // left
+      f(2, 10, 3, 1, WHT); // top
+      f(2, 13, 3, 1, WHT); // bottom
+      f(2, 10, 1, 4, WHT); // left
       f(4, 10, 1, 4, WHT); // right
 
-      f(5, 9, 5, 1, WHT); // top
-      f(5, 12, 5, 1, WHT); // bottom
-      f(5, 9, 1, 4, WHT); // left
-      f(9, 9, 1, 4, WHT); // right
+      f(5, 9, 3, 1, WHT); // top
+      f(5, 11, 3, 1, WHT); // bottom
+      f(5, 9, 1, 3, WHT); // left
+      f(7, 9, 1, 3, WHT); // right
     } else if (air) {
       // Airborne legs
       f(2, 10, 3, 1, WHT); // top
@@ -255,10 +255,10 @@ export function drawPlayerSprite(
 
     // Legs (Solid Gold)
     if (diving) {
-      f(1, 10, 4, 4, G_DARK);
-      f(5, 9, 5, 3, G_DARK);
-      f(2, 11, 2, 2, G_MID);
-      f(6, 10, 3, 1, G_MID);
+      f(2, 10, 3, 4, G_DARK);
+      f(5, 9, 3, 3, G_DARK);
+      f(3, 11, 1, 2, G_MID);
+      f(6, 10, 1, 1, G_MID);
     } else if (air) {
       f(2, 10, 3, 4, G_DARK);
       f(6, 9, 3, 4, G_DARK);
@@ -362,8 +362,8 @@ export function drawPlayerSprite(
     if (skinId === 'gladiator') {
       const legs = PLAYER_RUN_LEGS[run >= 0 ? run : 0];
       if (diving) {
-        f(1, 10, 4, 4, BOOT);
-        f(5, 9, 5, 3, BOOT);
+        f(2, 10, 3, 4, BOOT);
+        f(5, 9, 3, 3, BOOT);
       } else if (air) {
         f(2, 10, 3, 4, BOOT);
         f(6, 9, 3, 4, BOOT);
@@ -376,8 +376,8 @@ export function drawPlayerSprite(
     } else if (skinId === 'angel') {
       // Golden Divine Greaves & Winged Sandals
       if (diving) {
-        f(1, 10, 4, 4, tint('#ffd166'));
-        f(5, 9, 5, 3, tint('#ffd166'));
+        f(2, 10, 3, 4, tint('#ffd166'));
+        f(5, 9, 3, 3, tint('#ffd166'));
       } else if (air) {
         f(2, 10, 3, 4, tint('#ffd166'));
         f(6, 9, 3, 4, tint('#ffd166'));
@@ -391,8 +391,8 @@ export function drawPlayerSprite(
         f(legs[4] + 1, legs[5], 1, 2, tint('#d97706'));
       }
     } else if (diving) {
-      f(1, 10, 4, 4, BOOT);
-      f(5, 9, 5, 3, BOOT);
+      f(2, 10, 3, 4, BOOT);
+      f(5, 9, 3, 3, BOOT);
     } else if (air) {
       f(2, 10, 3, 4, BOOT);
       f(6, 9, 3, 4, BOOT);
