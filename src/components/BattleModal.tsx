@@ -466,19 +466,19 @@ export function BattleModal({
   };
 
   const totalPlayers = opponents.length + 1;
-  const playerColors = ['#3ef2c8', '#ffd166', '#ff70a6', '#7ef7ff'];
+  const playerColors = ['var(--ui-accent)', 'var(--ui-gold)', '#ff70a6', 'var(--ui-accent-hi)'];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#08040f]/80 p-3 sm:p-4 font-pixel">
-      <div className="relative flex max-h-[92dvh] w-full max-w-[680px] flex-col items-center border-2 border-[#3ef2c8] bg-[#0e071e] p-4 sm:p-6 text-[#ffffff] shadow-[4px_4px_0_#06020c]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-bg)]/80 p-3 sm:p-4 font-pixel">
+      <div className="relative flex max-h-[92dvh] w-full max-w-[680px] flex-col items-center border-2 border-[var(--ui-accent)] bg-[var(--ui-panel)] p-4 sm:p-6 text-[#ffffff] shadow-[4px_4px_0_var(--ui-bg)]">
         {/* Top Header */}
-        <div className="flex w-full items-center justify-between border-b-2 border-[#251842] pb-2 mb-3">
+        <div className="flex w-full items-center justify-between border-b-2 border-[var(--ui-border)] pb-2 mb-3">
           <div className="flex items-center gap-2">
-            <h2 className="font-pixel text-[12px] uppercase leading-none tracking-wider text-[#3ef2c8]">
+            <h2 className="font-pixel text-[12px] uppercase leading-none tracking-wider text-[var(--ui-accent)]">
               {matchResult ? 'MATCH RESULTS' : tab === 'local' ? 'LOCAL BATTLE' : 'ONLINE BATTLE'}
             </h2>
             {!matchResult && tab !== 'local' && (
-              <span className="inline-block border-2 border-[#ff4d6d] bg-[#ff4d6d]/20 px-1.5 py-0.5 text-[8px] leading-none text-[#ff4d6d]">
+              <span className="inline-block border-2 border-[var(--ui-danger)] bg-[var(--ui-danger)]/20 px-1.5 py-0.5 text-[8px] leading-none text-[var(--ui-danger)]">
                 BETA
               </span>
             )}
@@ -487,7 +487,7 @@ export function BattleModal({
             type="button"
             onClick={handleExit}
             aria-label="Close"
-            className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center border-2 border-[#ff4d6d] bg-[#ff4d6d]/20 font-pixel text-[10px] text-[#ff4d6d] shadow-[1px_1px_0_#08040f] hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px]"
+            className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center border-2 border-[var(--ui-danger)] bg-[var(--ui-danger)]/20 font-pixel text-[10px] text-[var(--ui-danger)] shadow-[1px_1px_0_var(--ui-bg)] hover:bg-[var(--ui-danger)]/40 active:translate-x-[1px] active:translate-y-[1px]"
           >
             <PixelCloseIcon className="h-3.5 w-3.5" />
           </button>
@@ -498,17 +498,17 @@ export function BattleModal({
           <div className="flex w-full flex-col items-center py-3 text-center">
             <h3
               className={`text-[12px] ${
-                matchResult.isWinner ? 'text-[#ffd166]' : 'text-[#ff4d6d]'
+                matchResult.isWinner ? 'text-[var(--ui-gold)]' : 'text-[var(--ui-danger)]'
               }`}
             >
               {matchResult.isWinner
                 ? 'VICTORY - 1ST PLACE'
                 : `${matchResult.rank}${matchResult.rank === 2 ? 'ND' : matchResult.rank === 3 ? 'RD' : 'TH'} PLACE`}
             </h3>
-            <p className="mt-2 max-w-full break-words text-[20px] leading-tight text-[#ffd166] drop-shadow-[0_3px_0_#08040f] sm:text-[28px]">
+            <p className="mt-2 max-w-full break-words text-[20px] leading-tight text-[var(--ui-gold)] drop-shadow-[0_3px_0_var(--ui-bg)] sm:text-[28px]">
               {matchResult.winnerName.toUpperCase()}
             </p>
-            <p className="mt-1.5 text-[10px] text-[#9d8fd6]">
+            <p className="mt-1.5 text-[10px] text-[var(--ui-muted)]">
               {matchResult.mode === 'local'
                 ? 'WINS THE BATTLE!'
                 : matchResult.isWinner
@@ -517,8 +517,8 @@ export function BattleModal({
             </p>
 
             {/* Leaderboard Table */}
-            <div className="my-3 flex w-full max-w-md flex-col gap-1 border border-[#2c1f4d] bg-[#080312] p-2.5">
-              <div className="grid grid-cols-5 text-[8px] text-[#9d8fd6] pb-1 border-b border-[#2c1f4d]">
+            <div className="my-3 flex w-full max-w-md flex-col gap-1 border border-[var(--ui-border2)] bg-[#080312] p-2.5">
+              <div className="grid grid-cols-5 text-[8px] text-[var(--ui-muted)] pb-1 border-b border-[var(--ui-border2)]">
                 <span>RANK</span>
                 <span className="col-span-2 text-left">PLAYER</span>
                 <span>SCORE</span>
@@ -529,7 +529,7 @@ export function BattleModal({
                   key={entry.peerId}
                   className={`grid grid-cols-5 items-center py-1.5 text-[10px] ${
                     entry.isLocal
-                      ? 'bg-[#3ef2c8]/10 border border-[#3ef2c8]/40 text-[#3ef2c8]'
+                      ? 'bg-[var(--ui-accent)]/10 border border-[var(--ui-accent)]/40 text-[var(--ui-accent)]'
                       : 'text-[#ffffff]'
                   }`}
                 >
@@ -539,7 +539,7 @@ export function BattleModal({
                   <span className="col-span-2 truncate text-left">
                     {entry.name} {entry.isLocal && matchResult.mode !== 'local' ? '(YOU)' : ''}
                   </span>
-                  <span className="text-[#ffd166]">{entry.score}</span>
+                  <span className="text-[var(--ui-gold)]">{entry.score}</span>
                   <span>{entry.meters}M</span>
                 </div>
               ))}
@@ -549,7 +549,7 @@ export function BattleModal({
               <PixelButton
                 variant="primary"
                 onClick={handleRematch}
-                className="flex-1 !bg-[#3ef2c8] !text-[#08040f] hover:!bg-[#6ef5d6]"
+                className="flex-1 !bg-[var(--ui-accent)] !text-[var(--ui-bg)] hover:!bg-[var(--ui-accent-hi)]"
               >
                 REMATCH
               </PixelButton>
@@ -561,19 +561,19 @@ export function BattleModal({
         ) : countdown !== null ? (
           /* 2. SYNCHRONIZED COUNTDOWN OVERLAY */
           <div className="flex flex-col items-center justify-center py-8">
-            <span className="text-[10px] text-[#7ef7ff] tracking-widest uppercase">
+            <span className="text-[10px] text-[var(--ui-accent-hi)] tracking-widest uppercase">
               STARTING IN
             </span>
-            <div className="my-3 text-[28px] text-[#ffd166] sm:text-[36px]">
+            <div className="my-3 text-[28px] text-[var(--ui-gold)] sm:text-[36px]">
               {countdown === 0 ? 'GO' : countdown}
             </div>
-            <span className="text-[8px] text-[#9d8fd6]">PREPARE TO RUN</span>
+            <span className="text-[8px] text-[var(--ui-muted)]">PREPARE TO RUN</span>
           </div>
         ) : (
           /* 3. LOBBY & HOST/JOIN/LOCAL TABS */
           <div className="flex w-full flex-col items-center overflow-y-auto py-1.5">
             {/* Primary Mode Tabs */}
-            <div className="mb-4 flex w-full max-w-md border border-[#2c1f4d] bg-[#080312]">
+            <div className="mb-4 flex w-full max-w-md border border-[var(--ui-border2)] bg-[#080312]">
               <button
                 type="button"
                 onClick={() => {
@@ -585,8 +585,8 @@ export function BattleModal({
                 }}
                 className={`flex-1 min-h-[40px] py-2 text-[10px] transition-colors ${
                   tab === 'host'
-                    ? 'bg-[#3ef2c8] text-[#08040f]'
-                    : 'text-[#9d8fd6] hover:text-[#ffffff]'
+                    ? 'bg-[var(--ui-accent)] text-[var(--ui-bg)]'
+                    : 'text-[var(--ui-muted)] hover:text-[#ffffff]'
                 }`}
               >
                 HOST ROOM
@@ -605,8 +605,8 @@ export function BattleModal({
                 }}
                 className={`flex-1 min-h-[40px] py-2 text-[10px] transition-colors ${
                   tab === 'join'
-                    ? 'bg-[#ffd166] text-[#08040f]'
-                    : 'text-[#9d8fd6] hover:text-[#ffffff]'
+                    ? 'bg-[var(--ui-gold)] text-[var(--ui-bg)]'
+                    : 'text-[var(--ui-muted)] hover:text-[#ffffff]'
                 }`}
               >
                 JOIN ROOM
@@ -622,8 +622,8 @@ export function BattleModal({
                 }}
                 className={`flex-1 min-h-[40px] py-2 text-[10px] transition-colors ${
                   tab === 'local'
-                    ? 'bg-[#ff4d6d] text-[#08040f]'
-                    : 'text-[#9d8fd6] hover:text-[#ffffff]'
+                    ? 'bg-[var(--ui-danger)] text-[var(--ui-bg)]'
+                    : 'text-[var(--ui-muted)] hover:text-[#ffffff]'
                 }`}
               >
                 LOCAL BATTLE
@@ -632,7 +632,7 @@ export function BattleModal({
 
             {/* Beta notice for online (host/join) tabs */}
             {tab !== 'local' && (
-              <div className="mb-4 w-full max-w-md border border-[#ff4d6d]/40 bg-[#ff4d6d]/10 px-2 py-1 text-center text-[8px] text-[#ff4d6d]">
+              <div className="mb-4 w-full max-w-md border border-[var(--ui-danger)]/40 bg-[var(--ui-danger)]/10 px-2 py-1 text-center text-[8px] text-[var(--ui-danger)]">
                 ONLINE BATTLES ARE IN BETA — CONNECTIONS MAY DROP. LOCAL BATTLE IS STABLE.
               </div>
             )}
@@ -640,7 +640,7 @@ export function BattleModal({
             {/* Your online name — persisted and pushed live to the room */}
             {tab !== 'local' && (
               <div className="mb-4 flex w-full max-w-md items-center gap-2">
-                <span className="shrink-0 text-[8px] text-[#9d8fd6]">YOUR NAME:</span>
+                <span className="shrink-0 text-[8px] text-[var(--ui-muted)]">YOUR NAME:</span>
                 <input
                   type="text"
                   value={onlineName}
@@ -648,7 +648,7 @@ export function BattleModal({
                   onKeyDown={(e) => e.stopPropagation()}
                   maxLength={16}
                   placeholder="RUNNER"
-                  className="min-h-[32px] flex-1 select-text border border-[#3ef2c8]/60 bg-[#080312] px-2 py-1 text-center font-pixel text-[9px] uppercase text-[#3ef2c8] focus:border-[#3ef2c8] focus:outline-none"
+                  className="min-h-[32px] flex-1 select-text border border-[var(--ui-accent)]/60 bg-[#080312] px-2 py-1 text-center font-pixel text-[9px] uppercase text-[var(--ui-accent)] focus:border-[var(--ui-accent)] focus:outline-none"
                 />
               </div>
             )}
@@ -657,14 +657,14 @@ export function BattleModal({
             {tab === 'host' && (
               <div className="flex flex-col items-center gap-3 mb-4 w-full px-2 sm:px-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-[8px] text-[#9d8fd6]">ROOM CODE:</span>
-                  <div className="border border-[#ffd166] bg-[#1a1202] px-3 py-1 text-[12px] tracking-widest text-[#ffd166]">
+                  <span className="text-[8px] text-[var(--ui-muted)]">ROOM CODE:</span>
+                  <div className="border border-[var(--ui-gold)] bg-[var(--ui-gold-dim)] px-3 py-1 text-[12px] tracking-widest text-[var(--ui-gold)]">
                     {roomCode || 'CREATING...'}
                   </div>
                   <button
                     type="button"
                     onClick={handleCopyLink}
-                    className="border-2 border-[#3ef2c8]/80 bg-[#3ef2c8]/15 px-2.5 py-1 text-[8px] text-[#3ef2c8] hover:bg-[#3ef2c8]/30 active:translate-x-[1px] active:translate-y-[1px]"
+                    className="border-2 border-[var(--ui-accent)]/80 bg-[var(--ui-accent)]/15 px-2.5 py-1 text-[8px] text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/30 active:translate-x-[1px] active:translate-y-[1px]"
                   >
                     {copied ? 'COPIED!' : 'COPY LINK'}
                   </button>
@@ -690,15 +690,15 @@ export function BattleModal({
                     placeholder="CODE (E.G. ABCD)"
                     maxLength={4}
                     autoFocus
-                    className="flex-1 min-h-[44px] select-text border border-[#3ef2c8]/60 bg-[#080312] px-3 py-1 text-center font-pixel text-[10px] text-[#ffd166] uppercase focus:border-[#3ef2c8] focus:outline-none"
+                    className="flex-1 min-h-[44px] select-text border border-[var(--ui-accent)]/60 bg-[#080312] px-3 py-1 text-center font-pixel text-[10px] text-[var(--ui-gold)] uppercase focus:border-[var(--ui-accent)] focus:outline-none"
                   />
                   <button
                     type="button"
                     onClick={isJoining ? handleCancelJoin : () => handleJoinCode()}
                     className={`border-2 min-h-[44px] px-4 py-1 text-[10px] active:translate-x-[1px] active:translate-y-[1px] ${
                       isJoining
-                        ? 'border-[#ff4d6d] bg-[#ff4d6d]/20 text-[#ff4d6d] hover:bg-[#ff4d6d]/40'
-                        : 'border-[#3ef2c8] bg-[#3ef2c8] text-[#08040f] hover:bg-[#6ef5d6]'
+                        ? 'border-[var(--ui-danger)] bg-[var(--ui-danger)]/20 text-[var(--ui-danger)] hover:bg-[var(--ui-danger)]/40'
+                        : 'border-[var(--ui-accent)] bg-[var(--ui-accent)] text-[var(--ui-bg)] hover:bg-[var(--ui-accent-hi)]'
                     }`}
                   >
                     {isJoining ? 'CANCEL' : 'JOIN'}
@@ -712,7 +712,7 @@ export function BattleModal({
               <div className="flex flex-col items-center gap-4 mb-4 w-full px-3 py-1 sm:px-6">
                 {/* Player count buttons */}
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-[8px] text-[#9d8fd6]">PLAYERS:</span>
+                  <span className="text-[8px] text-[var(--ui-muted)]">PLAYERS:</span>
                   {([2, 3, 4] as const).map((cnt) => (
                     <button
                       key={cnt}
@@ -720,8 +720,8 @@ export function BattleModal({
                       onClick={() => setPlayerCount(cnt)}
                       className={`min-h-[32px] px-3 py-1 text-[8px] border-2 transition-colors ${
                         playerCount === cnt
-                          ? 'border-[#ffd166] bg-[#ffd166] text-[#08040f]'
-                          : 'border-[#2c1f4d] bg-[#0c081e] text-[#9d8fd6] hover:text-[#ffffff]'
+                          ? 'border-[var(--ui-gold)] bg-[var(--ui-gold)] text-[var(--ui-bg)]'
+                          : 'border-[var(--ui-border2)] bg-[#0c081e] text-[var(--ui-muted)] hover:text-[#ffffff]'
                       }`}
                     >
                       {cnt} PLAYERS
@@ -742,7 +742,7 @@ export function BattleModal({
                     return (
                       <div
                         key={`local-p-${idx}`}
-                        className="flex flex-col items-center border-2 p-4 justify-between bg-[#0a0518] shadow-[2px_2px_0_#08040f]"
+                        className="flex flex-col items-center border-2 p-4 justify-between bg-[#0a0518] shadow-[2px_2px_0_var(--ui-bg)]"
                         style={{ borderColor: col }}
                       >
                         <canvas
@@ -770,7 +770,7 @@ export function BattleModal({
 
                         {/* Skin Selector */}
                         <div className="w-full mt-2 flex flex-col items-start">
-                          <span className="text-[8px] text-[#9d8fd6] uppercase mb-0.5">SKIN:</span>
+                          <span className="text-[8px] text-[var(--ui-muted)] uppercase mb-0.5">SKIN:</span>
                           <select
                             value={localSkins[idx] || 'bob'}
                             onChange={(e) => {
@@ -791,7 +791,7 @@ export function BattleModal({
 
                         {/* Controls Selector */}
                         <div className="w-full mt-2 flex flex-col items-start">
-                          <span className="text-[8px] text-[#9d8fd6] uppercase mb-0.5">CONTROLS:</span>
+                          <span className="text-[8px] text-[var(--ui-muted)] uppercase mb-0.5">CONTROLS:</span>
                           <select
                             value={playerControlSchemes[idx]}
                             onChange={(e) => {
@@ -829,25 +829,25 @@ export function BattleModal({
 
             {/* Status Line */}
             {statusMsg && (
-              <div className="mb-3 text-center break-words text-[8px] text-[#ffd166]">
+              <div className="mb-3 text-center break-words text-[8px] text-[var(--ui-gold)]">
                 {statusMsg}
               </div>
             )}
 
             {/* Roster Section for Online Mode */}
             {tab !== 'local' && (
-              <div className="w-full max-w-md border border-[#2c1f4d] bg-[#080312] p-2.5 mb-3">
-                <div className="text-[8px] text-[#9d8fd6] mb-2 text-center">
+              <div className="w-full max-w-md border border-[var(--ui-border2)] bg-[#080312] p-2.5 mb-3">
+                <div className="text-[8px] text-[var(--ui-muted)] mb-2 text-center">
                   ROSTER ({totalPlayers}/{MAX_PLAYERS})
                 </div>
                 <div className="flex flex-wrap items-center justify-center gap-2.5">
                   {/* Slot 1: You */}
-                  <div className="flex flex-col items-center border border-[#3ef2c8] bg-[#0c1824] p-1 w-[88px] h-22 justify-between">
+                  <div className="flex flex-col items-center border border-[var(--ui-accent)] bg-[#0c1824] p-1 w-[88px] h-22 justify-between">
                     <canvas ref={localCanvasRef} width={60} height={60} className="w-9 h-9 pixelated" />
-                    <span className="truncate text-[8px] text-[#3ef2c8] max-w-[76px]">
+                    <span className="truncate text-[8px] text-[var(--ui-accent)] max-w-[76px]">
                       YOU
                     </span>
-                    <span className="border border-[#3ef2c8] bg-[#3ef2c8]/20 px-1 text-[8px] text-[#3ef2c8]">
+                    <span className="border border-[var(--ui-accent)] bg-[var(--ui-accent)]/20 px-1 text-[8px] text-[var(--ui-accent)]">
                       {tab === 'host' ? 'HOST' : myReady ? 'READY' : 'NOT READY'}
                     </span>
                   </div>
@@ -856,7 +856,7 @@ export function BattleModal({
                   {opponents.map((opp, i) => (
                     <div
                       key={opp.peerId}
-                      className="flex flex-col items-center border p-1 w-[88px] h-22 justify-between border-[#ffd166] bg-[#0d061e]"
+                      className="flex flex-col items-center border p-1 w-[88px] h-22 justify-between border-[var(--ui-gold)] bg-[#0d061e]"
                     >
                       <canvas
                         ref={(el) => {
@@ -867,10 +867,10 @@ export function BattleModal({
                         height={60}
                         className="w-9 h-9 pixelated"
                       />
-                      <span className="truncate text-[8px] max-w-[76px] text-[#ffd166]">
+                      <span className="truncate text-[8px] max-w-[76px] text-[var(--ui-gold)]">
                         {opp.name}
                       </span>
-                      <span className="border px-1 text-[8px] border-[#3ef2c8] text-[#3ef2c8]">
+                      <span className="border px-1 text-[8px] border-[var(--ui-accent)] text-[var(--ui-accent)]">
                         {opp.ready ? `P${i + 2} READY` : 'NOT READY'}
                       </span>
                     </div>
@@ -880,10 +880,10 @@ export function BattleModal({
                   {Array.from({ length: Math.max(0, MAX_PLAYERS - totalPlayers) }).map((_, i) => (
                     <div
                       key={`empty-${i}`}
-                      className="flex flex-col items-center justify-center border border-dashed border-[#2c1f4d] bg-[#080312]/40 w-[88px] h-22"
+                      className="flex flex-col items-center justify-center border border-dashed border-[var(--ui-border2)] bg-[#080312]/40 w-[88px] h-22"
                     >
-                      <span className="text-[8px] text-[#9d8fd6]">SLOT {totalPlayers + i + 1}</span>
-                      <span className="text-[8px] text-[#9d8fd6]">EMPTY</span>
+                      <span className="text-[8px] text-[var(--ui-muted)]">SLOT {totalPlayers + i + 1}</span>
+                      <span className="text-[8px] text-[var(--ui-muted)]">EMPTY</span>
                     </div>
                   ))}
                 </div>
@@ -896,7 +896,7 @@ export function BattleModal({
                 <button
                   type="button"
                   onClick={handleStartLocal}
-                  className="w-full border-2 border-[#ffd166] bg-[#ffd166] min-h-[44px] px-6 py-2.5 text-[10px] text-[#120726] transition-colors hover:bg-[#ffe082] active:translate-x-[1px] active:translate-y-[1px] shadow-[2px_2px_0_#08040f]"
+                  className="w-full border-2 border-[var(--ui-gold)] bg-[var(--ui-gold)] min-h-[44px] px-6 py-2.5 text-[10px] text-[#120726] transition-colors hover:bg-[#ffe082] active:translate-x-[1px] active:translate-y-[1px] shadow-[2px_2px_0_var(--ui-bg)]"
                 >
                   START RUN
                 </button>
@@ -905,7 +905,7 @@ export function BattleModal({
                   type="button"
                   onClick={handleStartRun}
                   disabled={opponents.length === 0 || !allOpponentsReady}
-                  className="w-full border-2 border-[#ffd166] bg-[#ffd166] min-h-[44px] px-6 py-2.5 text-[10px] text-[#120726] transition-colors hover:bg-[#ffe082] disabled:opacity-40 disabled:hover:bg-[#ffd166] active:translate-x-[1px] active:translate-y-[1px] shadow-[2px_2px_0_#08040f]"
+                  className="w-full border-2 border-[var(--ui-gold)] bg-[var(--ui-gold)] min-h-[44px] px-6 py-2.5 text-[10px] text-[#120726] transition-colors hover:bg-[#ffe082] disabled:opacity-40 disabled:hover:bg-[var(--ui-gold)] active:translate-x-[1px] active:translate-y-[1px] shadow-[2px_2px_0_var(--ui-bg)]"
                 >
                   {opponents.length === 0
                     ? 'WAITING FOR PLAYERS...'
@@ -915,9 +915,9 @@ export function BattleModal({
                 </button>
               ) : (
                 <div className="flex w-full flex-col items-center gap-2.5">
-                  <div className="w-full text-center text-[9px] leading-relaxed tracking-wider text-[#9d8fd6]">
+                  <div className="w-full text-center text-[9px] leading-relaxed tracking-wider text-[var(--ui-muted)]">
                     {opponents.length > 0 ? (
-                      <span className="font-bold text-[#3ef2c8]">CONNECTED - WAITING FOR HOST TO START</span>
+                      <span className="font-bold text-[var(--ui-accent)]">CONNECTED - WAITING FOR HOST TO START</span>
                     ) : joined ? (
                       'SEARCHING FOR HOST...'
                     ) : roomCode ? (
@@ -930,10 +930,10 @@ export function BattleModal({
                     <button
                       type="button"
                       onClick={toggleReady}
-                      className={`w-full border-2 min-h-[44px] px-6 py-2.5 text-[10px] tracking-wider shadow-[2px_2px_0_#08040f] transition-colors active:translate-x-[1px] active:translate-y-[1px] ${
+                      className={`w-full border-2 min-h-[44px] px-6 py-2.5 text-[10px] tracking-wider shadow-[2px_2px_0_var(--ui-bg)] transition-colors active:translate-x-[1px] active:translate-y-[1px] ${
                         myReady
-                          ? 'border-[#3ef2c8] bg-[#3ef2c8] text-[#08040f] hover:bg-[#6ef5d6]'
-                          : 'border-[#3ef2c8] bg-[#3ef2c8]/15 text-[#3ef2c8] hover:bg-[#3ef2c8]/30'
+                          ? 'border-[var(--ui-accent)] bg-[var(--ui-accent)] text-[var(--ui-bg)] hover:bg-[var(--ui-accent-hi)]'
+                          : 'border-[var(--ui-accent)] bg-[var(--ui-accent)]/15 text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/30'
                       }`}
                     >
                       {myReady ? 'CANCEL READY' : 'I AM READY'}

@@ -6,6 +6,33 @@
 
 :root {
   color-scheme: dark;
+
+  /* UI theme variables — defaults = PIXEL (original palette).
+     Switched at runtime by src/game/uiThemes.ts; components only ever
+     reference the vars, so a theme swap is one style recalc. */
+  --ui-bg: #08040f;
+  --ui-panel: #0e071e;
+  --ui-panel2: #140a26;
+  --ui-panel3: #0d0619;
+  --ui-border: #251842;
+  --ui-border2: #2c1f4d;
+  --ui-border3: #453c60;
+  --ui-accent: #3ef2c8;
+  --ui-danger: #ff4d6d;
+  --ui-gold: #ffd166;
+  --ui-purple: #c98cff;
+  --ui-muted: #9d8fd6;
+  --ui-text: #e8ecff;
+
+  /* Derived tints (computed once per theme change by the browser) */
+  --ui-accent-hi: color-mix(in srgb, var(--ui-accent) 65%, white);
+  --ui-danger-hi: color-mix(in srgb, var(--ui-danger) 70%, white);
+  --ui-gold-hi: color-mix(in srgb, var(--ui-gold) 75%, white);
+  --ui-accent-dim: color-mix(in srgb, var(--ui-accent) 14%, var(--ui-bg));
+  --ui-accent-dim2: color-mix(in srgb, var(--ui-accent) 30%, var(--ui-bg));
+  --ui-danger-dim: color-mix(in srgb, var(--ui-danger) 12%, var(--ui-bg));
+  --ui-gold-dim: color-mix(in srgb, var(--ui-gold) 12%, var(--ui-bg));
+  --ui-purple-dim: color-mix(in srgb, var(--ui-purple) 14%, var(--ui-bg));
 }
 
 html,
@@ -40,7 +67,7 @@ body.keyboard-active *:focus-visible,
 body.gamepad-active *:focus-visible,
 body.keyboard-active .nav-focus,
 body.gamepad-active .nav-focus {
-  outline: 2px solid #3ef2c8 !important;
+  outline: 2px solid var(--ui-accent) !important;
   outline-offset: 2px !important;
   box-shadow: 0 0 0 2px #08040f !important;
   z-index: 20 !important;

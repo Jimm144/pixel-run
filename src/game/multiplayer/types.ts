@@ -74,6 +74,7 @@ export interface LocalPlayerState {
   jumps: number;
   coyote: number;
   jumpBuf: number;
+  diveBuf: number;
   jumpHeld: boolean;
   diveHeld: boolean;
   moveDir: number;

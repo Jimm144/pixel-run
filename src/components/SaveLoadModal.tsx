@@ -142,43 +142,43 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#08040f]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
+      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[var(--ui-bg)]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="relative flex w-full max-w-[380px] flex-col items-center border-2 border-[#3ef2c8] bg-[#0e071e] p-4 text-center font-pixel text-white shadow-[4px_4px_0_#06020c] sm:p-5">
+      <div className="relative flex w-full max-w-[380px] flex-col items-center border-2 border-[var(--ui-accent)] bg-[var(--ui-panel)] p-4 text-center font-pixel text-white shadow-[4px_4px_0_var(--ui-bg)] sm:p-5">
         {/* Header */}
-        <div className="mb-3 flex w-full items-center justify-between border-b-2 border-[#251842] pb-2">
-          <h2 className="font-pixel text-[12px] uppercase tracking-wider text-[#3ef2c8]">
+        <div className="mb-3 flex w-full items-center justify-between border-b-2 border-[var(--ui-border)] pb-2">
+          <h2 className="font-pixel text-[12px] uppercase tracking-wider text-[var(--ui-accent)]">
             {mode === 'save' ? 'EXPORT SAVE DATA' : 'RESTORE SAVE DATA'}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center border-2 border-[#ff4d6d] bg-[#ff4d6d]/20 font-pixel text-[10px] text-[#ff4d6d] shadow-[1px_1px_0_#08040f] hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px]"
+            className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center border-2 border-[var(--ui-danger)] bg-[var(--ui-danger)]/20 font-pixel text-[10px] text-[var(--ui-danger)] shadow-[1px_1px_0_var(--ui-bg)] hover:bg-[var(--ui-danger)]/40 active:translate-x-[1px] active:translate-y-[1px]"
           >
             <PixelCloseIcon className="h-3.5 w-3.5" />
           </button>
         </div>
 
         {errorMsg && (
-          <div className="mb-3 w-full border border-[#ff4d6d] bg-[#ff4d6d]/15 p-2 text-[8px] text-[#ff4d6d]">
+          <div className="mb-3 w-full border border-[var(--ui-danger)] bg-[var(--ui-danger)]/15 p-2 text-[8px] text-[var(--ui-danger)]">
             {errorMsg}
           </div>
         )}
 
         {successMsg && (
-          <div className="mb-3 w-full border border-[#3ef2c8] bg-[#3ef2c8]/15 p-2 text-[8px] text-[#3ef2c8]">
+          <div className="mb-3 w-full border border-[var(--ui-accent)] bg-[var(--ui-accent)]/15 p-2 text-[8px] text-[var(--ui-accent)]">
             {successMsg}
           </div>
         )}
 
         {confirmPendingCode !== null ? (
           <div className="flex w-full flex-col gap-3">
-            <div className="border border-[#ffd166] bg-[#ffd166]/10 p-3 text-center">
-              <h3 className="font-pixel text-[10px] text-[#ffd166] mb-2">OVERWRITE PROGRESS?</h3>
+            <div className="border border-[var(--ui-gold)] bg-[var(--ui-gold)]/10 p-3 text-center">
+              <h3 className="font-pixel text-[10px] text-[var(--ui-gold)] mb-2">OVERWRITE PROGRESS?</h3>
               <p className="text-[8px] leading-relaxed text-[#f3f4f6]">
                 This will replace your stats, unlocked skins, and scores with the restored save.
               </p>
@@ -204,7 +204,7 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
           </div>
         ) : mode === 'save' ? (
           <div className="flex w-full flex-col gap-3">
-            <p className="text-[8px] leading-relaxed text-[#9d8fd6] sm:text-[10px]">
+            <p className="text-[8px] leading-relaxed text-[var(--ui-muted)] sm:text-[10px]">
               Download your backup file or copy the save code string to restore in Safari.
             </p>
 
@@ -227,7 +227,7 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
 
             {/* Selectable Save Code Box */}
             <div className="mt-1 flex flex-col text-left">
-              <span className="mb-1 text-[8px] text-[#9d8fd6]">
+              <span className="mb-1 text-[8px] text-[var(--ui-muted)]">
                 BACKUP CODE STRING (TAP TO SELECT ALL):
               </span>
               <textarea
@@ -236,13 +236,13 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
                 onFocus={(e) => e.target.select()}
                 onClick={(e) => (e.target as HTMLTextAreaElement).select()}
                 onChange={() => {}}
-                className="h-16 w-full resize-none border-2 border-[#251842] bg-[#120722] p-2 font-mono text-[8px] text-[#ffd166] selection:bg-[#3ef2c8] selection:text-[#08040f] focus:border-[#3ef2c8] focus:outline-none"
+                className="h-16 w-full resize-none border-2 border-[var(--ui-border)] bg-[var(--ui-panel3)] p-2 font-mono text-[8px] text-[var(--ui-gold)] selection:bg-[var(--ui-accent)] selection:text-[var(--ui-bg)] focus:border-[var(--ui-accent)] focus:outline-none"
               />
             </div>
           </div>
         ) : (
           <div className="flex w-full flex-col gap-3">
-            <p className="text-[8px] leading-relaxed text-[#9d8fd6] sm:text-[10px]">
+            <p className="text-[8px] leading-relaxed text-[var(--ui-muted)] sm:text-[10px]">
               Select your .save file or paste your backup code string below.
             </p>
 
@@ -260,20 +260,20 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
             {/* Label acts as the click target — guaranteed to open file picker on all platforms */}
             <label
               htmlFor="save-file-input"
-              className="flex min-h-[44px] w-full cursor-pointer items-center justify-center border-2 border-[#3ef2c8]/60 bg-[#092922] py-2.5 font-pixel text-[10px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] transition-colors hover:bg-[#0d3b2d] active:translate-x-[1px] active:translate-y-[1px]"
+              className="flex min-h-[44px] w-full cursor-pointer items-center justify-center border-2 border-[var(--ui-accent)]/60 bg-[var(--ui-accent-dim)] py-2.5 font-pixel text-[10px] text-[var(--ui-accent)] shadow-[2px_2px_0_var(--ui-bg)] transition-colors hover:bg-[var(--ui-accent-dim2)] active:translate-x-[1px] active:translate-y-[1px]"
             >
               {loading ? 'LOADING...' : 'SELECT .SAVE FILE'}
             </label>
 
             <div className="flex flex-col text-left">
               <div className="mb-1 flex items-center justify-between">
-                <span className="text-[8px] text-[#9d8fd6]">
+                <span className="text-[8px] text-[var(--ui-muted)]">
                   OR PASTE SAVE CODE:
                 </span>
                 <button
                   type="button"
                   onClick={handlePasteFromClipboard}
-                  className="cursor-pointer border-2 border-[#3ef2c8]/40 bg-[#092922] px-2 py-1 text-[8px] text-[#3ef2c8] hover:bg-[#0d3b2d]"
+                  className="cursor-pointer border-2 border-[var(--ui-accent)]/40 bg-[var(--ui-accent-dim)] px-2 py-1 text-[8px] text-[var(--ui-accent)] hover:bg-[var(--ui-accent-dim2)]"
                 >
                   PASTE FROM CLIPBOARD
                 </button>
@@ -282,7 +282,7 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
                 value={inputCode}
                 onChange={(e) => setInputCode(e.target.value)}
                 placeholder="Paste PRSAVE1:... code here"
-                className="h-20 w-full resize-none border-2 border-[#251842] bg-[#120722] p-2 font-mono text-[8px] text-[#ffd166] placeholder-[#9d8fd6] focus:border-[#3ef2c8] focus:outline-none"
+                className="h-20 w-full resize-none border-2 border-[var(--ui-border)] bg-[var(--ui-panel3)] p-2 font-mono text-[8px] text-[var(--ui-gold)] placeholder-[var(--ui-muted)] focus:border-[var(--ui-accent)] focus:outline-none"
               />
             </div>
 

@@ -12,7 +12,7 @@ type ControlIconKind = 'jump' | 'dive' | 'boost' | 'pause' | 'hold' | 'double' |
 
 function ControlIcon({ kind }: { kind: ControlIconKind }) {
   return (
-    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center border border-current/35 bg-[#0d0619]">
+    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center border border-current/35 bg-[var(--ui-panel3)]">
       <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor" shapeRendering="crispEdges">
         {kind === 'jump' && (
           <>
@@ -96,10 +96,10 @@ function ControlIcon({ kind }: { kind: ControlIconKind }) {
 function ControlHint({ kind, keys, danger = false }: { kind: ControlIconKind; keys: string; danger?: boolean }) {
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <span className={danger ? 'text-[#ff4d6d]' : 'text-[#3ef2c8]'}>
+      <span className={danger ? 'text-[var(--ui-danger)]' : 'text-[var(--ui-accent)]'}>
         <ControlIcon kind={kind} />
       </span>
-      <p className={`truncate font-pixel text-[8px] leading-[1.7] ${danger ? 'text-[#ff4d6d]' : 'text-[#3ef2c8]'}`}>
+      <p className={`truncate font-pixel text-[8px] leading-[1.7] ${danger ? 'text-[var(--ui-danger)]' : 'text-[var(--ui-accent)]'}`}>
         {keys}
       </p>
     </div>
@@ -311,7 +311,7 @@ function GladiatorPreview() {
 
 function DiscordPromo({ onClaim, onDismiss }: { onClaim: () => void; onDismiss: () => void }) {
   return (
-    <div className="relative flex w-full items-center gap-2 border-2 border-[#5865f2] bg-[#151942] p-2 shadow-[3px_3px_0_#08040f] tablet:gap-3 tablet:p-2.5">
+    <div className="relative flex w-full items-center gap-2 border-2 border-[#5865f2] bg-[#151942] p-2 shadow-[3px_3px_0_var(--ui-bg)] tablet:gap-3 tablet:p-2.5">
       <button
         type="button"
         aria-label="Dismiss Discord reward"
@@ -324,13 +324,13 @@ function DiscordPromo({ onClaim, onDismiss }: { onClaim: () => void; onDismiss: 
         <GladiatorPreview />
       </div>
       <div className="min-w-0 flex-1 pr-3">
-        <p className="font-pixel text-[8px] leading-[1.6] text-[#ffd166]">
+        <p className="font-pixel text-[8px] leading-[1.6] text-[var(--ui-gold)]">
           JOIN THE DISCORD TO GET THE LEGENDARY GLADIATOR SKIN
         </p>
         <button
           type="button"
           onClick={onClaim}
-          className="mt-2 border-2 border-[#08040f] bg-[#5865f2] px-3 py-1.5 font-pixel text-[8px] text-white shadow-[2px_2px_0_#08040f] hover:bg-[#7289da] active:translate-x-[1px] active:translate-y-[1px]"
+          className="mt-2 border-2 border-[var(--ui-bg)] bg-[#5865f2] px-3 py-1.5 font-pixel text-[8px] text-white shadow-[2px_2px_0_var(--ui-bg)] hover:bg-[#7289da] active:translate-x-[1px] active:translate-y-[1px]"
         >
           JOIN DISCORD
         </button>
@@ -369,6 +369,23 @@ function PixelReloadIcon({ className = 'h-2.5 w-2.5 tablet:h-3 tablet:w-3' }: { 
   );
 }
 
+function PixelSwatchIcon({ className = 'h-2.5 w-2.5 tablet:h-3 tablet:w-3' }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 10 10"
+      className={`inline-block shrink-0 align-middle ${className}`}
+      shapeRendering="crispEdges"
+    >
+      {/* 2x2 swatch grid using the theme roles */}
+      <rect x="0" y="0" width="4" height="4" fill="var(--ui-accent)" />
+      <rect x="5" y="0" width="4" height="4" fill="var(--ui-gold)" />
+      <rect x="0" y="5" width="4" height="4" fill="var(--ui-danger)" />
+      <rect x="5" y="5" width="4" height="4" fill="var(--ui-purple)" />
+    </svg>
+  );
+}
+
 /* -------------------------------------------------------------------- start */
 export function StartScreen({
   best,
@@ -392,6 +409,8 @@ export function StartScreen({
   onExportSave,
   onImportSave,
   onCheckUpdate,
+  onCycleTheme,
+  themeName,
 }: {
   best: number;
   lastRun: number;
@@ -414,18 +433,20 @@ export function StartScreen({
   onExportSave?: () => void;
   onImportSave?: () => void;
   onCheckUpdate?: () => void;
+  onCycleTheme?: () => void;
+  themeName?: string;
 }) {
   return (
     <div
-      className="absolute inset-0 z-10 flex cursor-default items-start justify-center overflow-y-auto bg-[#08040f]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
+      className="absolute inset-0 z-10 flex cursor-default items-start justify-center overflow-y-auto bg-[var(--ui-bg)]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
     >
       <div className="my-auto flex w-full max-w-[420px] flex-col items-center gap-3 tablet:max-w-[500px]">
         <div className="text-center">
-          <h1 className="font-pixel text-[20px] leading-none drop-shadow-[0_4px_0_#08040f] sm:text-[28px] tablet:text-[36px]">
-            <span className="animate-title block text-[#3ef2c8]">PIXEL</span>
-            <span className="animate-title-2 block text-[#ff4d6d]">RUN</span>
+          <h1 className="font-pixel text-[20px] leading-none drop-shadow-[0_4px_0_var(--ui-bg)] sm:text-[28px] tablet:text-[36px]">
+            <span className="animate-title block text-[var(--ui-accent)]">PIXEL</span>
+            <span className="animate-title-2 block text-[var(--ui-danger)]">RUN</span>
           </h1>
-          <p className="mt-2 font-pixel text-[8px] tracking-[0.25em] text-[#9d8fd6] tablet:text-[10px]">
+          <p className="mt-2 font-pixel text-[8px] tracking-[0.25em] text-[var(--ui-muted)] tablet:text-[10px]">
             RUN &middot; STOMP &middot; SURVIVE
           </p>
         </div>
@@ -451,9 +472,9 @@ export function StartScreen({
                 </>
               )}
             </div>
-            <div className="mt-1 flex w-full items-center justify-center gap-4 border-t-2 border-[#251842] pt-3 font-pixel text-[8px] text-[#9d8fd6] tablet:text-[10px]">
-              <span>LAST RUN <span className="text-[#9d8fd6]">{pad(lastRun, 6)}</span></span>
-              <span>BEST <span className="text-[#ffd166]">{pad(best, 6)}</span></span>
+            <div className="mt-1 flex w-full items-center justify-center gap-4 border-t-2 border-[var(--ui-border)] pt-3 font-pixel text-[8px] text-[var(--ui-muted)] tablet:text-[10px]">
+              <span>LAST RUN <span className="text-[var(--ui-muted)]">{pad(lastRun, 6)}</span></span>
+              <span>BEST <span className="text-[var(--ui-gold)]">{pad(best, 6)}</span></span>
             </div>
           </div>
         </Panel>
@@ -464,10 +485,10 @@ export function StartScreen({
           <button
             onClick={(e) => { e.stopPropagation(); onToggleMusic(); }}
             aria-pressed={musicOn}
-            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,background-color,border-color,color] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] tablet:px-5 tablet:py-3 tablet:text-[10px] ${
+            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_var(--ui-bg)] transition-[transform,box-shadow,background-color,border-color,color] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)] tablet:px-5 tablet:py-3 tablet:text-[10px] ${
               musicOn
-                ? 'border-[#3ef2c8]/40 bg-[#3ef2c8]/10 text-[#3ef2c8] hover:bg-[#3ef2c8]/20'
-                : 'border-[#9d8fd6]/30 bg-[#0d0619] text-[#9d8fd6] hover:border-[#9d8fd6]/60'
+                ? 'border-[var(--ui-accent)]/40 bg-[var(--ui-accent)]/10 text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/20'
+                : 'border-[var(--ui-muted)]/30 bg-[var(--ui-panel3)] text-[var(--ui-muted)] hover:border-[var(--ui-muted)]/60'
             }`}
           >
             <PixelSpeakerIcon active={musicOn} />
@@ -476,10 +497,10 @@ export function StartScreen({
           <button
             onClick={(e) => { e.stopPropagation(); onToggleSfx(); }}
             aria-pressed={sfxOn}
-            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,background-color,border-color,color] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] tablet:px-5 tablet:py-3 tablet:text-[10px] ${
+            className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_var(--ui-bg)] transition-[transform,box-shadow,background-color,border-color,color] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)] tablet:px-5 tablet:py-3 tablet:text-[10px] ${
               sfxOn
-                ? 'border-[#ffd166]/40 bg-[#ffd166]/10 text-[#ffd166] hover:bg-[#ffd166]/20'
-                : 'border-[#9d8fd6]/30 bg-[#0d0619] text-[#9d8fd6] hover:border-[#9d8fd6]/60'
+                ? 'border-[var(--ui-gold)]/40 bg-[var(--ui-gold)]/10 text-[var(--ui-gold)] hover:bg-[var(--ui-gold)]/20'
+                : 'border-[var(--ui-muted)]/30 bg-[var(--ui-panel3)] text-[var(--ui-muted)] hover:border-[var(--ui-muted)]/60'
             }`}
           >
             <PixelSpeakerIcon active={sfxOn} />
@@ -494,7 +515,7 @@ export function StartScreen({
               onClick={onOpenBattle}
               aria-label="Multiplayer Battle"
               title="Multiplayer Battle"
-              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[#ff4d6d]/70 bg-[#1c0812] text-[#ff4d6d] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,background-color] duration-75 hover:bg-[#ff4d6d]/20 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
+              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[var(--ui-danger)]/70 bg-[var(--ui-danger-dim)] text-[var(--ui-danger)] shadow-[2px_2px_0_var(--ui-bg)] transition-[transform,box-shadow,background-color] duration-75 hover:bg-[var(--ui-danger)]/20 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)]"
             >
               <PixelSwordsIcon className="h-5 w-5 sm:h-6 sm:w-6" />
             </button>
@@ -512,7 +533,7 @@ export function StartScreen({
               onClick={onOpenSkins}
               aria-label="Character Locker"
               title="Character Locker"
-              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[#3ef2c8]/60 bg-[#061815] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] transition-[transform,box-shadow,background-color] duration-75 hover:bg-[#3ef2c8]/20 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f]"
+              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[var(--ui-accent)]/60 bg-[var(--ui-accent-dim)] text-[var(--ui-accent)] shadow-[2px_2px_0_var(--ui-bg)] transition-[transform,box-shadow,background-color] duration-75 hover:bg-[var(--ui-accent)]/20 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)]"
             >
               <PixelShirtIcon className="h-5 w-5 sm:h-6 sm:w-6" />
             </button>
@@ -528,20 +549,20 @@ export function StartScreen({
             target="_blank"
             rel="noreferrer noopener"
             onClick={(e) => e.stopPropagation()}
-            className="font-pixel text-[8px] text-[#9d8fd6] transition-colors hover:text-[#ffffff] tablet:text-[10px]"
+            className="font-pixel text-[8px] text-[var(--ui-muted)] transition-colors hover:text-[#ffffff] tablet:text-[10px]"
           >
             GITHUB
           </a>
           {onExportSave && (
             <>
-              <span className="text-[8px] text-[#332454]">|</span>
+              <span className="text-[8px] text-[var(--ui-border2)]">|</span>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onExportSave();
                 }}
-                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[8px] text-[#ffd166]/70 transition-colors hover:text-[#ffd166] tablet:text-[10px]"
+                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[8px] text-[var(--ui-gold)]/70 transition-colors hover:text-[var(--ui-gold)] tablet:text-[10px]"
               >
                 <span>SAVE</span>
                 <PixelArrow dir="down" />
@@ -550,14 +571,14 @@ export function StartScreen({
           )}
           {onImportSave && (
             <>
-              <span className="text-[8px] text-[#332454]">|</span>
+              <span className="text-[8px] text-[var(--ui-border2)]">|</span>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onImportSave();
                 }}
-                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[8px] text-[#c98cff]/70 transition-colors hover:text-[#c98cff] tablet:text-[10px]"
+                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[8px] text-[var(--ui-purple)]/70 transition-colors hover:text-[var(--ui-purple)] tablet:text-[10px]"
               >
                 <span>LOAD</span>
                 <PixelArrow dir="up" />
@@ -566,17 +587,35 @@ export function StartScreen({
           )}
           {onCheckUpdate && (
             <>
-              <span className="text-[8px] text-[#332454]">|</span>
+              <span className="text-[8px] text-[var(--ui-border2)]">|</span>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   onCheckUpdate();
                 }}
-                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[8px] text-[#3ef2c8]/70 transition-colors hover:text-[#3ef2c8] tablet:text-[10px]"
+                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[8px] text-[var(--ui-accent)]/70 transition-colors hover:text-[var(--ui-accent)] tablet:text-[10px]"
               >
                 <span>UPDATE</span>
                 <PixelReloadIcon />
+              </button>
+            </>
+          )}
+          {onCycleTheme && themeName && (
+            <>
+              <span className="text-[8px] text-[var(--ui-border2)]">|</span>
+              <button
+                type="button"
+                aria-label="Change color theme"
+                title={`THEME: ${themeName}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCycleTheme();
+                }}
+                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[8px] text-[var(--ui-purple)]/70 transition-colors hover:text-[var(--ui-purple)] tablet:text-[10px]"
+              >
+                <PixelSwatchIcon />
+                <span>{themeName}</span>
               </button>
             </>
           )}
@@ -607,7 +646,7 @@ function VolumeStepper({ label, value, onChange }: { label: string; value: numbe
 
   const step = (dir: number) => onChange(Math.min(1, Math.max(0, pct + dir) / 100));
   return (
-    <div className="flex items-center justify-between gap-2 border-2 border-[#2c1f4d] bg-[#0d0619] px-2 py-1.5">
+    <div className="flex items-center justify-between gap-2 border-2 border-[var(--ui-border2)] bg-[var(--ui-panel3)] px-2 py-1.5">
       <div className="flex items-center gap-1.5">
         <button
           type="button"
@@ -615,14 +654,14 @@ function VolumeStepper({ label, value, onChange }: { label: string; value: numbe
           onClick={toggleMute}
           className={`flex items-center justify-center border-2 px-1.5 py-1 font-pixel text-[8px] transition-colors ${
             isMuted
-              ? 'border-[#2c1f4d] bg-[#08040f] text-[#9d8fd6]/50 opacity-60 hover:border-[#9d8fd6]/60 hover:text-[#9d8fd6]'
-              : 'border-[#3ef2c8]/60 bg-[#3ef2c8]/10 text-[#3ef2c8] hover:bg-[#3ef2c8]/20 active:bg-[#3ef2c8]/30'
+              ? 'border-[var(--ui-border2)] bg-[var(--ui-bg)] text-[var(--ui-muted)]/50 opacity-60 hover:border-[var(--ui-muted)]/60 hover:text-[var(--ui-muted)]'
+              : 'border-[var(--ui-accent)]/60 bg-[var(--ui-accent)]/10 text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/20 active:bg-[var(--ui-accent)]/30'
           }`}
           title={isMuted ? `Unmute ${label} (${Math.round(prevVolRef.current * 100)}%)` : `Mute ${label}`}
         >
           <PixelSpeakerIcon active={!isMuted} />
         </button>
-        <span className="font-pixel text-[8px] text-[#9d8fd6]">{label}</span>
+        <span className="font-pixel text-[8px] text-[var(--ui-muted)]">{label}</span>
       </div>
       <div className="flex items-center gap-1.5">
         <button
@@ -632,20 +671,20 @@ function VolumeStepper({ label, value, onChange }: { label: string; value: numbe
           onClick={() => step(-10)}
           className={`border-2 px-2 py-1 font-pixel text-[10px] transition-colors ${
             isMuted
-              ? 'border-[#2c1f4d] bg-[#08040f] text-[#9d8fd6]/40 opacity-40 cursor-not-allowed'
-              : 'border-[#3ef2c8]/50 bg-[#0d0619] text-[#3ef2c8] hover:bg-[#3ef2c8]/10 active:bg-[#3ef2c8]/20'
+              ? 'border-[var(--ui-border2)] bg-[var(--ui-bg)] text-[var(--ui-muted)]/40 opacity-40 cursor-not-allowed'
+              : 'border-[var(--ui-accent)]/50 bg-[var(--ui-panel3)] text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/10 active:bg-[var(--ui-accent)]/20'
           }`}
         >
           -
         </button>
-        <span className={`w-11 text-center font-pixel text-[10px] ${isMuted ? 'text-[#9d8fd6]' : 'text-[#e9e2ff]'}`}>
+        <span className={`w-11 text-center font-pixel text-[10px] ${isMuted ? 'text-[var(--ui-muted)]' : 'text-[var(--ui-text)]'}`}>
           {pct}%
         </span>
         <button
           type="button"
           aria-label={`${label} up`}
           onClick={() => step(10)}
-          className="border-2 border-[#3ef2c8]/50 bg-[#0d0619] px-2 py-1 font-pixel text-[10px] text-[#3ef2c8] transition-colors hover:bg-[#3ef2c8]/10 active:bg-[#3ef2c8]/20"
+          className="border-2 border-[var(--ui-accent)]/50 bg-[var(--ui-panel3)] px-2 py-1 font-pixel text-[10px] text-[var(--ui-accent)] transition-colors hover:bg-[var(--ui-accent)]/10 active:bg-[var(--ui-accent)]/20"
         >
           +
         </button>
@@ -681,19 +720,19 @@ export function PauseScreen({
 
   return (
     <div
-      className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-[#08040f]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] [@media(max-height:640px)]:items-end [@media(max-height:640px)]:pb-8"
+      className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto bg-[var(--ui-bg)]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] [@media(max-height:640px)]:items-end [@media(max-height:640px)]:pb-8"
       onPointerDown={() => sfx.unlock()}
     >
       <Panel className="w-full max-w-[300px] p-4 tablet:max-w-[420px] tablet:p-6">
-        <h2 className="mb-3 text-center font-pixel text-[16px] text-[#3ef2c8] tablet:mb-4 tablet:text-[20px]">PAUSED</h2>
+        <h2 className="mb-3 text-center font-pixel text-[16px] text-[var(--ui-accent)] tablet:mb-4 tablet:text-[20px]">PAUSED</h2>
         <div className="mb-3 grid grid-cols-2 gap-2 tablet:mb-4 tablet:gap-3">
           <Stat label="SCORE" value={pad(stats.score, 6)} color="#ffffff" />
-          <Stat label="DIST" value={stats.meters + 'M'} color="#3ef2c8" />
+          <Stat label="DIST" value={stats.meters + 'M'} color="var(--ui-accent)" />
         </div>
         <div className="mb-3 grid grid-cols-3 gap-2 tablet:mb-4 tablet:gap-3">
-          <Stat label="COINS" value={String(stats.coins)} color="#ffd166" />
-          <Stat label="KILLS" value={String(stats.kills)} color="#ff4d6d" />
-          <Stat label="COMBO" value={'X' + stats.combo} color="#c98cff" />
+          <Stat label="COINS" value={String(stats.coins)} color="var(--ui-gold)" />
+          <Stat label="KILLS" value={String(stats.kills)} color="var(--ui-danger)" />
+          <Stat label="COMBO" value={'X' + stats.combo} color="var(--ui-purple)" />
         </div>
         <div className="mb-3 flex flex-col gap-2 tablet:mb-4">
           <VolumeStepper label="MUSIC" value={musicVol} onChange={onMusicVol} />
@@ -765,38 +804,38 @@ export function GameOverScreen({
 
   return (
     <div
-      className="absolute inset-0 z-10 flex items-start justify-center overflow-y-auto bg-[#08040f]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
+      className="absolute inset-0 z-10 flex items-start justify-center overflow-y-auto bg-[var(--ui-bg)]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
       onPointerDown={() => sfx.unlock()}
     >
       <div className="my-auto flex w-full max-w-[380px] flex-col items-center gap-3 tablet:max-w-[460px]">
         <div className="text-center">
-          <h2 className="animate-shake-in font-pixel text-[20px] text-[#ff4d6d] drop-shadow-[0_4px_0_#08040f] tablet:text-[28px]">
+          <h2 className="animate-shake-in font-pixel text-[20px] text-[var(--ui-danger)] drop-shadow-[0_4px_0_var(--ui-bg)] tablet:text-[28px]">
             WASTED
           </h2>
-          <p className="mt-1 font-pixel text-[8px] tracking-wider text-[#ff4d6d]/80">
+          <p className="mt-1 font-pixel text-[8px] tracking-wider text-[var(--ui-danger)]/80">
             {causeLabel}
           </p>
         </div>
         <Panel className="w-full">
           <div className="mb-3 text-center">
-            <p className="font-pixel text-[8px] text-[#9d8fd6]">
+            <p className="font-pixel text-[8px] text-[var(--ui-muted)]">
               {newBest ? 'NEW PERSONAL BEST' : 'FINAL SCORE'}
             </p>
-            <p className="font-pixel text-[20px] text-[#ffd166] drop-shadow-[0_3px_0_#08040f] tablet:text-[28px]">
+            <p className="font-pixel text-[20px] text-[var(--ui-gold)] drop-shadow-[0_3px_0_var(--ui-bg)] tablet:text-[28px]">
               {pad(stats.score, 6)}
             </p>
             {!newBest && (
-              <p className="mt-2 font-pixel text-[8px] text-[#9d8fd6]">
-                BEST <span className="text-[#3ef2c8]">{pad(best, 6)}</span>
+              <p className="mt-2 font-pixel text-[8px] text-[var(--ui-muted)]">
+                BEST <span className="text-[var(--ui-accent)]">{pad(best, 6)}</span>
               </p>
             )}
           </div>
           <div className="mb-3 grid grid-cols-5 gap-1 tablet:gap-2">
-            <Stat label="DIST" value={stats.meters + 'M'} color="#3ef2c8" />
-            <Stat label="COINS" value={String(stats.coins ?? 0)} color="#ffd166" />
-            <Stat label="GEMS" value={String(stats.gems ?? 0)} color="#3ef2c8" />
-            <Stat label="KILLS" value={String(stats.kills)} color="#ff4d6d" />
-            <Stat label="COMBO" value={'X' + stats.combo} color="#c98cff" />
+            <Stat label="DIST" value={stats.meters + 'M'} color="var(--ui-accent)" />
+            <Stat label="COINS" value={String(stats.coins ?? 0)} color="var(--ui-gold)" />
+            <Stat label="GEMS" value={String(stats.gems ?? 0)} color="var(--ui-accent)" />
+            <Stat label="KILLS" value={String(stats.kills)} color="var(--ui-danger)" />
+            <Stat label="COMBO" value={'X' + stats.combo} color="var(--ui-purple)" />
           </div>
         </Panel>
         <div className="flex w-full max-w-[380px] flex-col items-center gap-2 tablet:max-w-[460px]">
@@ -813,7 +852,7 @@ export function GameOverScreen({
               variant="ghost"
               onClick={onShare}
               small
-              className="w-full flex items-center justify-center py-2.5 border-[#ffd166]/70 bg-[#ffd166]/10 text-[#ffd166] hover:bg-[#ffd166]/20 hover:text-[#fff4b8] hover:border-[#ffd166] tablet:py-3"
+              className="w-full flex items-center justify-center py-2.5 border-[var(--ui-gold)]/70 bg-[var(--ui-gold)]/10 text-[var(--ui-gold)] hover:bg-[var(--ui-gold)]/20 hover:text-[var(--ui-gold-hi)] hover:border-[var(--ui-gold)] tablet:py-3"
             >
               <PixelShareIcon className="mr-1.5 inline-block h-[12px] w-[12px] align-[-2px] tablet:h-[15px] tablet:w-[15px]" />
               SHARE SCORE

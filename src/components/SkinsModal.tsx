@@ -37,9 +37,9 @@ function GemIcon({ className = 'h-3.5 w-3.5' }: { className?: string }) {
       {/* 8-bit Dark Outline */}
       <path d="M5 1h6v2h2v2h2v4h-2v2h-2v2H5v-2H3v-2H1V5h2V3h2V1z" fill="#08121e" />
       {/* Radiant Vibrant Cyan Body */}
-      <path d="M6 2h4v2h3v2h1v2h-1v2h-3v2H6v-2H3V8H2V6h1V4h3V2z" fill="#3ef2c8" />
+      <path d="M6 2h4v2h3v2h1v2h-1v2h-3v2H6v-2H3V8H2V6h1V4h3V2z" fill="var(--ui-accent)" />
       {/* Bright Highlight Facet */}
-      <path d="M6 2h4v2H6V2zM3 4h3v4H3V4z" fill="#7ef7ff" />
+      <path d="M6 2h4v2H6V2zM3 4h3v4H3V4z" fill="var(--ui-accent-hi)" />
       {/* Crisp White Sparkling Glint */}
       <rect x="6" y="3" width="2" height="2" fill="#ffffff" />
     </svg>
@@ -366,12 +366,12 @@ export function SkinsModal({
       const pct = Math.min(100, Math.max(0, Math.round((cur / max) * 100)));
       return (
         <div className="w-full">
-          <div className="mb-1.5 flex justify-between font-pixel text-[8px] leading-none text-[#ffd166]">
+          <div className="mb-1.5 flex justify-between font-pixel text-[8px] leading-none text-[var(--ui-gold)]">
             <span>{pct}%</span>
             <span>{cur}/{max}</span>
           </div>
-          <div className="h-2 w-full overflow-hidden border border-[#59427e] bg-[#100722]">
-            <div className="h-full bg-[#ffd166] transition-all duration-200" style={{ width: `${pct}%` }} />
+          <div className="h-2 w-full overflow-hidden border border-[var(--ui-border3)] bg-[#100722]">
+            <div className="h-full bg-[var(--ui-gold)] transition-all duration-200" style={{ width: `${pct}%` }} />
           </div>
         </div>
       );
@@ -382,12 +382,12 @@ export function SkinsModal({
       const pct = Math.min(100, Math.max(0, Math.round((cur / max) * 100)));
       return (
         <div className="w-full">
-          <div className="mb-1.5 flex justify-between font-pixel text-[8px] leading-none text-[#ffd166]">
+          <div className="mb-1.5 flex justify-between font-pixel text-[8px] leading-none text-[var(--ui-gold)]">
             <span>{pct}%</span>
             <span>{Math.floor(cur / 1000)}K/{Math.floor(max / 1000)}K</span>
           </div>
-          <div className="h-2 w-full overflow-hidden border border-[#59427e] bg-[#100722]">
-            <div className="h-full bg-[#ffd166] transition-all duration-200" style={{ width: `${pct}%` }} />
+          <div className="h-2 w-full overflow-hidden border border-[var(--ui-border3)] bg-[#100722]">
+            <div className="h-full bg-[var(--ui-gold)] transition-all duration-200" style={{ width: `${pct}%` }} />
           </div>
         </div>
       );
@@ -398,12 +398,12 @@ export function SkinsModal({
       const pct = Math.min(100, Math.max(0, Math.round((cur / max) * 100)));
       return (
         <div className="w-full">
-          <div className="mb-1.5 flex justify-between font-pixel text-[8px] leading-none text-[#ffd166]">
+          <div className="mb-1.5 flex justify-between font-pixel text-[8px] leading-none text-[var(--ui-gold)]">
             <span>{pct}%</span>
             <span>{Math.floor(cur / 1000)}K/{Math.floor(max / 1000)}K</span>
           </div>
-          <div className="h-2 w-full overflow-hidden border border-[#59427e] bg-[#100722]">
-            <div className="h-full bg-[#ffd166] transition-all duration-200" style={{ width: `${pct}%` }} />
+          <div className="h-2 w-full overflow-hidden border border-[var(--ui-border3)] bg-[#100722]">
+            <div className="h-full bg-[var(--ui-gold)] transition-all duration-200" style={{ width: `${pct}%` }} />
           </div>
         </div>
       );
@@ -414,33 +414,33 @@ export function SkinsModal({
       const pct = Math.min(100, Math.max(0, Math.round((cur / max) * 100)));
       return (
         <div className="w-full">
-          <div className="mb-1.5 flex justify-between font-pixel text-[8px] leading-none text-[#ffd166]">
+          <div className="mb-1.5 flex justify-between font-pixel text-[8px] leading-none text-[var(--ui-gold)]">
             <span>{pct}%</span>
             <span>{cur}/{max} SETS</span>
           </div>
-          <div className="h-2 w-full overflow-hidden border border-[#59427e] bg-[#100722]">
-            <div className="h-full bg-[#ffd166] transition-all duration-200" style={{ width: `${pct}%` }} />
+          <div className="h-2 w-full overflow-hidden border border-[var(--ui-border3)] bg-[#100722]">
+            <div className="h-full bg-[var(--ui-gold)] transition-all duration-200" style={{ width: `${pct}%` }} />
           </div>
         </div>
       );
     }
     if (skin.unlock.type === 'moon') {
       return (
-        <div className="flex min-h-[20px] sm:min-h-[24px] w-full items-center justify-center border border-[#ff4d6d]/40 bg-[#25050f] px-1 py-1 text-center font-pixel text-[8px] leading-tight text-[#ff4d6d]">
+        <div className="flex min-h-[20px] sm:min-h-[24px] w-full items-center justify-center border border-[var(--ui-danger)]/40 bg-[var(--ui-danger-dim)] px-1 py-1 text-center font-pixel text-[8px] leading-tight text-[var(--ui-danger)]">
           {skin.unlock.desc}
         </div>
       );
     }
     if (skin.unlock.type === 'konami') {
       return (
-        <div className="flex h-[20px] sm:h-[22px] w-full items-center justify-center border border-[#c98cff]/40 bg-[#1c0830] px-1 text-center font-pixel text-[8px] text-[#c98cff]">
+        <div className="flex h-[20px] sm:h-[22px] w-full items-center justify-center border border-[var(--ui-purple)]/40 bg-[var(--ui-purple-dim)] px-1 text-center font-pixel text-[8px] text-[var(--ui-purple)]">
           {skin.unlock.desc}
         </div>
       );
     }
     if (skin.unlock.type === 'save') {
       return (
-        <div className="flex h-[20px] sm:h-[22px] w-full items-center justify-center border border-[#ffd166]/40 bg-[#2b2005] px-1 text-center font-pixel text-[8px] text-[#ffd166]">
+        <div className="flex h-[20px] sm:h-[22px] w-full items-center justify-center border border-[var(--ui-gold)]/40 bg-[var(--ui-gold-dim)] px-1 text-center font-pixel text-[8px] text-[var(--ui-gold)]">
           {skin.unlock.desc}
         </div>
       );
@@ -453,7 +453,7 @@ export function SkinsModal({
           className={`flex min-h-[20px] w-full items-center justify-center border px-1 py-1 text-center font-pixel text-[7px] leading-tight ${
           active
             ? 'border-[#ff70a6]/80 bg-[#33081e] text-[#ff70a6]'
-            : 'border-[#453c60] bg-[#1c162e] text-[#9d8fd6]'
+            : 'border-[var(--ui-border3)] bg-[#1c162e] text-[var(--ui-muted)]'
         }`}
         >
           {skin.unlock.desc}
@@ -464,7 +464,7 @@ export function SkinsModal({
       return (
         <div className={`flex h-[20px] sm:h-[22px] w-full items-center justify-center border px-1 text-center font-pixel text-[8px] ${
           discordClaimed
-            ? 'border-[#3ef2c8]/60 bg-[#092922] text-[#3ef2c8]'
+            ? 'border-[var(--ui-accent)]/60 bg-[var(--ui-accent-dim)] text-[var(--ui-accent)]'
             : 'border-[#5865f2]/60 bg-[#151942] text-[#9da9ff]'
         }`}>
           {discordClaimed ? 'REWARD CLAIMED' : 'JOIN THE DISCORD'}
@@ -478,29 +478,29 @@ export function SkinsModal({
     <div
       className={
         touch
-          ? 'fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#0d0619] p-3 text-white pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] tablet:items-center tablet:justify-center tablet:bg-[#08040f]/80 tablet:p-4'
-          : 'fixed inset-0 z-50 flex items-center justify-center bg-[#08040f]/80 p-3'
+          ? 'fixed inset-0 z-50 flex flex-col overflow-hidden bg-[var(--ui-panel3)] p-3 text-white pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] tablet:items-center tablet:justify-center tablet:bg-[var(--ui-bg)]/80 tablet:p-4'
+          : 'fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-bg)]/80 p-3'
       }
     >
       <div
         className={
           touch
-            ? 'flex h-full min-h-0 w-full flex-col bg-[#0e071e] p-0 text-white tablet:h-auto tablet:max-h-[92vh] tablet:max-w-[780px] tablet:border-2 tablet:border-[#3ef2c8] tablet:p-4 tablet:shadow-[4px_4px_0_#06020c]'
-            : 'flex max-h-[94vh] w-full max-w-[980px] flex-col border-2 border-[#3ef2c8] bg-[#0e071e] p-4 text-white shadow-[4px_4px_0_#06020c] tablet:max-w-[min(980px,calc(100vw-32px))]'
+            ? 'flex h-full min-h-0 w-full flex-col bg-[var(--ui-panel)] p-0 text-white tablet:h-auto tablet:max-h-[92vh] tablet:max-w-[780px] tablet:border-2 tablet:border-[var(--ui-accent)] tablet:p-4 tablet:shadow-[4px_4px_0_var(--ui-bg)]'
+            : 'flex max-h-[94vh] w-full max-w-[980px] flex-col border-2 border-[var(--ui-accent)] bg-[var(--ui-panel)] p-4 text-white shadow-[4px_4px_0_var(--ui-bg)] tablet:max-w-[min(980px,calc(100vw-32px))]'
         }
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-2 border-b-2 border-[#251842] pb-2 sm:pb-2.5">
+        <div className="flex items-start justify-between gap-2 border-b-2 border-[var(--ui-border)] pb-2 sm:pb-2.5">
           <div className="flex min-w-0 flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-            <h2 className="font-pixel text-[12px] text-[#3ef2c8] whitespace-nowrap md:text-[16px]">
+            <h2 className="font-pixel text-[12px] text-[var(--ui-accent)] whitespace-nowrap md:text-[16px]">
               CHARACTER LOCKER
             </h2>
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <div className="flex shrink-0 items-center gap-1.5 border-2 border-[#3ef2c8]/60 bg-[#092922] px-2 py-0.5 font-pixel text-[8px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f] whitespace-nowrap md:text-[10px]">
+              <div className="flex shrink-0 items-center gap-1.5 border-2 border-[var(--ui-accent)]/60 bg-[var(--ui-accent-dim)] px-2 py-0.5 font-pixel text-[8px] text-[var(--ui-accent)] shadow-[2px_2px_0_var(--ui-bg)] whitespace-nowrap md:text-[10px]">
                 <GemIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                 <span>GEMS: {stats.gems}</span>
               </div>
-              <div className="flex shrink-0 items-center gap-1.5 border-2 border-[#ffd166]/60 bg-[#2b2005] px-2 py-0.5 font-pixel text-[8px] text-[#ffd166] shadow-[2px_2px_0_#08040f] whitespace-nowrap md:text-[10px]">
+              <div className="flex shrink-0 items-center gap-1.5 border-2 border-[var(--ui-gold)]/60 bg-[var(--ui-gold-dim)] px-2 py-0.5 font-pixel text-[8px] text-[var(--ui-gold)] shadow-[2px_2px_0_var(--ui-bg)] whitespace-nowrap md:text-[10px]">
                 <span>UNLOCKED: {unlockedSkins.length}/{SKIN_LIST.length}</span>
               </div>
             </div>
@@ -509,14 +509,14 @@ export function SkinsModal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center border-2 border-[#ff4d6d] bg-[#ff4d6d]/20 font-pixel text-[10px] text-[#ff4d6d] shadow-[1px_1px_0_#08040f] hover:bg-[#ff4d6d]/40 active:translate-x-[1px] active:translate-y-[1px]"
+            className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center border-2 border-[var(--ui-danger)] bg-[var(--ui-danger)]/20 font-pixel text-[10px] text-[var(--ui-danger)] shadow-[1px_1px_0_var(--ui-bg)] hover:bg-[var(--ui-danger)]/40 active:translate-x-[1px] active:translate-y-[1px]"
           >
             <PixelCloseIcon className="h-3.5 w-3.5" />
           </button>
         </div>
 
         {/* Tier Tabs (Colored when selected, rarity hover on unselected, no individual counts) */}
-        <div className="mt-2.5 flex flex-wrap gap-1.5 border-b-2 border-[#251842] pb-2.5">
+        <div className="mt-2.5 flex flex-wrap gap-1.5 border-b-2 border-[var(--ui-border)] pb-2.5">
           {TIERS.map((tier, idx) => {
             const active = selectedTier === tier;
             const theme = TIER_COLORS[tier];
@@ -535,11 +535,11 @@ export function SkinsModal({
                 onMouseEnter={() => setHoveredTier(tier)}
                 onMouseLeave={() => setHoveredTier(null)}
                 style={{
-                  color: active ? '#0b0616' : isHovered ? theme.text : '#9d8fd6',
-                  backgroundColor: active ? theme.text : isHovered ? theme.bg : '#140a26',
-                  borderColor: active ? theme.text : isHovered ? theme.border : '#251842',
+                  color: active ? '#0b0616' : isHovered ? theme.text : 'var(--ui-muted)',
+                  backgroundColor: active ? theme.text : isHovered ? theme.bg : 'var(--ui-panel2)',
+                  borderColor: active ? theme.text : isHovered ? theme.border : 'var(--ui-border)',
                 }}
-                className={`cursor-pointer border-2 px-3 py-1 font-pixel text-[8px] uppercase tracking-wider shadow-[2px_2px_0_#08040f] transition-[color,background-color,border-color,transform] duration-75 hover:-translate-y-[1px] active:translate-x-[1px] active:translate-y-[1px] ${
+                className={`cursor-pointer border-2 px-3 py-1 font-pixel text-[8px] uppercase tracking-wider shadow-[2px_2px_0_var(--ui-bg)] transition-[color,background-color,border-color,transform] duration-75 hover:-translate-y-[1px] active:translate-x-[1px] active:translate-y-[1px] ${
                   isTabFocused ? 'nav-focus' : ''
                 }`}
               >
@@ -559,9 +559,9 @@ export function SkinsModal({
           }
         >
           {/* Left / Top: Stage Preview (h-fit, does not stretch to bottom) */}
-          <div className="flex shrink-0 flex-row md:flex-col items-center justify-between md:justify-start gap-2.5 md:gap-0 self-stretch md:self-start border-2 border-[#251842] bg-[#120722] p-2.5 md:p-3.5 shadow-[2px_2px_0_#08040f]">
+          <div className="flex shrink-0 flex-row md:flex-col items-center justify-between md:justify-start gap-2.5 md:gap-0 self-stretch md:self-start border-2 border-[var(--ui-border)] bg-[var(--ui-panel3)] p-2.5 md:p-3.5 shadow-[2px_2px_0_var(--ui-bg)]">
             <div className="flex items-center gap-2.5 md:flex-col md:gap-0">
-              <div className="relative flex items-center justify-center border-2 border-[#38225c] bg-[#1a0e2e] p-1.5 md:p-2.5">
+              <div className="relative flex items-center justify-center border-2 border-[var(--ui-border3)] bg-[#1a0e2e] p-1.5 md:p-2.5">
                 <canvas ref={previewCanvasRef} width={96} height={96} style={{ imageRendering: 'pixelated' }} className="h-20 w-20 md:h-24 md:w-24 block [image-rendering:pixelated]" />
               </div>
               <div className="text-left md:mt-2.5 md:text-center">
@@ -582,28 +582,28 @@ export function SkinsModal({
             {/* Action Button */}
             <div className="w-36 md:mt-3 md:w-full">
               {isEquipped ? (
-                <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#3ef2c8] bg-[#3ef2c8]/20 px-2 font-pixel text-[10px] text-[#3ef2c8] shadow-[2px_2px_0_#08040f]">
+                <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[var(--ui-accent)] bg-[var(--ui-accent)]/20 px-2 font-pixel text-[10px] text-[var(--ui-accent)] shadow-[2px_2px_0_var(--ui-bg)]">
                   EQUIPPED
                 </div>
               ) : isUnlocked ? (
                 <button
                   type="button"
                   onClick={() => handleEquip(selectedSkinId)}
-                  className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#08040f] bg-[#3ef2c8] px-2 font-pixel text-[10px] text-[#0b0616] shadow-[3px_3px_0_#08040f] transition-all hover:bg-[#7ef7ff] active:translate-x-[2px] active:translate-y-[2px]"
+                  className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[var(--ui-bg)] bg-[var(--ui-accent)] px-2 font-pixel text-[10px] text-[#0b0616] shadow-[3px_3px_0_var(--ui-bg)] transition-all hover:bg-[var(--ui-accent-hi)] active:translate-x-[2px] active:translate-y-[2px]"
                 >
                   EQUIP
                 </button>
               ) : selectedSkin.id === 'question' ? (
-                <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#453c60] bg-[#140a26] px-2 font-pixel text-[8px] text-[#9d8fd6] shadow-[2px_2px_0_#08040f]">
+                <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[var(--ui-border3)] bg-[var(--ui-panel2)] px-2 font-pixel text-[8px] text-[var(--ui-muted)] shadow-[2px_2px_0_var(--ui-bg)]">
                   ENTER SECRET CODE
                 </div>
               ) : selectedSkin.unlock.type === 'holiday' ? (
                 <div
                   title={selectedSkin.unlock.desc}
-                  className={`flex min-h-[32px] md:min-h-[36px] w-full items-center justify-center border-2 px-2 py-1 text-center font-pixel text-[7px] leading-tight shadow-[2px_2px_0_#08040f] ${
+                  className={`flex min-h-[32px] md:min-h-[36px] w-full items-center justify-center border-2 px-2 py-1 text-center font-pixel text-[7px] leading-tight shadow-[2px_2px_0_var(--ui-bg)] ${
                     isSkinAvailable(selectedSkin)
                       ? 'border-[#ff70a6]/80 bg-[#33081e] text-[#ff70a6]'
-                      : 'border-[#453c60] bg-[#140a26] text-[#9d8fd6]'
+                      : 'border-[var(--ui-border3)] bg-[var(--ui-panel2)] text-[var(--ui-muted)]'
                   }`}
                 >
                   {selectedSkin.unlock.desc}
@@ -613,10 +613,10 @@ export function SkinsModal({
                   type="button"
                   onClick={handleDiscordClaim}
                   disabled={discordClaimed}
-                  className={`flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 px-2 font-pixel text-[8px] shadow-[3px_3px_0_#08040f] transition-all active:translate-x-[2px] active:translate-y-[2px] ${
+                  className={`flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 px-2 font-pixel text-[8px] shadow-[3px_3px_0_var(--ui-bg)] transition-all active:translate-x-[2px] active:translate-y-[2px] ${
                     discordClaimed
-                      ? 'cursor-not-allowed border-[#3ef2c8]/60 bg-[#092922] text-[#3ef2c8]'
-                      : 'border-[#08040f] bg-[#5865f2] text-white hover:bg-[#7289da]'
+                      ? 'cursor-not-allowed border-[var(--ui-accent)]/60 bg-[var(--ui-accent-dim)] text-[var(--ui-accent)]'
+                      : 'border-[var(--ui-bg)] bg-[#5865f2] text-white hover:bg-[#7289da]'
                   }`}
                 >
                   {discordClaimed ? 'REWARD CLAIMED' : 'JOIN THE DISCORD'}
@@ -626,16 +626,16 @@ export function SkinsModal({
                   type="button"
                   disabled={stats.gems < (selectedSkin.unlock.cost || 0)}
                   onClick={() => handleBuy(selectedSkin)}
-                  className={`flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 px-2 font-pixel text-[8px] md:text-[10px] shadow-[3px_3px_0_#08040f] transition-all active:translate-x-[2px] active:translate-y-[2px] ${
+                  className={`flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 px-2 font-pixel text-[8px] md:text-[10px] shadow-[3px_3px_0_var(--ui-bg)] transition-all active:translate-x-[2px] active:translate-y-[2px] ${
                     stats.gems >= (selectedSkin.unlock.cost || 0)
-                      ? 'border-[#08040f] bg-[#ffd166] text-[#120820] hover:bg-[#ffe9a0]'
-                      : 'cursor-not-allowed border-[#38225c] bg-[#160a2c] text-[#9d8fd6]'
+                      ? 'border-[var(--ui-bg)] bg-[var(--ui-gold)] text-[#120820] hover:bg-[var(--ui-gold-hi)]'
+                      : 'cursor-not-allowed border-[var(--ui-border3)] bg-[var(--ui-purple-dim)] text-[var(--ui-muted)]'
                   }`}
                 >
                   BUY ({selectedSkin.unlock.cost} GEMS)
                 </button>
               ) : (
-                <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[#38225c] bg-[#140a26] px-2 text-center font-pixel text-[8px] text-[#9d8fd6] shadow-[2px_2px_0_#08040f]">
+                <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[var(--ui-border3)] bg-[var(--ui-panel2)] px-2 text-center font-pixel text-[8px] text-[var(--ui-muted)] shadow-[2px_2px_0_var(--ui-bg)]">
                   {selectedSkin.unlock.desc}
                 </div>
               )}
@@ -670,8 +670,8 @@ export function SkinsModal({
                   }}
                   className={`flex h-[104px] w-full flex-col justify-between border-2 p-3 text-left transition-all sm:h-[112px] ${
                     selected || isCardFocused
-                      ? 'border-[#3ef2c8] bg-[#221038] shadow-[2px_2px_0_#3ef2c8]'
-                      : 'border-[#2a1b49] bg-[#140a26] shadow-[2px_2px_0_#08040f] hover:border-[#4f3680]'
+                      ? 'border-[var(--ui-accent)] bg-[#221038] shadow-[2px_2px_0_var(--ui-accent)]'
+                      : 'border-[#2a1b49] bg-[var(--ui-panel2)] shadow-[2px_2px_0_var(--ui-bg)] hover:border-[#4f3680]'
                   } ${isCardFocused ? 'nav-focus' : ''}`}
                 >
                   <div className="w-full">
@@ -691,20 +691,20 @@ export function SkinsModal({
 
                     {/* Swatch preview */}
                     <div className="mt-1.5 flex items-center gap-1">
-                      <span className="h-2.5 w-2.5 border border-[#08040f] sm:h-3 sm:w-3" style={{ backgroundColor: skin.suit }} />
-                      <span className="h-2.5 w-2.5 border border-[#08040f] sm:h-3 sm:w-3" style={{ backgroundColor: skin.scarf }} />
-                      <span className="h-2.5 w-2.5 border border-[#08040f] sm:h-3 sm:w-3" style={{ backgroundColor: skin.boot }} />
+                      <span className="h-2.5 w-2.5 border border-[var(--ui-bg)] sm:h-3 sm:w-3" style={{ backgroundColor: skin.suit }} />
+                      <span className="h-2.5 w-2.5 border border-[var(--ui-bg)] sm:h-3 sm:w-3" style={{ backgroundColor: skin.scarf }} />
+                      <span className="h-2.5 w-2.5 border border-[var(--ui-bg)] sm:h-3 sm:w-3" style={{ backgroundColor: skin.boot }} />
                     </div>
                   </div>
 
                   {/* Status / Progress slot with uniform height */}
                   <div className="mt-auto flex h-[26px] w-full flex-col justify-end">
                     {equipped ? (
-                      <span className="font-pixel text-[8px] text-[#3ef2c8]">EQUIPPED</span>
+                      <span className="font-pixel text-[8px] text-[var(--ui-accent)]">EQUIPPED</span>
                     ) : unlocked ? (
-                      <span className="font-pixel text-[8px] text-[#9d8fd6]">UNLOCKED</span>
+                      <span className="font-pixel text-[8px] text-[var(--ui-muted)]">UNLOCKED</span>
                     ) : skin.unlock.type === 'gems' ? (
-                      <span className="font-pixel text-[8px] text-[#ffd166]">{skin.unlock.cost} GEMS</span>
+                      <span className="font-pixel text-[8px] text-[var(--ui-gold)]">{skin.unlock.cost} GEMS</span>
                     ) : (
                       renderCardProgressBar(skin)
                     )}
@@ -716,7 +716,7 @@ export function SkinsModal({
         </div>
 
         {/* Footer with Controls */}
-        <div className="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-t-2 border-[#251842] pt-1.5 text-center font-pixel text-[8px] text-[#9d8fd6]">
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-t-2 border-[var(--ui-border)] pt-1.5 text-center font-pixel text-[8px] text-[var(--ui-muted)]">
           {touch ? (
             <span>TAP CARD: SELECT / PREVIEW · CLICK AGAIN: EQUIP</span>
           ) : (

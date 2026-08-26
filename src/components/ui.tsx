@@ -18,11 +18,11 @@ export function PixelButton({
 }) {
   const styles = {
     primary:
-      'border-[#08040f] bg-[#3ef2c8] text-[#0b0616] hover:bg-[#7ef7ff] shadow-[4px_4px_0_#08040f] active:shadow-[1px_1px_0_#08040f]',
+      'border-[var(--ui-bg)] bg-[var(--ui-accent)] text-[#0b0616] hover:bg-[var(--ui-accent-hi)] shadow-[4px_4px_0_var(--ui-bg)] active:shadow-[1px_1px_0_var(--ui-bg)]',
     danger:
-      'border-[#08040f] bg-[#ff4d6d] text-[#180512] hover:bg-[#ff7a90] shadow-[4px_4px_0_#08040f] active:shadow-[1px_1px_0_#08040f]',
+      'border-[var(--ui-bg)] bg-[var(--ui-danger)] text-[#180512] hover:bg-[var(--ui-danger-hi)] shadow-[4px_4px_0_var(--ui-bg)] active:shadow-[1px_1px_0_var(--ui-bg)]',
     ghost:
-      'border-[#3ef2c8]/60 bg-[#0d2822]/80 text-[#3ef2c8] hover:border-[#3ef2c8] hover:bg-[#165044] hover:text-[#7ef7ff] shadow-[4px_4px_0_#08040f] active:shadow-[1px_1px_0_#08040f]',
+      'border-[var(--ui-accent)]/60 bg-[var(--ui-accent-dim)]/80 text-[var(--ui-accent)] hover:border-[var(--ui-accent)] hover:bg-[var(--ui-accent-dim2)] hover:text-[var(--ui-accent-hi)] shadow-[4px_4px_0_var(--ui-bg)] active:shadow-[1px_1px_0_var(--ui-bg)]',
   }[variant];
   return (
     <button
@@ -30,7 +30,7 @@ export function PixelButton({
       onClick={onClick}
       style={style}
       className={cn(
-        'font-pixel border-2 uppercase leading-none tracking-wide transition-[transform,box-shadow,background-color,border-color,color] duration-75 active:translate-x-[3px] active:translate-y-[3px] focus-visible:outline-2 focus-visible:outline-[#ffd166] focus-visible:outline-offset-2',
+        'font-pixel border-2 uppercase leading-none tracking-wide transition-[transform,box-shadow,background-color,border-color,color] duration-75 active:translate-x-[3px] active:translate-y-[3px] focus-visible:outline-2 focus-visible:outline-[var(--ui-gold)] focus-visible:outline-offset-2',
         small ? 'px-3 py-2 text-[10px]' : 'px-5 py-3 text-[10px]',
         styles,
         className,
@@ -122,7 +122,7 @@ export function Panel({ children, className }: { children: ReactNode; className?
   return (
     <div
       className={cn(
-        'relative border-2 border-[#3ef2c8] bg-[#0e071e] p-5 shadow-[4px_4px_0_#06020c]',
+        'relative border-2 border-[var(--ui-accent)] bg-[var(--ui-panel)] p-5 shadow-[4px_4px_0_var(--ui-bg)]',
         className,
       )}
     >
@@ -133,8 +133,8 @@ export function Panel({ children, className }: { children: ReactNode; className?
 
 export function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="flex flex-col items-center gap-1.5 border-2 border-[#2c1f4d] bg-[#0d0619] px-2 py-2">
-      <span className="font-pixel text-[8px] text-[#9d8fd6]">{label}</span>
+    <div className="flex flex-col items-center gap-1.5 border-2 border-[var(--ui-border2)] bg-[var(--ui-panel3)] px-2 py-2">
+      <span className="font-pixel text-[8px] text-[var(--ui-muted)]">{label}</span>
       <span className="font-pixel text-[10px]" style={{ color: color ?? '#ffffff' }}>
         {value}
       </span>

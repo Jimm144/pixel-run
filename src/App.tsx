@@ -37,6 +37,7 @@ import { SkinUnlockModal } from './components/SkinUnlockModal';
 import { FeedbackModal } from './components/FeedbackModal';
 import { SaveLoadModal } from './components/SaveLoadModal';
 import { backupProgressCookie, restoreCookieBackup } from './game/saveManager';
+import { type UiTheme, cycleUiTheme, loadUiTheme, saveUiTheme } from './game/uiThemes';
 import { BattleModal } from './components/BattleModal';
 import type { MatchResult } from './game/multiplayer/types';
 import {
@@ -65,6 +66,7 @@ const SHARE_URL = 'https://pixelrun.localplayer.dev/';
 // initializer reads localStorage, so a returning player on a moved/new
 // address starts with their progress instead of a blank profile.
 restoreCookieBackup();
+loadUiTheme();
 
 function shareInteger(value: number, fallback = 0) {
   if (!Number.isFinite(value)) return fallback;
@@ -388,6 +390,16 @@ export function App() {
 
   const [swUpdate, setSwUpdate] = useState<ServiceWorkerRegistration | null>(null);
   const swRegRef = useRef<ServiceWorkerRegistration | null>(null);
+
+  /* ---- UI theme (loaded/applied synchronously at module init) */
+  const [uiTheme, setUiTheme] = useState<UiTheme>(() => loadUiTheme());
+  const handleCycleTheme = useCallback(() => {
+    sfx.play('ui');
+    const next = cycleUiTheme(uiTheme.id);
+    saveUiTheme(next);
+    setUiTheme(next);
+    triggerSkinToast(`THEME: ${next.name}`);
+  }, [uiTheme.id, triggerSkinToast]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
@@ -909,7 +921,7 @@ export function App() {
   }, []);
 
   return (
-    <div className="fixed inset-0 h-full h-[100dvh] w-full w-[100dvw] flex min-h-0 min-w-0 items-center justify-center overflow-hidden bg-[#08040f] font-pixel">
+    <div className="fixed inset-0 h-full h-[100dvh] w-full w-[100dvw] flex min-h-0 min-w-0 items-center justify-center overflow-hidden bg-[var(--ui-bg)] font-pixel">
       <div className="relative h-full min-h-0 min-w-0 w-full">
         <GameCanvas
           gameRef={gameRef}
@@ -966,6 +978,8 @@ export function App() {
             onExportSave={handleExportSave}
             onImportSave={handleImportSave}
             onCheckUpdate={handleCheckUpdate}
+            onCycleTheme={handleCycleTheme}
+            themeName={uiTheme.name}
           />
         )}
         {ui === 'paused' && (
@@ -1000,7 +1014,7 @@ export function App() {
         )}
         {questToast.length > 0 && <QuestCompletionToast quests={quests} completed={questToast} touch={touch} />}
         {skinToast && (
-          <div className="fixed top-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 border-2 border-[#3ef2c8] bg-[#0e071e]/95 px-4 py-2 font-pixel text-[#3ef2c8] shadow-[4px_4px_0_#06020c]">
+          <div className="fixed top-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 border-2 border-[var(--ui-accent)] bg-[var(--ui-panel)]/95 px-4 py-2 font-pixel text-[var(--ui-accent)] shadow-[4px_4px_0_var(--ui-bg)]">
             <span className="text-[8px] tablet:text-[10px] uppercase">{skinToast}</span>
           </div>
         )}
@@ -1063,12 +1077,12 @@ export function App() {
           />
         )}
         {swUpdate && ui !== 'playing' && (
-          <div className="fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 border-2 border-[#ffd166] bg-[#0e071e]/95 px-3 py-1.5 font-pixel text-[#ffd166] shadow-[3px_3px_0_#06020c]">
+          <div className="fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 border-2 border-[var(--ui-gold)] bg-[var(--ui-panel)]/95 px-3 py-1.5 font-pixel text-[var(--ui-gold)] shadow-[3px_3px_0_var(--ui-bg)]">
             <span className="text-[8px] tablet:text-[10px]">UPDATE READY</span>
             <button
               type="button"
               onClick={handleApplyUpdate}
-              className="border-2 border-[#ffd166] bg-[#ffd166]/20 px-2 py-0.5 text-[8px] text-[#ffffff] transition-colors hover:bg-[#ffd166]/40 tablet:text-[10px]"
+              className="border-2 border-[var(--ui-gold)] bg-[var(--ui-gold)]/20 px-2 py-0.5 text-[8px] text-[#ffffff] transition-colors hover:bg-[var(--ui-gold)]/40 tablet:text-[10px]"
             >
               RELOAD
             </button>

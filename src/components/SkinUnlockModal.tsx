@@ -94,13 +94,13 @@ export function SkinUnlockModal({ skinId, onEquip, onClose }: SkinUnlockModalPro
       role="dialog"
       aria-modal="true"
       aria-labelledby="skin-unlock-title"
-      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#08040f]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
+      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[var(--ui-bg)]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
       onClick={(e) => {
         if (e.target === e.currentTarget) handleClose();
       }}
     >
       <div
-        className="relative flex w-full max-w-[340px] flex-col items-center border-2 bg-[#0e071e] p-5 text-center font-pixel text-white shadow-[4px_4px_0_#06020c]"
+        className="relative flex w-full max-w-[340px] flex-col items-center border-2 bg-[var(--ui-panel)] p-5 text-center font-pixel text-white shadow-[4px_4px_0_var(--ui-bg)]"
         style={{ borderColor: tierTheme.border }}
       >
         {/* Header Title */}
@@ -113,7 +113,7 @@ export function SkinUnlockModal({ skinId, onEquip, onClose }: SkinUnlockModalPro
         </h3>
 
         {/* Sprite Preview Frame */}
-        <div className="relative mb-3 flex h-28 w-28 items-center justify-center border-2 border-[#251842] bg-[#120722] p-2.5 shadow-[2px_2px_0_#08040f]">
+        <div className="relative mb-3 flex h-28 w-28 items-center justify-center border-2 border-[var(--ui-border)] bg-[var(--ui-panel3)] p-2.5 shadow-[2px_2px_0_var(--ui-bg)]">
           <canvas
             ref={canvasRef}
             width={112}
@@ -124,7 +124,7 @@ export function SkinUnlockModal({ skinId, onEquip, onClose }: SkinUnlockModalPro
         </div>
 
         {/* Skin Name */}
-        <h2 className="text-[12px] uppercase tracking-wide text-white drop-shadow-[0_2px_0_#08040f] sm:text-[16px]">
+        <h2 className="text-[12px] uppercase tracking-wide text-white drop-shadow-[0_2px_0_var(--ui-bg)] sm:text-[16px]">
           {skin.name}
         </h2>
 
@@ -141,7 +141,7 @@ export function SkinUnlockModal({ skinId, onEquip, onClose }: SkinUnlockModalPro
         </span>
 
         {/* Unlock Requirement Info */}
-        <p className="mb-4 text-[8px] text-[#9d8fd6] sm:text-[10px]">
+        <p className="mb-4 text-[8px] text-[var(--ui-muted)] sm:text-[10px]">
           {skin.unlock.desc || 'UNLOCKED'}
         </p>
 

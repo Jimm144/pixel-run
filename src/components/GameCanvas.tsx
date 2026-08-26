@@ -25,7 +25,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   /** Zone accent for the touch pause button — follows the biome. */
-  const [biomeAccent, setBiomeAccent] = useState('#3ef2c8');
+  const [biomeAccent, setBiomeAccent] = useState('var(--ui-accent)');
   const lastZoneName = useRef('');
   /** True while the 3-2-1 countdown dims the scene — buttons dim too. */
   const [counting, setCounting] = useState(false);
@@ -220,7 +220,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
               type="button"
               aria-label="Pause"
               style={{ borderColor: biomeAccent, color: biomeAccent, opacity: counting ? 0.35 : 0.75 }}
-              className="relative flex h-12 w-12 items-center justify-center border-2 bg-[#140a26]/80 shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] tablet:h-16 tablet:w-16"
+              className="relative flex h-12 w-12 items-center justify-center border-2 bg-[var(--ui-panel2)]/80 shadow-[4px_4px_0_var(--ui-bg)] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)] tablet:h-16 tablet:w-16"
               {...pauseHandlers}
             >
               <span className="pointer-events-none absolute -top-[4px] -left-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
@@ -234,14 +234,14 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
             <button
               type="button"
               aria-label="Dive"
-              style={{ borderColor: '#ffd166', color: '#ffd166', opacity: counting ? 0.35 : 0.75 }}
-              className="relative flex h-16 w-16 items-center justify-center border-2 bg-[#140a26]/80 shadow-[4px_4px_0_#08040f] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_#08040f] tablet:h-20 tablet:w-20"
+              style={{ borderColor: 'var(--ui-gold)', color: 'var(--ui-gold)', opacity: counting ? 0.35 : 0.75 }}
+              className="relative flex h-16 w-16 items-center justify-center border-2 bg-[var(--ui-panel2)]/80 shadow-[4px_4px_0_var(--ui-bg)] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)] tablet:h-20 tablet:w-20"
               {...diveHandlers}
             >
-              <span className="pointer-events-none absolute -top-[4px] -left-[4px] h-2 w-2 bg-[#ffd166]" />
-              <span className="pointer-events-none absolute -top-[4px] -right-[4px] h-2 w-2 bg-[#ffd166]" />
-              <span className="pointer-events-none absolute -bottom-[4px] -left-[4px] h-2 w-2 bg-[#ffd166]" />
-              <span className="pointer-events-none absolute -bottom-[4px] -right-[4px] h-2 w-2 bg-[#ffd166]" />
+              <span className="pointer-events-none absolute -top-[4px] -left-[4px] h-2 w-2 bg-[var(--ui-gold)]" />
+              <span className="pointer-events-none absolute -top-[4px] -right-[4px] h-2 w-2 bg-[var(--ui-gold)]" />
+              <span className="pointer-events-none absolute -bottom-[4px] -left-[4px] h-2 w-2 bg-[var(--ui-gold)]" />
+              <span className="pointer-events-none absolute -bottom-[4px] -right-[4px] h-2 w-2 bg-[var(--ui-gold)]" />
               <svg aria-hidden="true" viewBox="0 0 32 32" className="h-9 w-9 tablet:h-12 tablet:w-12" fill="currentColor" shapeRendering="crispEdges">
                 {/* Pixel arrow shaft */}
                 <rect x="12" y="4" width="8" height="12" />

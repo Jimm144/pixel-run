@@ -1332,23 +1332,30 @@ export class Renderer {
     for (const s of this.g.spikes) {
       const x0 = Math.round(s.x - cam);
       if (x0 > VW || x0 + s.n * 8 < 0) continue;
+      const wiggle = (this.g.frame & 3) < 2 ? 0 : 1;
       for (let i = 0; i < s.n; i++) {
         const x = x0 + i * 8;
         const y = Math.round(s.y);
+        // subtle pre-spike wiggle when player is close — telegraph
+        // amber crack decal on the platform top under each blade
+        c.fillStyle = '#ff8c42';
+        c.globalAlpha = 0.55;
+        c.fillRect(x + 2 + wiggle, y + 7, 4, 1);
+        c.globalAlpha = 1;
         // sharp triangular blade — wide at the base, single pixel tip
         c.fillStyle = '#8a8fa8';
-        c.fillRect(x, y + 7, 8, 3);
-        c.fillRect(x + 1, y + 5, 6, 2);
-        c.fillRect(x + 2, y + 3, 4, 2);
-        c.fillRect(x + 3, y + 1, 2, 2);
-        c.fillRect(x + 3, y, 1, 1);
+        c.fillRect(x + wiggle, y + 7, 8, 3);
+        c.fillRect(x + 1 + wiggle, y + 5, 6, 2);
+        c.fillRect(x + 2 + wiggle, y + 3, 4, 2);
+        c.fillRect(x + 3 + wiggle, y + 1, 2, 2);
+        c.fillRect(x + 3 + wiggle, y, 1, 1);
         // bright polished highlight down the centre
         c.fillStyle = '#e8ecff';
-        c.fillRect(x + 3, y + 1, 1, 6);
+        c.fillRect(x + 3 + wiggle, y + 1, 1, 6);
         // hard shadow on the right side
         c.fillStyle = '#3a3d55';
-        c.fillRect(x + 5, y + 3, 1, 4);
-        c.fillRect(x + 6, y + 5, 1, 4);
+        c.fillRect(x + 5 + wiggle, y + 3, 1, 4);
+        c.fillRect(x + 6 + wiggle, y + 5, 1, 4);
       }
     }
   }
@@ -1918,12 +1925,13 @@ export class Renderer {
     const status = (remaining: number, kind: PowerUpKind) => {
       // The propeller flashes with 0s left — draw the icon alone, no "0".
       const text = remaining > 0 ? String(Math.ceil(remaining / 60)) : '';
-      const width = textWidth(text, 1) + 12;
+      const width = textWidth(text, 1) + 26;
       if (x + width > W - 6) return;
       const col = POWERUP_COLORS[kind];
-      c.drawImage(this.powerupSprite(kind), x, y, 9, 9);
-      if (text) drawText(c, text, x + 11, y + 1, 1, col, '#150a24');
-      x += width + 4;
+      // 12x12 shows all 4 border edges (18 sprite scaled) without half-pixel clipping
+      c.drawImage(this.powerupSprite(kind), x, y, 12, 12);
+      if (text) drawText(c, text, x + 14, y + 1, 1, col, '#150a24');
+      x += width + 2;
     };
     if (this.g.shielded) status(this.g.shieldTimer, 'shield');
     if (this.g.jumpShoes > 0) status(this.g.jumpShoes, 'shoes');
@@ -2098,22 +2106,23 @@ export class Renderer {
   private drawCombo(labelCenterX: number, y: number) {
     if (this.g.combo <= 1) return;
     const c = this.ctx;
-    const t = this.g.comboT / COMBO_TIME;
-    // Only rebuild the label string when its parts change.
     const key = this.g.combo + '|' + this.g.mult();
     if (key !== this.hudComboKey) {
       this.hudComboKey = key;
       this.hudComboStr = 'X' + this.g.mult() + ' COMBO ' + this.g.combo;
     }
     const label = this.hudComboStr;
-    const flash = this.g.comboPulse;
-    const col = flash > 0.4 ? '#ffffff' : '#ffd166';
-    // Bar grows with the label so a long "X8 COMBO 9999" can't overflow it.
-    const bw = Math.max(84, textWidth(label, 1) + 12);
+    const mult = this.g.mult();
+    let col = mult >= 4 ? '#ff4d6d' : mult >= 2 ? '#ffd166' : this.g.zone.accent;
+    const bw = Math.max(110, textWidth(label, 1) + 16);
     drawTextCentered(c, label, labelCenterX, y, 1, col, '#150a24');
     c.fillStyle = '#150a24';
-    c.fillRect(labelCenterX - bw / 2 - 1, y + 9, bw + 2, 7);
-    c.fillStyle = t > 0.3 ? this.g.zone.accent : '#ff4d6d';
-    c.fillRect(labelCenterX - bw / 2, y + 10, Math.round(bw * t), 5);
+    c.fillRect(labelCenterX - bw / 2 - 1, y + 9, bw + 2, 9);
+    // thinner bar: 5px instead of 7
+    // color by time remaining: green -> orange -> red
+    const ratio = this.g.comboT / COMBO_TIME;
+    let barCol = ratio > 0.5 ? '#3ef2c8' : ratio > 0.2 ? '#ffd166' : '#ff4d6d';
+    c.fillStyle = barCol;
+    c.fillRect(labelCenterX - bw / 2, y + 10, Math.round(bw * (this.g.comboT / COMBO_TIME)), 5);
   }
 }

@@ -49,8 +49,8 @@ export const GRAV_DIVE = 1.1;
 export const JUMP_V = 6.4;
 export const DJUMP_V = 6.4;
 export const MAX_FALL = 10;
-export const COYOTE = 12;
-export const BUFFER = 8;
+export const COYOTE = 14;
+export const BUFFER = 10;
 /** Camera anchor as a fraction of view width (112/400 on desktop). */
 const ANCHOR_FRAC = 0.28;
 export function anchorX() {

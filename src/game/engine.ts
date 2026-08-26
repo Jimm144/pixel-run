@@ -146,12 +146,14 @@ export class Game implements GenHost, RenderHost {
   jumpHeld!: boolean;
   jumpBuf!: number;
   diveHeld!: boolean;
+  diveBuf!: number;
   moveDir!: number;
   savedJumpHeld!: boolean;
   savedDiveHeld!: boolean;
   savedMoveDir!: number;
   /** Jump buffer saved across a mid-countdown pause (taps must survive to GO). */
   savedJumpBuf!: number;
+  savedDiveBuf!: number;
 
   /* ---- world arrays (read by WorldGen + Renderer through the host contract) */
   platforms!: Platform[];
@@ -290,11 +292,13 @@ export class Game implements GenHost, RenderHost {
       jumpHeld: false,
       jumpBuf: 0,
       diveHeld: false,
+      diveBuf: 0,
       moveDir: 0,
       savedJumpHeld: false,
       savedDiveHeld: false,
       savedMoveDir: 0,
       savedJumpBuf: 0,
+      savedDiveBuf: 0,
       platforms: [],
       pickups: [],
       powerups: [],
@@ -465,6 +469,7 @@ export class Game implements GenHost, RenderHost {
         jumps: 0,
         coyote: 0,
         jumpBuf: 0,
+        diveBuf: 0,
         jumpHeld: false,
         diveHeld: false,
         moveDir: 0,
@@ -576,6 +581,7 @@ export class Game implements GenHost, RenderHost {
     // A tap buffered during the countdown must fire at GO after the pause —
     // it can't be re-derived from jumpHeld (the finger already lifted).
     this.savedJumpBuf = this.countdown > 0 ? this.jumpBuf : 0;
+      this.savedDiveBuf = this.countdown > 0 ? this.diveBuf : 0;
     this.jumpHeld = false;
     this.jumpBuf = 0;
     this.diveHeld = false;
@@ -593,8 +599,11 @@ export class Game implements GenHost, RenderHost {
       this.savedDiveHeld = false;
       this.savedMoveDir = 0;
       if (this.jumpHeld) this.jumpBuf = BUFFER; // buffered for GO
+      if (this.diveHeld) this.diveBuf = 6;
       else if (this.savedJumpBuf > 0) this.jumpBuf = this.savedJumpBuf; // mid-countdown tap survives
+      if (this.savedDiveBuf > 0) this.diveBuf = this.savedDiveBuf;
       this.savedJumpBuf = 0;
+      this.savedDiveBuf = 0;
       if (this.countdown === 0) {
         this.goTimer = 0; // don't flash "GO" over the fresh countdown
         this.countdown = 180; // 3s of "3-2-1-GO" before control resumes
@@ -656,14 +665,21 @@ export class Game implements GenHost, RenderHost {
     // buffer here cancels any buffered jump (held input survives via
     // jumpHeld, which resume()/the countdown re-buffers at GO).
     this.jumpBuf = 0;
+    this.diveBuf = 0;
     if (this.phase === 'paused') {
       this.savedJumpHeld = false;
-      this.savedJumpBuf = 0; // releasing during the pause cancels the buffered tap too
+      this.savedJumpBuf = 0;
+      this.savedDiveBuf = 0;
+      this.savedDiveBuf = 0; // releasing during the pause cancels the buffered tap too
     }
   }
   pressDive() {
-    if ((this.phase !== 'playing' && this.phase !== 'ready') || this.countdown > 0) return;
+    if ((this.phase !== 'playing' && this.phase !== 'ready') || this.countdown > 0) {
+      this.diveBuf = 6;
+      return;
+    }
     this.diveHeld = true;
+    this.diveBuf = 6;
     if (!this.onGround && this.vy > -3) {
       this.diving = true;
       this.padFlight = 0;
@@ -675,12 +691,13 @@ export class Game implements GenHost, RenderHost {
   }
   releaseDive() {
     this.diveHeld = false;
+    this.diveBuf = 0;
     if (this.phase === 'paused') this.savedDiveHeld = false;
   }
   setMove(d: number) {
     if (this.phase !== 'playing') {
       this.moveDir = 0;
-      if (this.phase === 'paused') this.savedMoveDir = 0;
+      if (this.phase === 'paused') this.savedMoveDir = d;
       return;
     }
     this.moveDir = d;
@@ -801,7 +818,7 @@ export class Game implements GenHost, RenderHost {
     this.shake *= 0.88;
     if (this.shake < 0.002) this.shake = 0;
     const s = this.shake * this.shake * 4;
-    this.shakeX = 0;
+    this.shakeX = rnd(-s, s);
     this.shakeY = rnd(-s, s);
     if (this.flash > 0) this.flash = Math.max(0, this.flash - 0.06);
 
@@ -882,6 +899,7 @@ export class Game implements GenHost, RenderHost {
 
     /* ---- jumping */
     if (this.jumpBuf > 0) this.jumpBuf--;
+    if (this.diveBuf > 0) this.diveBuf--;
     if (this.coyote > 0) this.coyote--;
     if (this.jumpBuf > 0) {
       if (this.onGround || this.coyote > 0) {
@@ -1274,6 +1292,8 @@ export class Game implements GenHost, RenderHost {
     sfx.play(e.kind === 'spiker' ? 'slam' : 'stomp');
     if (e.kind === 'spiker') haptics.diveSlam();
     else haptics.stomp();
+    this.freeze = Math.max(this.freeze, e.kind === 'spiker' ? 5 : 3);
+    this.addShake(e.kind === 'spiker' ? 0.42 : 0.18 + (this.mult() - 1) * 0.06);
   }
 
   private updateEntities(): boolean {
@@ -1558,9 +1578,7 @@ export class Game implements GenHost, RenderHost {
           const stomping =
             stompedThisFrame ||
             isFlyerStomp ||
-            isDescending ||
-            isAboveMidpoint ||
-            wasAbove;
+            (isDescending && (isAboveMidpoint || wasAbove));
 
           if (stomping) {
             this.killEnemy(e, STOMP_PTS);
@@ -1592,6 +1610,10 @@ export class Game implements GenHost, RenderHost {
     if (!shieldTriggered && this.invuln === 0) {
       for (const s of this.spikes) {
         if (s.x > this.camX + VW + 20 || s.x + s.n * 8 < this.camX - 20) continue;
+        // 2px landing forgiveness — clipping the very edge of a spike patch
+        // on the landing frame feels unfair (common "bullshit death").
+        const wasJustAbove = prevFeet <= s.y + 7;
+        if (wasJustAbove && pyc + ph > s.y + 5 && pyc + ph - (s.y + 5) < 3) continue;
         if (
           pxc + pw - 4 > s.x + 2 &&
           pxc + 4 < s.x + s.n * 8 - 2 &&
@@ -1995,7 +2017,17 @@ export class Game implements GenHost, RenderHost {
     const jumpScale = (p.jumpShoes && p.jumpShoes > 0) ? 1.18 : 1;
     const maxJumps = (p.tripleJump && p.tripleJump > 0) ? 3 : 2;
     if (p.jumpBuf > 0) p.jumpBuf--;
+    if (p.diveBuf > 0) p.diveBuf--;
     if (p.coyote > 0) p.coyote--;
+    if (p.diveBuf > 0 && !p.onGround && p.vy > -3 && !p.diving) {
+      p.diving = true;
+      p.padFlight = 0;
+      p.vy = Math.max(p.vy, 6.5);
+      p.spin = 0;
+      p.sx = 0.8;
+      p.sy = 1.25;
+      p.diveBuf = 0;
+    }
     if (p.jumpBuf > 0) {
       if (p.onGround || p.coyote > 0) {
         p.jumpBuf = 0;
