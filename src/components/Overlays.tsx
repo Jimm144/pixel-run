@@ -294,6 +294,14 @@ function PixelSwordsIcon({ className = 'h-5 w-5 sm:h-6 sm:w-6' }: { className?: 
   );
 }
 
+function PixelGithubIcon({ className = 'h-2.5 w-2.5 tablet:h-3 tablet:w-3' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={`inline-block shrink-0 align-middle ${className}`} fill="currentColor" aria-hidden="true">
+      <path fillRule="evenodd" clipRule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
+    </svg>
+  );
+}
+
 function GladiatorPreview() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -487,7 +495,7 @@ export function StartScreen({
             aria-pressed={musicOn}
             className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_var(--ui-bg)] transition-[transform,box-shadow,background-color,border-color,color] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)] tablet:px-5 tablet:py-3 tablet:text-[10px] ${
               musicOn
-                ? 'border-[var(--ui-accent)]/40 bg-[var(--ui-accent)]/10 text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/20'
+                ? 'border-[var(--ui-accent)]/50 bg-[var(--ui-accent)]/15 text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/25'
                 : 'border-[var(--ui-muted)]/30 bg-[var(--ui-panel3)] text-[var(--ui-muted)] hover:border-[var(--ui-muted)]/60'
             }`}
           >
@@ -499,7 +507,7 @@ export function StartScreen({
             aria-pressed={sfxOn}
             className={`flex flex-1 items-center justify-center gap-2 border-2 px-3 py-2 font-pixel text-[8px] shadow-[2px_2px_0_var(--ui-bg)] transition-[transform,box-shadow,background-color,border-color,color] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)] tablet:px-5 tablet:py-3 tablet:text-[10px] ${
               sfxOn
-                ? 'border-[var(--ui-gold)]/40 bg-[var(--ui-gold)]/10 text-[var(--ui-gold)] hover:bg-[var(--ui-gold)]/20'
+                ? 'border-[var(--ui-accent)]/50 bg-[var(--ui-accent)]/15 text-[var(--ui-accent)] hover:bg-[var(--ui-accent)]/25'
                 : 'border-[var(--ui-muted)]/30 bg-[var(--ui-panel3)] text-[var(--ui-muted)] hover:border-[var(--ui-muted)]/60'
             }`}
           >
@@ -515,27 +523,28 @@ export function StartScreen({
               onClick={onOpenBattle}
               aria-label="Multiplayer Battle"
               title="Multiplayer Battle"
-              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[var(--ui-danger)]/70 bg-[var(--ui-danger-dim)] text-[var(--ui-danger)] shadow-[2px_2px_0_var(--ui-bg)] transition-[transform,box-shadow,background-color] duration-75 hover:bg-[var(--ui-danger)]/20 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)]"
+              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[var(--ui-danger)]/70 bg-[var(--ui-danger-dim)] text-[var(--ui-danger)] shadow-[3px_3px_0_var(--ui-bg)] transition-[transform,box-shadow,background-color] duration-75 hover:bg-[var(--ui-danger)]/20 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)]"
             >
-              <PixelSwordsIcon className="h-5 w-5 sm:h-6 sm:w-6" />
+              <PixelSwordsIcon className="h-5 w-5" />
             </button>
           )}
-          <PixelButton
+          <button
+            type="button"
             onClick={onStart}
-            className="flex flex-1 items-center justify-center gap-3 py-3.5 text-[10px] tablet:py-4 tablet:text-[12px]"
+            className="flex flex-1 items-center justify-center gap-2 border-2 border-[var(--ui-bg)] bg-[var(--ui-accent)] py-3 sm:py-3.5 font-pixel text-[10px] sm:text-[11px] uppercase leading-none tracking-wide text-[#08040f] shadow-[3px_3px_0_var(--ui-bg)] transition-[transform,box-shadow,background-color] duration-75 hover:bg-[var(--ui-accent-hi)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)] tablet:text-[12px]"
           >
-            <PixelPlayIcon />
+            <PixelPlayIcon className="h-4 w-4" />
             <span>START RUN</span>
-          </PixelButton>
+          </button>
           {onOpenSkins && (
             <button
               type="button"
               onClick={onOpenSkins}
               aria-label="Character Locker"
               title="Character Locker"
-              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[var(--ui-accent)]/60 bg-[var(--ui-accent-dim)] text-[var(--ui-accent)] shadow-[2px_2px_0_var(--ui-bg)] transition-[transform,box-shadow,background-color] duration-75 hover:bg-[var(--ui-accent)]/20 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)]"
+              className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[var(--ui-gold)]/70 bg-[var(--ui-gold-dim)] text-[var(--ui-gold)] shadow-[3px_3px_0_var(--ui-bg)] transition-[transform,box-shadow,background-color] duration-75 hover:bg-[var(--ui-gold)]/20 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)]"
             >
-              <PixelShirtIcon className="h-5 w-5 sm:h-6 sm:w-6" />
+              <PixelShirtIcon className="h-5 w-5" />
             </button>
           )}
         </div>
@@ -543,81 +552,70 @@ export function StartScreen({
         {showDiscordPromo && onDiscordPromoClaim && onDiscordPromoDismiss && (
           <DiscordPromo onClaim={onDiscordPromoClaim} onDismiss={onDiscordPromoDismiss} />
         )}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 font-pixel text-[8px] tablet:text-[10px]">
           <a
             href="https://github.com/Jimm144/pixel-run"
             target="_blank"
             rel="noreferrer noopener"
             onClick={(e) => e.stopPropagation()}
-            className="font-pixel text-[8px] text-[var(--ui-muted)] transition-colors hover:text-[#ffffff] tablet:text-[10px]"
+            className="inline-flex items-center gap-1 text-[#ffffff]/80 transition-colors hover:text-[#ffffff]"
           >
-            GITHUB
+            <PixelGithubIcon />
+            <span>GITHUB</span>
           </a>
           {onExportSave && (
-            <>
-              <span className="text-[8px] text-[var(--ui-border2)]">|</span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onExportSave();
-                }}
-                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[8px] text-[var(--ui-gold)]/70 transition-colors hover:text-[var(--ui-gold)] tablet:text-[10px]"
-              >
-                <span>SAVE</span>
-                <PixelArrow dir="down" />
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onExportSave();
+              }}
+              className="inline-flex items-center gap-1 cursor-pointer text-[var(--ui-gold)]/80 transition-colors hover:text-[var(--ui-gold)]"
+            >
+              <PixelArrow dir="down" className="h-2 w-2" />
+              <span>SAVE</span>
+            </button>
           )}
           {onImportSave && (
-            <>
-              <span className="text-[8px] text-[var(--ui-border2)]">|</span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onImportSave();
-                }}
-                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[8px] text-[var(--ui-purple)]/70 transition-colors hover:text-[var(--ui-purple)] tablet:text-[10px]"
-              >
-                <span>LOAD</span>
-                <PixelArrow dir="up" />
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onImportSave();
+              }}
+              className="inline-flex items-center gap-1 cursor-pointer text-[var(--ui-purple)]/80 transition-colors hover:text-[var(--ui-purple)]"
+            >
+              <PixelArrow dir="up" className="h-2 w-2" />
+              <span>LOAD</span>
+            </button>
           )}
           {onCheckUpdate && (
-            <>
-              <span className="text-[8px] text-[var(--ui-border2)]">|</span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCheckUpdate();
-                }}
-                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[8px] text-[var(--ui-accent)]/70 transition-colors hover:text-[var(--ui-accent)] tablet:text-[10px]"
-              >
-                <span>UPDATE</span>
-                <PixelReloadIcon />
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCheckUpdate();
+              }}
+              className="inline-flex items-center gap-1 cursor-pointer text-[var(--ui-accent)]/80 transition-colors hover:text-[var(--ui-accent)]"
+            >
+              <PixelReloadIcon />
+              <span>UPDATE</span>
+            </button>
           )}
           {onCycleTheme && themeName && (
-            <>
-              <span className="text-[8px] text-[var(--ui-border2)]">|</span>
-              <button
-                type="button"
-                aria-label="Change color theme"
-                title={`THEME: ${themeName}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCycleTheme();
-                }}
-                className="inline-flex items-center gap-1 cursor-pointer font-pixel text-[8px] text-[var(--ui-purple)]/70 transition-colors hover:text-[var(--ui-purple)] tablet:text-[10px]"
-              >
-                <PixelSwatchIcon />
-                <span>{themeName}</span>
-              </button>
-            </>
+            <button
+              type="button"
+              aria-label="Change color theme"
+              title={`THEME: ${themeName}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCycleTheme();
+              }}
+              className="inline-flex items-center gap-1 cursor-pointer text-[var(--ui-purple)]/80 transition-colors hover:text-[var(--ui-purple)]"
+            >
+              <PixelSwatchIcon />
+              <span>{themeName}</span>
+            </button>
           )}
         </div>
       </div>

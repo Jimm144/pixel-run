@@ -27,13 +27,24 @@ function hexToRgb(hex: string): [number, number, number] {
   return cached;
 }
 
+const MIX_CACHE = new Map<string, string>();
+
 function mixColor(c1: string, c2: string, t: number): string {
+  if (t <= 0) return c1;
+  if (t >= 1) return c2;
+  const quantT = Math.round(t * 20) / 20;
+  const key = `${c1}|${c2}|${quantT}`;
+  const hit = MIX_CACHE.get(key);
+  if (hit) return hit;
+  if (MIX_CACHE.size > 256) MIX_CACHE.clear();
   const [r1, g1, b1] = hexToRgb(c1);
   const [r2, g2, b2] = hexToRgb(c2);
-  const r = Math.round(r1 + (r2 - r1) * t);
-  const g = Math.round(g1 + (g2 - g1) * t);
-  const b = Math.round(b1 + (b2 - b1) * t);
-  return `rgb(${r},${g},${b})`;
+  const r = Math.round(r1 + (r2 - r1) * quantT);
+  const g = Math.round(g1 + (g2 - g1) * quantT);
+  const b = Math.round(b1 + (b2 - b1) * quantT);
+  const res = `rgb(${r},${g},${b})`;
+  MIX_CACHE.set(key, res);
+  return res;
 }
 
 function clamp(v: number, min: number, max: number): number {

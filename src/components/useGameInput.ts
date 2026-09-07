@@ -4,13 +4,14 @@ import { DIVE_SWIPE_PX } from '../game/types';
 import type { Game } from '../game/engine';
 import { inputManager, type GamepadAction } from '../game/input';
 
-export type UI = 'start' | 'playing' | 'paused' | 'over' | 'results';
+export type UI = 'start' | 'playing' | 'paused' | 'over' | 'results' | 'victory';
 
-// Modals sit at different z-layers: Battle/Skins at z-50, Save/Load and skin
-// unlock at z-[100], the feedback banner at z-40. Search highest-first.
-const MODAL_ROOT_SELECTOR = '.fixed.z-\\[100\\], .fixed.z-50, .fixed.z-40';
+// Modals sit at different z-layers: Save/Load and skin unlock at z-[100],
+// CampaignVictoryModal at z-[60], Battle/Skins/Updates at z-50, feedback at z-40. Search highest-first.
+const MODAL_ROOT_SELECTOR = '.fixed.z-\\[100\\], .fixed.z-\\[60\\], .fixed.z-50, .fixed.z-40';
 const CLOSE_BUTTON_SELECTOR =
   '.fixed.z-50 button[aria-label="Close"], .fixed.z-50 button[title="Close"], ' +
+  '.fixed.z-\\[60\\] button[aria-label="Close"], .fixed.z-\\[60\\] button[title="Close"], ' +
   '.fixed.z-\\[100\\] button[aria-label="Close"], .fixed.z-\\[100\\] button[title="Close"]';
 
 const JUMP = ['Space', 'ArrowUp', 'KeyW', 'KeyZ', 'KeyK'];
@@ -337,7 +338,8 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
       }
       if (!isModalOpen) {
         e.preventDefault();
-        if (u === 'start' || u === 'over') cbRef.current.onStart();
+        if (u === 'start') cbRef.current.onStart();
+        else if (u === 'over') cbRef.current.onRestart();
         else if (u === 'paused') cbRef.current.onResume();
       }
       return;
@@ -348,7 +350,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
       if (isModalOpen) {
         const closeBtn = document.querySelector<HTMLButtonElement>(CLOSE_BUTTON_SELECTOR);
         if (closeBtn) closeBtn.click();
-      } else if (u === 'paused' || u === 'over' || u === 'results') {
+      } else if (u === 'paused' || u === 'over' || u === 'results' || u === 'victory') {
         cbRef.current.onMenu?.();
       }
       return;
@@ -624,8 +626,10 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
             active.click();
           } else if (isModalOpen) {
             navigate2D('down');
-          } else if (u === 'start' || u === 'over') {
+          } else if (u === 'start') {
             cbRef.current.onStart();
+          } else if (u === 'over') {
+            cbRef.current.onRestart();
           } else if (u === 'paused') {
             cbRef.current.onResume();
           }
@@ -735,7 +739,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
 
   return {
     wrapHandlers: { onPointerDown: onWrapPointerDown, onPointerMove: onWrapPointerMove },
-    diveHandlers: { onPointerDown: onDivePointerDown, onPointerUp: onDivePointerUp, onContextMenu: noContextMenu },
+    diveHandlers: { onPointerDown: onDivePointerDown, onPointerUp: onDivePointerUp, onPointerCancel: onDivePointerUp, onContextMenu: noContextMenu },
     pauseHandlers: { onPointerDown: onPausePointerDown, onContextMenu: noContextMenu },
   };
 }

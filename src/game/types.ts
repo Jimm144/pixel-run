@@ -136,7 +136,7 @@ export interface BiomeEventTrigger {
   kind: BgKind;
   used: boolean;
 }
-export type EnemyKind = 'slime' | 'hopper' | 'scarab' | 'spiker' | 'flyer';
+export type EnemyKind = 'slime' | 'hopper' | 'scarab' | 'spiker' | 'flyer' | 'roller';
 export interface Enemy {
   kind: EnemyKind;
   x: number;
@@ -254,6 +254,8 @@ export interface GenHost {
   startX: number;
   zone: Zone;
   zoneOrder: number[];
+  isCampaign?: boolean;
+  campaignLevel?: number;
   diff(): number;
   runSpeed(): number;
 }
@@ -322,4 +324,9 @@ export interface RenderHost {
   localPlayers?: LocalPlayerState[];
   isMultiplayer?: boolean;
   opponentStates?: Map<string, OpponentInfo>;
+  isCampaign?: boolean;
+  campaignLevel?: number;
+  /** Campaign goal in engine distance units (meters * 10); 0/undefined = none. */
+  campaignTarget?: number;
+  startX: number;
 }

@@ -1,5 +1,5 @@
 import { drawText, drawTextCentered, pad, textWidth } from './font';
-import { lerpZone, mix, sampleSky, shade, ZONES, type Zone } from './palette';
+import { lerpZone, mix, sampleSky, shade, ZONES, type BgKind, type Zone } from './palette';
 import { ParticleSystem } from './particles';
 import { FloatTexts } from './texts';
 import { SKINS, type SkinDef } from './skins';
@@ -387,7 +387,6 @@ export class Renderer {
     // atlases only re-bake at step boundaries — a dozen steps read as one
     // smooth fade, and the ground already stepped like this. Platform art is
     // baked once per pure biome and crossfaded (drawPlatforms), so it never
-    // re-bakes mid-fade and can't drift into half-blended colours.
     const df = this.g.distance / 10;
     const zi = Math.floor(df / ZONE_LEN_M);
     const frac = df / ZONE_LEN_M - zi;
@@ -398,14 +397,14 @@ export class Renderer {
       const ziChanged = zi !== this.lastZoneZi;
       this.lastZoneZi = zi;
       this.lastZoneT = t;
-      const i = this.g.zoneOrder[zi % ZONES.length];
-      const ni = this.g.zoneOrder[(zi + 1) % ZONES.length];
+      const i = this.g.zoneOrder[zi % ZONES.length] || 0;
+      const ni = this.g.zoneOrder[(zi + 1) % ZONES.length] || 0;
       this.platI = i;
       this.platNI = ni;
       if (ziChanged) this.prunePlatformCaches();
-      this.g.zone = lerpZone(ZONES[i], ZONES[ni], t);
-      this.transOut = ZONES[i];
-      this.transIn = ZONES[ni];
+      this.g.zone = lerpZone(ZONES[i] || ZONES[0], ZONES[ni] || ZONES[0], t);
+      this.transOut = ZONES[i] || ZONES[0];
+      this.transIn = ZONES[ni] || ZONES[0];
       this.refreshZoneColors(this.g.zone);
     }
 
@@ -697,7 +696,99 @@ export class Renderer {
     const colors = this.getShadedLayerColors(Z, nightT, isEclipse);
     c.globalAlpha = alpha;
     const m = this.mobileView;
-    if (bg === 'jungle') {
+    if (bg === 'construction') {
+      // haze band + layered crane/scaffold skyline
+      this.seeBand(0.10, m ? 112 : 116, m ? 46 : 44, 0.05, 0.9, 0.05, colors.far);
+      this.drawLandmarks(Z, colors.back, 0.18, m ? 124 : 142, 42, 19, colors.decoFar, m ? 0.8 : 0.7);
+      this.drawLandmarks(Z, colors.mid, 0.28, m ? 158 : 160, 52, 37, colors.decoFar, 1);
+      // smog gradient at the horizon
+      c.globalAlpha = alpha * 0.3;
+      c.fillStyle = colors.back;
+      c.fillRect(-20, m ? 106 : 108, VW + 40, 14);
+      c.globalAlpha = 1;
+    } else if (bg === 'pirates') {
+      // sea horizon + distant sail silhouettes + island mounds
+      this.seeBand(0.08, m ? 128 : 132, m ? 40 : 20, 0.006, 0.03, 0, colors.far);
+      // ocean horizon line
+      c.globalAlpha = alpha;
+      c.fillStyle = colors.decoMid;
+      c.fillRect(-20, m ? 128 : 130, VW + 40, 2);
+      // distant sails
+      for (let k = 0; k < 4; k++) {
+        const sx = ((hash(k * 31.7) * (VW + 160) - this.g.camX * 0.12) % (VW + 160) + VW + 160) % (VW + 160) - 80;
+        const sy = (m ? 122 : 124) + hash(k * 7.7) * 6;
+        c.fillStyle = colors.back;
+        c.fillRect(Math.round(sx), Math.round(sy), 3, 8);
+        c.fillRect(Math.round(sx) - 3, Math.round(sy) + 2, 9, 2);
+      }
+      this.drawLandmarks(Z, colors.mid, 0.24, m ? 150 : 152, 64, 41, colors.decoMid, 1);
+      c.globalAlpha = 1;
+    } else if (bg === 'ocean') {
+      // god rays + drifting fish silhouettes + kelp towers
+      this.seeBand(0.07, m ? 130 : 134, m ? 40 : 20, 0.005, 1.6, 0.5, colors.far);
+      // light shafts from the surface
+      c.globalAlpha = alpha * 0.14;
+      c.fillStyle = '#caf0f8';
+      for (let k = 0; k < 5; k++) {
+        const shx = ((hash(k * 13.1) * (VW + 200) - this.g.camX * 0.1) % (VW + 200) + VW + 200) % (VW + 200) - 100;
+        const w2 = 14 + hash(k * 3.3) * 18;
+        for (let yy = 0; yy < 90; yy += 3) {
+          c.fillRect(Math.round(shx + yy * 0.22), yy, Math.round(w2 * (1 - yy / 110)), 2);
+        }
+      }
+      c.globalAlpha = alpha;
+      // fish silhouettes
+      for (let k = 0; k < 5; k++) {
+        const fx = ((hash(k * 47.3) * (VW + 140) - this.g.camX * 0.16 + this.g.frame * 0.08) % (VW + 140) + VW + 140) % (VW + 140) - 70;
+        const fy = 40 + hash(k * 9.1) * 70;
+        c.fillStyle = colors.back;
+        c.fillRect(Math.round(fx), Math.round(fy), 7, 3);
+        c.fillRect(Math.round(fx) - 3, Math.round(fy) - 1, 3, 5);
+      }
+      this.drawLandmarks(Z, colors.mid, 0.24, m ? 158 : 160, 58, 59, colors.decoMid, 1);
+      c.globalAlpha = 1;
+    } else if (bg === 'volcano') {
+      // jagged charcoal ridge + smoke glow horizon
+      this.seeBand(0.09, m ? 114 : 118, m ? 44 : 42, 0.09, 0.4, 0.15, colors.far);
+      c.globalAlpha = alpha * 0.35;
+      c.fillStyle = '#ff5400';
+      c.fillRect(-20, m ? 108 : 110, VW + 40, 3);
+      c.globalAlpha = alpha;
+      this.drawLandmarks(Z, colors.back, 0.19, m ? 124 : 142, 38, 29, colors.decoMid, m ? 0.8 : 0.65);
+      this.drawLandmarks(Z, colors.mid, 0.28, m ? 158 : 160, 46, 73, colors.decoMid, 1);
+      c.globalAlpha = 1;
+    } else if (bg === 'hell') {
+      // blood haze + towering obsidian spires
+      this.seeBand(0.10, m ? 116 : 120, m ? 44 : 42, 0.12, 0.5, 0.5, colors.far);
+      c.globalAlpha = alpha * 0.4;
+      c.fillStyle = '#ff0054';
+      c.fillRect(-20, m ? 112 : 114, VW + 40, 2);
+      c.globalAlpha = alpha;
+      this.drawLandmarks(Z, colors.back, 0.18, m ? 126 : 144, 30, 19, colors.decoFar, m ? 0.8 : 0.7);
+      this.drawLandmarks(Z, colors.mid, 0.28, m ? 158 : 160, 44, 37, colors.decoFar, 1);
+      c.globalAlpha = 1;
+    } else if (bg === 'heaven') {
+      // layered cloud banks + radiant beam
+      this.seeBand(0.06, m ? 118 : 122, m ? 40 : 24, 0.004, 1.6, 0.5, colors.far);
+      // radiating beam from above
+      c.globalAlpha = alpha * 0.12;
+      c.fillStyle = '#ffd700';
+      const bx2 = ((VW * 0.6 - this.g.camX * 0.05) % VW + VW) % VW;
+      for (let yy = 0; yy < 100; yy += 3) {
+        c.fillRect(Math.round(bx2 - yy * 0.3), yy, Math.round(yy * 0.6 + 8), 2);
+      }
+      c.globalAlpha = alpha;
+      // slow cloud puffs (far)
+      for (let k = 0; k < 4; k++) {
+        const cx3 = ((hash(k * 21.3) * (VW + 180) - this.g.camX * 0.1) % (VW + 180) + VW + 180) % (VW + 180) - 90;
+        const cy3 = 30 + hash(k * 5.5) * 40;
+        c.fillStyle = colors.back;
+        c.fillRect(Math.round(cx3), Math.round(cy3), 22, 6);
+        c.fillRect(Math.round(cx3) + 5, Math.round(cy3) - 4, 12, 5);
+      }
+      this.drawLandmarks(Z, colors.mid, 0.22, m ? 152 : 154, 70, 59, colors.decoMid, 1);
+      c.globalAlpha = 1;
+    } else if (bg === 'jungle') {
       this.seeBand(0.12, m ? 116 : 120, m ? 40 : 30, 0.02, 0.15, 0, colors.far);
       this.drawLandmarks(Z, colors.back, 0.19, m ? 124 : 142, 38, 29, colors.decoMid, m ? 0.8 : 0.65);
       this.drawLandmarks(Z, colors.mid, 0.28, m ? 158 : 160, 46, 73, colors.decoMid, 1);
@@ -749,10 +840,251 @@ export class Renderer {
       if (nx < -70 || nx > VW + 70) continue;
       const roll = hash(seed);
       const ground = Math.round(baseY) + 2;
-      if (bg === 'jungle') this.drawJungleShape(roll, nx, ground, seed, scale, col);
+      if (bg === 'construction') this.drawConstructionShape(roll, nx, ground, seed, scale, col, tipCol);
+      else if (bg === 'pirates') this.drawPiratesShape(roll, nx, ground, seed, scale, col, tipCol);
+      else if (bg === 'ocean') this.drawOceanShape(roll, nx, ground, seed, scale, col, tipCol);
+      else if (bg === 'volcano') this.drawVolcanoShape(roll, nx, ground, seed, scale, col, tipCol);
+      else if (bg === 'hell') this.drawHellShape(roll, nx, ground, seed, scale, col, tipCol);
+      else if (bg === 'heaven') this.drawHeavenShape(roll, nx, ground, seed, scale, col, tipCol);
+      else if (bg === 'jungle') this.drawJungleShape(roll, nx, ground, seed, scale, col);
       else if (bg === 'desert') this.drawDesertShape(roll, nx, ground, seed, scale, col);
       else if (bg === 'tundra') this.drawTundraShape(roll, nx, ground, seed, scale, col, tipCol);
       else this.drawCityShape(roll, nx, ground, seed, scale, col, tipCol);
+    }
+  }
+
+  private drawConstructionShape(
+    roll: number,
+    nx: number,
+    ground: number,
+    seed: number,
+    scale: number,
+    col: string,
+    tipCol: string,
+  ) {
+    const c = this.ctx;
+    c.fillStyle = col;
+    const h = Math.round((28 + Math.floor(hash(seed + 3) * 32)) * scale);
+    const bw = Math.round((18 + Math.floor(hash(seed + 4) * 18)) * scale);
+    const top = ground - h;
+
+    if (roll < 0.35) {
+      // 1. Tower crane with lattice mast and horizontal jib
+      c.fillRect(Math.round(nx), top, 4, h + 2);
+      c.fillRect(Math.round(nx - 12), top + 2, 36, 3);
+      c.fillRect(Math.round(nx - 12), top, 6, 6);
+      c.fillRect(Math.round(nx + 14), top + 5, 2, 12);
+      c.fillRect(Math.round(nx + 10), top + 17, 10, 2);
+      // Red aviation warning beacon on peak
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx) + 1, top - 4, 2, 3);
+      c.fillStyle = col;
+    } else if (roll < 0.7) {
+      // 2. Open steel skyscraper framework under construction
+      c.fillRect(Math.round(nx), top, 3, h + 2);
+      c.fillRect(Math.round(nx + bw - 3), top, 3, h + 2);
+      for (let y = top + 8; y < ground - 2; y += 12) {
+        c.fillRect(Math.round(nx), y, bw, 2);
+      }
+      // Top antenna beacon
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx + bw / 2 - 1), top - 6, 2, 6);
+      c.fillStyle = col;
+    } else {
+      // 3. Concrete building block with roof scaffolding
+      c.fillRect(Math.round(nx), top + 8, bw, h - 6);
+      c.fillRect(Math.round(nx + 2), top, 2, 8);
+      c.fillRect(Math.round(nx + bw - 4), top, 2, 8);
+      c.fillRect(Math.round(nx), top + 2, bw, 2);
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx + 4), top + 14, 3, 3);
+      c.fillRect(Math.round(nx + bw - 7), top + 14, 3, 3);
+      c.fillStyle = col;
+    }
+  }
+
+  private drawPiratesShape(
+    roll: number,
+    nx: number,
+    ground: number,
+    seed: number,
+    scale: number,
+    col: string,
+    tipCol: string,
+  ) {
+    const c = this.ctx;
+    c.fillStyle = col;
+    const h = Math.round((24 + Math.floor(hash(seed + 3) * 20)) * scale);
+
+    if (roll < 0.35) {
+      // 1. Tropical palm tree with curving trunk & fronds
+      c.fillRect(Math.round(nx - 1), ground - h, 3, h + 2);
+      c.fillRect(Math.round(nx - 2), ground - h - 3, 5, 5);
+      // Fronds
+      c.fillRect(Math.round(nx - 10), ground - h, 8, 3);
+      c.fillRect(Math.round(nx + 3), ground - h - 1, 9, 3);
+      c.fillRect(Math.round(nx - 5), ground - h - 5, 5, 3);
+      c.fillRect(Math.round(nx + 1), ground - h - 6, 5, 3);
+    } else if (roll < 0.7) {
+      // 2. Shipwreck mast & yardarm
+      c.fillRect(Math.round(nx), ground - h, 3, h + 2);
+      c.fillRect(Math.round(nx - 10), ground - h + 6, 23, 2);
+      c.fillRect(Math.round(nx - 3), ground - h + 2, 9, 4);
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx + 3), ground - h - 4, 6, 4);
+      c.fillStyle = col;
+    } else {
+      // 3. Coastal sea cliff / rock stack
+      const w = Math.round(18 * scale);
+      c.fillRect(Math.round(nx - w / 2), ground - h + 4, w, h);
+      c.fillRect(Math.round(nx - w / 3), ground - h, Math.round(w * 0.66), 5);
+    }
+  }
+
+  private drawOceanShape(
+    roll: number,
+    nx: number,
+    ground: number,
+    seed: number,
+    scale: number,
+    col: string,
+    tipCol: string,
+  ) {
+    const c = this.ctx;
+    c.fillStyle = col;
+    const h = Math.round((22 + Math.floor(hash(seed + 3) * 22)) * scale);
+
+    if (roll < 0.35) {
+      // 1. Branching coral reef spire with glowing polyps
+      c.fillRect(Math.round(nx - 2), ground - h, 5, h + 2);
+      c.fillRect(Math.round(nx - 8), ground - h + 6, 7, 3);
+      c.fillRect(Math.round(nx - 8), ground - h + 2, 3, 5);
+      c.fillRect(Math.round(nx + 3), ground - h + 10, 8, 3);
+      c.fillRect(Math.round(nx + 8), ground - h + 6, 3, 5);
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx - 8), ground - h, 3, 2);
+      c.fillRect(Math.round(nx + 8), ground - h + 4, 3, 2);
+      c.fillRect(Math.round(nx - 1), ground - h - 2, 3, 2);
+      c.fillStyle = col;
+    } else if (roll < 0.7) {
+      // 2. Tall swaying kelp stalk
+      c.fillRect(Math.round(nx - 1), ground - h, 3, h + 2);
+      c.fillRect(Math.round(nx - 5), ground - h + 4, 4, 3);
+      c.fillRect(Math.round(nx + 2), ground - h + 10, 5, 3);
+      c.fillRect(Math.round(nx - 6), ground - h + 16, 5, 3);
+    } else {
+      // 3. Sunken ancient Atlantean stone pillar ruins
+      const w = Math.round(14 * scale);
+      c.fillRect(Math.round(nx - w / 2), ground - h, w, h + 2);
+      c.fillRect(Math.round(nx - w / 2 - 2), ground - h - 3, w + 4, 4);
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx - 1), ground - h + 6, 2, 8);
+      c.fillStyle = col;
+    }
+  }
+
+  private drawVolcanoShape(
+    roll: number,
+    nx: number,
+    ground: number,
+    seed: number,
+    scale: number,
+    col: string,
+    tipCol: string,
+  ) {
+    const c = this.ctx;
+    c.fillStyle = col;
+    const h = Math.round((26 + Math.floor(hash(seed + 3) * 26)) * scale);
+    const w = Math.round((28 + Math.floor(hash(seed + 4) * 20)) * scale);
+    const halfW = w / 2;
+
+    if (roll < 0.5) {
+      // 1. Basalt caldera horn with glowing magma crater rim
+      for (let colOffset = -Math.floor(halfW); colOffset <= Math.floor(halfW); colOffset++) {
+        const ratio = 1 - Math.abs(colOffset) / halfW;
+        const colH = Math.round(h * ratio);
+        if (colH > 0) {
+          c.fillRect(Math.round(nx + colOffset), ground - colH, 1, colH + 2);
+        }
+      }
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx - 3), ground - h, 7, 3);
+      c.fillRect(Math.round(nx - 1), ground - h + 3, 2, 8);
+      c.fillStyle = col;
+    } else {
+      // 2. Jagged obsidian rock spire
+      for (let colOffset = -Math.floor(halfW * 0.6); colOffset <= Math.floor(halfW * 0.6); colOffset++) {
+        const ratio = Math.pow(1 - Math.abs(colOffset) / (halfW * 0.6), 1.5);
+        const colH = Math.round(h * ratio);
+        if (colH > 0) {
+          c.fillRect(Math.round(nx + colOffset), ground - colH, 1, colH + 2);
+        }
+      }
+    }
+  }
+
+  private drawHellShape(
+    roll: number,
+    nx: number,
+    ground: number,
+    seed: number,
+    scale: number,
+    col: string,
+    tipCol: string,
+  ) {
+    const c = this.ctx;
+    c.fillStyle = col;
+    const h = Math.round((28 + Math.floor(hash(seed + 3) * 24)) * scale);
+    const w = Math.round(18 * scale);
+
+    if (roll < 0.45) {
+      // 1. Gothic demon arch pillar with curved horns
+      c.fillRect(Math.round(nx - w / 2), ground - h, w, h + 2);
+      c.fillRect(Math.round(nx - w / 2 - 3), ground - h - 6, 3, 8);
+      c.fillRect(Math.round(nx + w / 2), ground - h - 6, 3, 8);
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx - 2), ground - h + 6, 4, 8);
+      c.fillStyle = col;
+    } else {
+      // 2. Sharp obsidian needle spire with hellfire brazier
+      c.fillRect(Math.round(nx - 2), ground - h, 4, h + 2);
+      c.fillRect(Math.round(nx - 6), ground - h + 8, 12, 3);
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx - 3), ground - h - 3, 6, 4);
+      c.fillStyle = col;
+    }
+  }
+
+  private drawHeavenShape(
+    roll: number,
+    nx: number,
+    ground: number,
+    seed: number,
+    scale: number,
+    col: string,
+    tipCol: string,
+  ) {
+    const c = this.ctx;
+    c.fillStyle = col;
+    const h = Math.round((26 + Math.floor(hash(seed + 3) * 22)) * scale);
+    const w = Math.round(16 * scale);
+
+    if (roll < 0.5) {
+      // 1. Neoclassical temple column with gilded capital & base
+      c.fillRect(Math.round(nx - w / 2), ground - h, w, h + 2);
+      c.fillRect(Math.round(nx - w / 2 - 2), ground - h - 3, w + 4, 4);
+      c.fillRect(Math.round(nx - w / 2 - 2), ground - 3, w + 4, 4);
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx - w / 2), ground - h - 4, w, 2);
+      c.fillStyle = col;
+    } else {
+      // 2. Cumulus cloud bank mound with hovering halo
+      const cw = Math.round(24 * scale);
+      c.fillRect(Math.round(nx - cw / 2), ground - h + 8, cw, h);
+      c.fillRect(Math.round(nx - cw / 3), ground - h + 2, Math.round(cw * 0.66), 8);
+      c.fillStyle = tipCol;
+      c.fillRect(Math.round(nx - 4), ground - h - 6, 8, 4);
+      c.fillStyle = col;
     }
   }
 
@@ -1096,6 +1428,283 @@ export class Renderer {
   // redoing dozens of fillRect/hash() calls per platform per frame. Two
   // pure-biome bakes crossfade over a transition, so the art never re-bakes
   // at fade steps and every platform in a frame shares one palette.
+  /** Bespoke ground bodies for the six campaign worlds — each biome reads
+   *  as its own material (steel, wood, seabed, basalt, obsidian, marble).
+   *  Runs once per platform bake; deterministic from p.seed. */
+  private bakeCampaignGround(
+    c: CanvasRenderingContext2D,
+    bg: BgKind,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    seed: number,
+  ) {
+    // Deterministic hash helpers bound to this platform
+    const hs = (n: number) => hash(seed * 0.618 + n * 7.13);
+
+    // Cliff-edge shadow shared by all campaign grounds
+    for (let gy = y + 6; gy < y + h; gy++) {
+      const ratio = Math.min(1, (gy - (y + 6)) / 40);
+      c.globalAlpha = ratio * 0.5;
+      c.fillStyle = '#0a0612';
+      c.fillRect(x + w - 1, gy, 1, 1);
+    }
+    c.globalAlpha = 1;
+
+    // ---- dark-to-mid vertical wash under the rim (all biomes)
+    const wash = (c1: string, c2: string, c3: string, split1: number, split2: number) => {
+      c.fillStyle = c1;
+      c.fillRect(x, y + 4, w, h);
+      c.fillStyle = c2;
+      c.fillRect(x, y + split1, w, Math.max(0, h - split1));
+      c.fillStyle = c3;
+      c.fillRect(x, y + split2, w, Math.max(0, h - split2));
+    };
+
+    if (bg === 'construction') {
+      // CONCRETE + STEEL
+      wash('#4a4458', '#39344a', '#2b2735', 16 + Math.floor(hs(1) * 8), 40 + Math.floor(hs(2) * 12));
+      // poured-concrete blotches (organic, hash-placed)
+      for (let i = 0; i < Math.max(3, w / 12); i++) {
+        const bx = x + 2 + Math.floor(hs(3 + i) * (w - 10));
+        const by = y + 10 + Math.floor(hs(40 + i) * Math.min(44, h - 14));
+        const bw2 = 4 + Math.floor(hs(80 + i) * 9);
+        c.fillStyle = hs(120 + i) > 0.5 ? '#544e66' : '#403a52';
+        c.fillRect(bx, by, bw2, 2 + Math.floor(hs(160 + i) * 3));
+        c.fillStyle = '#5b5570';
+        c.fillRect(bx, by, bw2, 1);
+      }
+      // rebar line with sag
+      c.fillStyle = '#6a6480';
+      let ry = y + 13 + Math.floor(hs(7) * 6);
+      for (let sx = 1; sx < w - 1; sx += 4) {
+        c.fillRect(x + sx, ry, 4, 1);
+        if (hs(sx + seed) > 0.72) ry += hs(sx) > 0.5 ? 1 : -1;
+      }
+      // steel girder base plate + bolts
+      const gy0 = y + Math.max(20, h - 12);
+      c.fillStyle = '#ffd166';
+      c.fillRect(x, gy0, w, 2);
+      c.fillStyle = '#d62828';
+      let gx = x + 2 + Math.floor(hs(9) * 6);
+      while (gx < x + w - 5) {
+        c.fillRect(gx, gy0 + 2, 3, Math.max(4, y + h - gy0 - 3));
+        c.fillStyle = '#ba181b';
+        c.fillRect(gx + 3, gy0 + 2, 1, Math.max(4, y + h - gy0 - 3));
+        c.fillStyle = '#d62828';
+        gx += 9 + Math.floor(hs(gx) * 7);
+      }
+      // rivets
+      c.fillStyle = '#8d99ae';
+      for (let sx = 5; sx < w - 3; sx += 10 + Math.floor(hs(sx) * 6)) {
+        c.fillRect(x + sx, y + 8, 2, 2);
+      }
+    } else if (bg === 'pirates') {
+      // SHIP HULL WOOD - planks with organic widths
+      let py2 = y + 4;
+      let row = 0;
+      while (py2 < y + h) {
+        const ph2 = 9 + Math.floor(hs(row * 3.3) * 5);
+        c.fillStyle = row % 2 ? '#5d300c' : '#714010';
+        c.fillRect(x, py2, w, Math.min(ph2, y + h - py2));
+        // grain streaks
+        for (let i = 0; i < Math.max(1, w / 22); i++) {
+          const gx2 = x + Math.floor(hs(row * 17 + i * 3.1) * (w - 8));
+          c.fillStyle = hs(row * 5 + i) > 0.5 ? '#835520' : '#4e2a0b';
+          c.fillRect(gx2, py2 + 2 + Math.floor(hs(row + i) * Math.max(1, ph2 - 5)), 5 + Math.floor(hs(i * 9) * 8), 1);
+        }
+        // seam
+        c.fillStyle = '#381d08';
+        c.fillRect(x, py2 + ph2 - 1, w, 1);
+        // staggered plank breaks
+        const off = Math.floor(hs(row * 7.7) * 20);
+        for (let sx = off + 4; sx < w; sx += 18 + Math.floor(hs(row + sx) * 8)) {
+          c.fillStyle = '#31200f';
+          c.fillRect(x + sx, py2, 1, ph2);
+        }
+        py2 += ph2;
+        row++;
+      }
+      // nails along random seams
+      c.fillStyle = '#ffd166';
+      for (let i = 0; i < w / 10; i++) {
+        const nx2 = x + 3 + Math.floor(hs(30 + i) * (w - 6));
+        const ny2 = y + 8 + Math.floor(hs(60 + i) * Math.max(1, h - 14));
+        c.fillRect(nx2, ny2, 1, 1);
+      }
+      // barnacle clusters low
+      for (let i = 0; i < w / 16; i++) {
+        if (hs(90 + i) < 0.4) continue;
+        c.fillStyle = hs(120 + i) > 0.6 ? '#48cae4' : '#90e0ef';
+        c.fillRect(x + 2 + Math.floor(hs(150 + i) * (w - 6)), y + h - 10 - Math.floor(hs(180 + i) * 8), 2, 1);
+      }
+    } else if (bg === 'ocean') {
+      // SEABED - sand, silt drifts, coral, shells
+      c.fillStyle = '#d4a373';
+      c.fillRect(x, y + 4, w, 6);
+      // sand ripples
+      for (let sx = 0; sx < w; sx += 3) {
+        const rr = hs(sx * 0.9) * 2;
+        c.fillStyle = rr > 1.2 ? '#e0b78a' : '#c2915f';
+        c.fillRect(x + sx, y + 5 + Math.floor(rr), 3, 1);
+      }
+      wash('#1d3557', '#182c45', '#12233a', 24 + Math.floor(hs(1) * 8), 52 + Math.floor(hs(2) * 10));
+      // silt mounds
+      for (let i = 0; i < Math.max(2, w / 14); i++) {
+        const mx = x + Math.floor(hs(3 + i) * (w - 8));
+        const my = y + 16 + Math.floor(hs(30 + i) * Math.min(40, h - 20));
+        c.fillStyle = '#2b4c6f';
+        c.fillRect(mx, my, 6 + Math.floor(hs(60 + i) * 7), 2);
+      }
+      // coral fans
+      for (let i = 0; i < w / 22; i++) {
+        if (hs(90 + i) < 0.35) continue;
+        const cx2 = x + 4 + Math.floor(hs(120 + i) * (w - 12));
+        const cy2 = y + 12 + Math.floor(hs(150 + i) * Math.min(34, h - 16));
+        const cc = hs(180 + i) > 0.55 ? '#ff70a6' : '#3ef2c8';
+        c.fillStyle = cc;
+        c.fillRect(cx2, cy2, 2, 4);
+        c.fillRect(cx2 - 2, cy2 + 1, 2, 2);
+        c.fillRect(cx2 + 2, cy2 + 1, 3, 2);
+        c.fillStyle = '#ffffff';
+        c.fillRect(cx2, cy2 - 1, 1, 1);
+      }
+      // shells in the sand
+      for (let sx = 3; sx < w - 3; sx += 5 + Math.floor(hs(sx) * 6)) {
+        if (hs(sx + 7) > 0.5) {
+          c.fillStyle = '#fffaf3';
+          c.fillRect(x + sx, y + 7, 2, 1);
+        }
+      }
+    } else if (bg === 'volcano') {
+      // BASALT columns, varied widths, lava veins
+      let vx0 = x;
+      let col = 0;
+      while (vx0 < x + w) {
+        const cw = 9 + Math.floor(hs(col * 5.1) * 9);
+        c.fillStyle = col % 2 ? '#2a1212' : '#3b1a1a';
+        c.fillRect(vx0, y + 4, Math.min(cw, x + w - vx0), h);
+        // column top highlight
+        c.fillStyle = '#4d2323';
+        c.fillRect(vx0, y + 4, Math.min(cw, x + w - vx0), 2);
+        // seam
+        c.fillStyle = '#180a0a';
+        c.fillRect(vx0 + cw - 1, y + 4, 1, h);
+        vx0 += cw;
+        col++;
+      }
+      // charred band under the surface
+      c.fillStyle = '#4a1515';
+      c.fillRect(x, y + 5, w, 3);
+      // lava veins - wavy, branching, hot cores
+      const veins = Math.max(2, Math.floor(w / 20));
+      for (let i = 0; i < veins; i++) {
+        let vy2 = y + 9 + Math.floor(hs(i * 3.7) * 6);
+        let vxx = x + 4 + Math.floor((i / veins) * (w - 10) + hs(i) * 8);
+        while (vy2 < y + h) {
+          c.fillStyle = '#ff5400';
+          c.fillRect(vxx, vy2, 2, 3);
+          if (hs(vxx + vy2) > 0.62) {
+            c.fillStyle = '#ffd166';
+            c.fillRect(vxx, vy2, 2, 1);
+          }
+          vy2 += 3;
+          const drift = hs(vxx * 0.7 + vy2);
+          if (drift > 0.66) vxx += 2;
+          else if (drift < 0.3) vxx -= 2;
+          vxx = Math.max(x + 1, Math.min(x + w - 3, vxx));
+        }
+      }
+      // ember pockets
+      for (let i = 0; i < w / 16; i++) {
+        if (hs(200 + i) > 0.45) {
+          c.fillStyle = hs(230 + i) > 0.5 ? '#ffd166' : '#ff7a33';
+          c.fillRect(x + 3 + Math.floor(hs(260 + i) * (w - 6)), y + 12 + Math.floor(hs(290 + i) * Math.min(24, h - 16)), 1, 1);
+        }
+      }
+    } else if (bg === 'hell') {
+      // OBSIDIAN - glassy black facets, ember cracks, bone
+      wash('#1a0510', '#150309', '#0f0206', 20 + Math.floor(hs(1) * 10), 48 + Math.floor(hs(2) * 12));
+      // glassy facets - random shine slabs
+      for (let i = 0; i < w / 11; i++) {
+        const fx = x + Math.floor(hs(3 + i) * (w - 12));
+        const fy = y + 10 + Math.floor(hs(30 + i) * Math.min(44, h - 14));
+        const fw = 6 + Math.floor(hs(60 + i) * 10);
+        c.fillStyle = '#24000e';
+        c.fillRect(fx, fy, fw, 3);
+        c.fillStyle = '#32001a';
+        c.fillRect(fx, fy, fw, 1);
+        c.fillStyle = '#3d0120';
+        c.fillRect(fx + fw - 2, fy + 1, 1, 2);
+      }
+      // ember cracks with flares
+      const cracks = Math.max(2, Math.floor(w / 18));
+      for (let i = 0; i < cracks; i++) {
+        let vy2 = y + 9 + Math.floor(hs(i * 4.4) * 5);
+        let vxx = x + 3 + Math.floor((i / cracks) * (w - 8) + hs(i * 9) * 6);
+        while (vy2 < y + h) {
+          c.fillStyle = '#ff0054';
+          c.fillRect(vxx, vy2, 1, 2);
+          if (hs(vxx + vy2 * 1.3) > 0.78) {
+            c.fillStyle = '#ffd166';
+            c.fillRect(vxx - 1, vy2, 3, 1);
+          }
+          vy2 += 2;
+          if (hs(vxx + vy2 * 2.1) > 0.6) vxx += hs(vy2) > 0.5 ? 1 : -1;
+          vxx = Math.max(x, Math.min(x + w - 1, vxx));
+        }
+      }
+      // bone flecks
+      for (let i = 0; i < w / 20; i++) {
+        if (hs(310 + i) > 0.55) {
+          c.fillStyle = '#b8a8d8';
+          c.fillRect(x + 4 + Math.floor(hs(340 + i) * (w - 8)), y + 14 + Math.floor(hs(370 + i) * Math.min(28, h - 18)), 3, 1);
+        }
+      }
+    } else {
+      // HEAVEN - marble with drifting gold veins, cloud dissolve below
+      wash('#e8ecff', '#dde4f8', '#cdd5f0', 18 + Math.floor(hs(1) * 8), 44 + Math.floor(hs(2) * 10));
+      // marble veins - branching, soft
+      const veins = Math.max(2, Math.floor(w / 15));
+      for (let i = 0; i < veins; i++) {
+        let vy2 = y + 9 + Math.floor(hs(i * 6.2) * 5);
+        let vxx = x + 3 + Math.floor((i / veins) * (w - 8) + hs(i) * 5);
+        while (vy2 < y + h - 6) {
+          c.fillStyle = hs(vxx + vy2) > 0.5 ? '#b4bfe4' : '#a5b1dc';
+          c.fillRect(vxx, vy2, 1, 4);
+          vy2 += 4;
+          if (hs(vxx * 1.1 + vy2) > 0.5) vxx += hs(vy2 * 3) > 0.5 ? 1 : -1;
+          vxx = Math.max(x, Math.min(x + w - 1, vxx));
+        }
+      }
+      // gold inlay band under the rim
+      c.fillStyle = '#ffd700';
+      c.fillRect(x, y + 9, w, 1);
+      for (let sx = 3; sx < w - 3; sx += 9 + Math.floor(hs(sx) * 5)) {
+        c.fillRect(x + sx, y + 11, 2, 1);
+      }
+      // subtle grey marble chips
+      for (let i = 0; i < w / 18; i++) {
+        if (hs(400 + i) > 0.5) {
+          c.fillStyle = '#c3ccec';
+          c.fillRect(x + 4 + Math.floor(hs(430 + i) * (w - 8)), y + 14 + Math.floor(hs(460 + i) * 16), 2, 1);
+        }
+      }
+      // cloud dissolve at the base
+      c.globalAlpha = 0.5;
+      c.fillStyle = '#ffffff';
+      c.fillRect(x, y + h - 18, w, 18);
+      c.globalAlpha = 0.85;
+      for (let sx = 0; sx < w; sx += 5) {
+        const puff = 5 + Math.floor(hs(sx * 1.3 + seed) * 8);
+        c.fillStyle = '#ffffff';
+        c.fillRect(x + sx, y + h - puff, 4, puff);
+      }
+      c.globalAlpha = 1;
+    }
+  }
+
   private getPlatformCache(p: Platform, k: number, Z: Zone): HTMLCanvasElement {
     let byZone = this.platformCaches.get(k);
     if (!byZone) {
@@ -1129,7 +1738,67 @@ export class Renderer {
     if (p.float) {
       c.fillStyle = Z.groundDark;
       c.fillRect(x, y + 3, w, 6);
-      if (bg === 'desert') {
+      if (bg === 'construction') {
+        // steel I-beam
+        c.fillStyle = '#f77f00';
+        c.fillRect(x, y, w, 3);
+        c.fillStyle = '#ffd166';
+        c.fillRect(x, y, w, 1);
+        c.fillStyle = '#ba181b';
+        c.fillRect(x, y + 3, w, 3);
+        c.fillStyle = '#3a3546';
+        for (let sx = 4; sx < w - 3; sx += 10) c.fillRect(x + sx, y + 6, 3, 5);
+      } else if (bg === 'pirates') {
+        // wooden plank with rope hangs
+        c.fillStyle = '#6f3b11';
+        c.fillRect(x, y, w, 5);
+        c.fillStyle = '#381d08';
+        c.fillRect(x, y + 5, w, 2);
+        c.fillStyle = '#ffd166';
+        for (let sx = 3; sx < w - 2; sx += 12) c.fillRect(x + sx, y + 2, 1, 1);
+        c.fillStyle = '#5d300c';
+        c.fillRect(x + Math.max(2, w / 2 - 1), y + 7, 2, 5);
+      } else if (bg === 'ocean') {
+        // coral shelf
+        c.fillStyle = '#ff70a6';
+        c.fillRect(x, y, w, 3);
+        c.fillStyle = '#ff9ebb';
+        c.fillRect(x, y, w, 1);
+        c.fillStyle = '#1d3557';
+        c.fillRect(x, y + 3, w, 4);
+        c.fillStyle = '#3ef2c8';
+        for (let sx = 3; sx < w - 2; sx += 9) c.fillRect(x + sx, y + 7, 2, 3);
+      } else if (bg === 'volcano') {
+        // basalt slab with a glowing vein
+        c.fillStyle = '#3d1c1c';
+        c.fillRect(x, y, w, 5);
+        c.fillStyle = '#ff5400';
+        c.fillRect(x, y, w, 1);
+        c.fillStyle = '#ffd166';
+        c.fillRect(x + Math.floor(w * 0.3), y + 1, Math.max(3, Math.floor(w * 0.2)), 1);
+        c.fillStyle = '#1c0c0c';
+        c.fillRect(x, y + 5, w, 3);
+      } else if (bg === 'hell') {
+        // obsidian shard
+        c.fillStyle = '#24000e';
+        c.fillRect(x, y, w, 5);
+        c.fillStyle = '#ff0054';
+        c.fillRect(x, y, w, 1);
+        c.fillStyle = '#150a24';
+        c.fillRect(x, y + 5, w, 3);
+        c.fillStyle = '#ffd166';
+        for (let sx = 4; sx < w - 3; sx += 11) c.fillRect(x + sx, y + 2, 1, 1);
+      } else if (bg === 'heaven') {
+        // cloud puff with gold rim
+        c.fillStyle = '#ffffff';
+        c.fillRect(x, y, w, 6);
+        c.fillStyle = '#ffd700';
+        c.fillRect(x, y, w, 1);
+        c.fillStyle = '#cfd6f2';
+        c.fillRect(x, y + 6, w, 3);
+        c.fillStyle = '#e8ecff';
+        for (let sx = 0; sx < w; sx += 6) c.fillRect(x + sx, y + 6, 4, 2);
+      } else if (bg === 'desert') {
         // sandy shelf — no green accent lip
         c.fillStyle = shade(Z.ground, 0.12);
         c.fillRect(x, y + 1, w, 2);
@@ -1173,6 +1842,13 @@ export class Renderer {
         for (let i = 3; i < w - 2; i += 7) c.fillRect(x + i, y + 8, 1, 1);
       }
     } else {
+      const isCampaignBg =
+        bg === 'construction' || bg === 'pirates' || bg === 'ocean' ||
+        bg === 'volcano' || bg === 'hell' || bg === 'heaven';
+
+      if (isCampaignBg) {
+        this.bakeCampaignGround(c, bg, x, y, w, h, p.seed);
+      } else {
       // ---- body: layered strata that get darker with depth
       c.fillStyle = Z.ground;
       c.fillRect(x, y + 4, w, h);
@@ -1211,6 +1887,7 @@ export class Renderer {
         c.fillStyle = rockLit;
         c.fillRect(bx, by, bw2, 1);
       }
+      }
 
       // ---- surface cap: uneven, per-column height so the top isn't a ruler
       const capTop = bg === 'desert' ? shade(Z.ground, 0.22) : Z.accent;
@@ -1225,8 +1902,7 @@ export class Renderer {
         c.fillRect(x + sx, capY, 2, 2);
       }
 
-      // ---- biome surface dressing (desert gets a clean sand top — no cap
-      // decorations; the surface cap above already gives it its rim)
+      // ---- biome surface dressing
       if (bg === 'jungle') {
         c.fillStyle = Z.deco;
         for (let i = 0; i * 22 < w - 6; i++) {
@@ -1240,6 +1916,52 @@ export class Renderer {
         c.fillRect(x + 1, y - 2, w - 2, 2);
         c.fillStyle = Z.deco;
         c.fillRect(x + 2, y - 1, w - 4, 1);
+      } else if (bg === 'construction') {
+        // Hazard yellow and dark rock platform rim
+        c.fillStyle = '#ffd166';
+        c.fillRect(x, y - 1, w, 2);
+        c.fillStyle = '#221a2c';
+        for (let i = 0; i < w; i += 8) {
+          c.fillRect(x + i, y - 1, 4, 2);
+        }
+      } else if (bg === 'volcano') {
+        // Glowing magma cracks
+        c.fillStyle = '#ff5400';
+        c.fillRect(x, y - 1, w, 2);
+        c.fillStyle = '#ffd166';
+        for (let i = 0; i < w; i += 12) {
+          c.fillRect(x + i + 2, y - 1, 3, 2);
+        }
+      } else if (bg === 'hell') {
+        // Nether fire brimstone edge
+        c.fillStyle = '#ff0054';
+        c.fillRect(x, y - 1, w, 2);
+        c.fillStyle = '#ffd166';
+        for (let i = 0; i < w; i += 10) {
+          c.fillRect(x + i, y - 1, 3, 2);
+        }
+      } else if (bg === 'heaven') {
+        // Pure radiant gold and white celestial rim
+        c.fillStyle = '#ffffff';
+        c.fillRect(x, y - 1, w, 2);
+        c.fillStyle = '#ffd700';
+        for (let i = 0; i < w; i += 6) {
+          c.fillRect(x + i, y - 1, 3, 2);
+        }
+      } else if (bg === 'ocean') {
+        // Glowing bioluminescent wave crest
+        c.fillStyle = '#3ef2c8';
+        c.fillRect(x, y - 1, w, 2);
+        c.fillStyle = '#ffffff';
+        for (let i = 0; i < w; i += 14) {
+          c.fillRect(x + i, y - 2, 4, 2);
+        }
+      } else if (bg === 'pirates') {
+        // Wooden plank pegs
+        c.fillStyle = '#ffd166';
+        for (let i = 0; i * 16 < w - 6; i++) {
+          c.fillRect(x + 4 + i * 16, y, 2, 2);
+        }
       } else {
         c.fillStyle = cRivet;
         for (let i = 0; i * 18 < w - 8; i++) c.fillRect(x + 6 + i * 18, y + 7, 2, 2);
@@ -1269,9 +1991,11 @@ export class Renderer {
   private drawPlatforms() {
     const c = this.ctx;
     const cam = Math.round(this.g.camX);
-    const outZ = ZONES[this.platI];
-    const inZ = ZONES[this.platNI];
+    const outZ = ZONES[this.platI] || ZONES[0];
+    const inZ = ZONES[this.platNI] || ZONES[0];
     const t = this.zoneFadeT;
+    const cacheKey = this.platI;
+    const inCacheKey = this.platNI;
     // Crossfade the two pure-biome bakes, mirroring the band-tile blend.
     // Outside a transition only one drawImage is issued per platform.
     const fading = t > 0 && t < 1;
@@ -1282,13 +2006,13 @@ export class Renderer {
       if (x > VW + 4 || x + p.w < -4) continue;
       const y = Math.round(p.y);
       if (!fading) {
-        c.drawImage(this.getPlatformCache(p, this.platI, outZ), x, y - PLATFORM_CACHE_PAD);
+        c.drawImage(this.getPlatformCache(p, cacheKey, outZ), x, y - PLATFORM_CACHE_PAD);
         continue;
       }
       c.globalAlpha = 1;
-      c.drawImage(this.getPlatformCache(p, this.platI, outZ), x, y - PLATFORM_CACHE_PAD);
+      c.drawImage(this.getPlatformCache(p, cacheKey, outZ), x, y - PLATFORM_CACHE_PAD);
       c.globalAlpha = t;
-      c.drawImage(this.getPlatformCache(p, this.platNI, inZ), x, y - PLATFORM_CACHE_PAD);
+      c.drawImage(this.getPlatformCache(p, inCacheKey, inZ), x, y - PLATFORM_CACHE_PAD);
       c.globalAlpha = 1;
     }
   }
@@ -1327,33 +2051,134 @@ export class Renderer {
   private drawSpikes() {
     const c = this.ctx;
     const cam = Math.round(this.g.camX);
+    const camp = this.g.isCampaign;
+    const cbg = this.g.zone.bg;
+    const geyser = camp && (cbg === 'volcano' || cbg === 'hell');
 
     /* spikes — sharp metal blades, grounded directly on the platform */
     for (const s of this.g.spikes) {
       const x0 = Math.round(s.x - cam);
       if (x0 > VW || x0 + s.n * 8 < 0) continue;
+      // Geysers are one wide vent per patch, cycling erupt / cool
+      if (geyser) {
+        const cyc = (this.g.frame + Math.floor(s.x * 0.21)) % 240;
+        const erupting = cyc < 110;
+        const building = !erupting && cyc >= 210;
+        for (let i = 0; i < s.n; i++) {
+          const x = x0 + i * 8;
+          const y = Math.round(s.y);
+          // stone vent base
+          c.fillStyle = '#2b2b33';
+          c.fillRect(x + 1, y + 4, 6, 4);
+          c.fillStyle = '#43434f';
+          c.fillRect(x + 1, y + 3, 6, 1);
+          c.fillStyle = cbg === 'volcano' ? '#ff5400' : '#ff0054';
+          c.fillRect(x + 3, y + 5, 2, 1);
+          if (erupting) {
+            // flame column with hot core
+            const flick = (this.g.frame + i * 7) % 9;
+            const hgt = 26 + (flick % 3) * 4;
+            c.fillStyle = cbg === 'volcano' ? '#ff5400' : '#ff0054';
+            c.fillRect(x + 1, y - hgt + 4, 6, hgt);
+            c.fillStyle = '#ffd166';
+            c.fillRect(x + 2, y - hgt + 6, 4, hgt - 4);
+            c.fillStyle = '#ffffff';
+            c.fillRect(x + 3, y - hgt + 8, 2, hgt - 10);
+          } else if (building) {
+            // pre-eruption shudder
+            const sh = (this.g.frame & 2) ? 1 : 0;
+            c.fillStyle = '#ffd166';
+            c.fillRect(x + sh, y - 2, 6, 2);
+          }
+        }
+        continue;
+      }
+      if (camp && cbg === 'construction') {
+        // rotating saw blades — one per spike slot, same hitbox
+        for (let i = 0; i < s.n; i++) {
+          const cx2 = x0 + i * 8 + 4;
+          const cy2 = Math.round(s.y) + 5;
+          const rot = this.g.frame * 0.3 + i * 1.3;
+          c.fillStyle = '#8a8fa8';
+          // 8 teeth
+          for (let t = 0; t < 8; t++) {
+            const a = rot + (t * Math.PI) / 4;
+            const tx = cx2 + Math.round(Math.cos(a) * 6);
+            const ty = cy2 + Math.round(Math.sin(a) * 6);
+            c.fillRect(tx - 1, ty - 1, 2, 2);
+          }
+          c.fillStyle = '#c8cde8';
+          c.fillRect(cx2 - 4, cy2 - 4, 8, 8);
+          c.fillStyle = '#e8ecff';
+          c.fillRect(cx2 - 4, cy2 - 4, 8, 2);
+          c.fillStyle = '#5a5f78';
+          c.fillRect(cx2 - 1, cy2 - 1, 2, 2);
+          // amber warning decal on the ground
+          c.fillStyle = '#ff8c42';
+          c.globalAlpha = 0.5;
+          c.fillRect(x0 + i * 8 + 2, Math.round(s.y) + 7, 4, 1);
+          c.globalAlpha = 1;
+        }
+        continue;
+      }
+      if (camp && cbg === 'ocean') {
+        // sea urchins
+        for (let i = 0; i < s.n; i++) {
+          const cx2 = x0 + i * 8 + 4;
+          const cy2 = Math.round(s.y) + 4;
+          c.fillStyle = '#0d1b2a';
+          c.fillRect(cx2 - 4, cy2 - 3, 8, 7);
+          c.fillStyle = '#ff70a6';
+          c.fillRect(cx2 - 3, cy2 - 3, 6, 5);
+          c.fillStyle = '#ff9ebb';
+          c.fillRect(cx2 - 2, cy2 - 3, 4, 2);
+          // spines
+          c.fillStyle = '#ffffff';
+          for (let t = 0; t < 6; t++) {
+            const a = (t * Math.PI) / 3 + Math.sin(this.g.frame * 0.1 + i) * 0.2;
+            c.fillRect(cx2 + Math.round(Math.cos(a) * 6) - 1, cy2 + Math.round(Math.sin(a) * 5) - 1, 1, 2);
+          }
+        }
+        continue;
+      }
+      if (camp && cbg === 'heaven') {
+        // halo rings — floating angelic hoops
+        for (let i = 0; i < s.n; i++) {
+          const x = x0 + i * 8;
+          const y = Math.round(s.y);
+          const bob = Math.sin(this.g.frame * 0.08 + i) * 2;
+          c.fillStyle = '#ffd700';
+          c.fillRect(x + 1, y + bob, 6, 1);
+          c.fillRect(x, y + 1 + bob, 1, 3);
+          c.fillRect(x + 7, y + 1 + bob, 1, 3);
+          c.fillRect(x + 1, y + 4 + bob, 6, 1);
+          c.fillStyle = '#fff3a8';
+          c.fillRect(x + 2, y + 1 + bob, 4, 1);
+        }
+        continue;
+      }
       const wiggle = (this.g.frame & 3) < 2 ? 0 : 1;
       for (let i = 0; i < s.n; i++) {
         const x = x0 + i * 8;
         const y = Math.round(s.y);
         // subtle pre-spike wiggle when player is close — telegraph
         // amber crack decal on the platform top under each blade
-        c.fillStyle = '#ff8c42';
+        c.fillStyle = camp && cbg === 'pirates' ? '#5d300c' : '#ff8c42';
         c.globalAlpha = 0.55;
         c.fillRect(x + 2 + wiggle, y + 7, 4, 1);
         c.globalAlpha = 1;
         // sharp triangular blade — wide at the base, single pixel tip
-        c.fillStyle = '#8a8fa8';
+        c.fillStyle = camp && cbg === 'pirates' ? '#8a5a2c' : '#8a8fa8';
         c.fillRect(x + wiggle, y + 7, 8, 3);
         c.fillRect(x + 1 + wiggle, y + 5, 6, 2);
         c.fillRect(x + 2 + wiggle, y + 3, 4, 2);
         c.fillRect(x + 3 + wiggle, y + 1, 2, 2);
         c.fillRect(x + 3 + wiggle, y, 1, 1);
         // bright polished highlight down the centre
-        c.fillStyle = '#e8ecff';
+        c.fillStyle = camp && cbg === 'pirates' ? '#d4a373' : '#e8ecff';
         c.fillRect(x + 3 + wiggle, y + 1, 1, 6);
         // hard shadow on the right side
-        c.fillStyle = '#3a3d55';
+        c.fillStyle = camp && cbg === 'pirates' ? '#381d08' : '#3a3d55';
         c.fillRect(x + 5 + wiggle, y + 3, 1, 4);
         c.fillRect(x + 6 + wiggle, y + 5, 1, 4);
       }
@@ -1523,6 +2348,34 @@ export class Renderer {
         const pupilRight = e.vx > 0 ? 11 : 9;
         c.fillRect(x + pupilLeft + eo, yy + 1, 2, 2);
         c.fillRect(x + pupilRight + eo, yy + 1, 2, 2);
+      } else if (e.kind === 'roller') {
+        // pirates cannonball — rolls toward the runner, stompable
+        const rot = this.g.frame * 0.22 * (e.vx < 0 ? -1 : 1);
+        const cx2 = x + 8;
+        const cy2 = y + 8;
+        // rolling bolt marker rotates with the roll
+        c.fillStyle = hurt ? '#ffffff' : '#1a1a22';
+        c.fillRect(cx2 - 7, cy2 - 7, 14, 14);
+        c.fillStyle = '#2e2e3c';
+        c.fillRect(cx2 - 6, cy2 - 6, 12, 12);
+        c.fillStyle = '#454558';
+        c.fillRect(cx2 - 6, cy2 - 6, 12, 2);
+        // rotation dot
+        const rx = cx2 + Math.round(Math.cos(rot) * 4);
+        const ry = cy2 + Math.round(Math.sin(rot) * 4);
+        c.fillStyle = '#8a8fa8';
+        c.fillRect(rx - 1, ry - 1, 2, 2);
+        // skull emblem faces the player
+        c.fillStyle = '#e8ecff';
+        c.fillRect(cx2 - 2, cy2 - 2, 4, 3);
+        c.fillStyle = '#1a1a22';
+        c.fillRect(cx2 - 1, cy2 - 1, 1, 1);
+        c.fillRect(cx2 + 1, cy2 - 1, 1, 1);
+        // fuse sparks when rolling fast
+        if (Math.abs(e.vx) > 0.7 && this.g.frame % 6 < 3) {
+          c.fillStyle = '#ffd166';
+          c.fillRect(cx2 + (e.vx < 0 ? 8 : -9), cy2 + 5, 2, 2);
+        }
       } else if (e.kind === 'scarab') {
         // desert scarab — fast, low
         const front = e.vx > 0 ? x + 22 : x - 2;
@@ -1586,10 +2439,53 @@ export class Renderer {
         c.fillRect(x + pupilLeft + eo, yy + 5, 2, 2);
         c.fillRect(x + pupilRight + eo, yy + 5, 2, 2);
       }
+
+      // ---- campaign biome decals: make the castes read as natives
+      if (this.g.isCampaign) {
+        const cbg = Z.bg;
+        const topY = e.kind === 'slime' ? y + Math.round(Math.sin(e.t * 2.4) * 2.0 * 0.7) : y;
+        const frx = e.vx > 0 ? x + 22 : x - 2;
+        if (cbg === 'construction' && e.kind === 'hopper') {
+          // hard hat + jackhammer spark
+          c.fillStyle = '#ffd166';
+          c.fillRect(x + 2, y - 3, 10, 2);
+          c.fillRect(x + 4, y - 5, 6, 2);
+          c.fillStyle = '#ffffff';
+          c.fillRect(x + 6, y - 5, 2, 1);
+          if (e.vy < 0 && this.g.frame % 4 < 2) {
+            c.fillStyle = '#8d99ae';
+            c.fillRect(x + (e.vx > 0 ? 15 : -2), y + 12, 2, 2);
+          }
+        } else if (cbg === 'volcano' && e.kind === 'hopper' && e.vy < 0) {
+          c.fillStyle = this.g.frame % 4 < 2 ? '#ffd166' : '#ff5400';
+          c.fillRect(x + 5, y + 15, 2, 2);
+          c.fillRect(x + 9, y + 17, 1, 1);
+        } else if (cbg === 'hell' && e.kind === 'scarab') {
+          c.fillStyle = '#ff0054';
+          c.fillRect(frx - 1, y + 1, 2, 3);
+          c.fillRect(frx + 3, y + 1, 2, 3);
+        } else if (cbg === 'ocean' && e.kind === 'slime') {
+          c.globalAlpha = 0.35;
+          c.fillStyle = '#ffffff';
+          c.fillRect(x + 3, topY + 3, 3, 5);
+          c.globalAlpha = 1;
+          if (this.g.frame % 22 < 11) {
+            c.fillStyle = '#caf0f8';
+            c.fillRect(x + (e.vx > 0 ? 20 : -3), topY - 2, 2, 2);
+          }
+        } else if (cbg === 'heaven' && e.kind === 'slime') {
+          c.fillStyle = '#ffd700';
+          c.fillRect(x + 4, topY - 4, 10, 1);
+          c.fillRect(x + 4, topY - 3, 1, 1);
+          c.fillRect(x + 13, topY - 3, 1, 1);
+          c.globalAlpha = 0.3;
+          c.fillRect(x + 5, topY - 3, 8, 1);
+          c.globalAlpha = 1;
+        }
+      }
   }
 
-  private drawPowerUpEffects(c: CanvasRenderingContext2D, cx: number, cy: number) {
-    if (this.g.shielded) {
+  private drawPowerUpEffects(c: CanvasRenderingContext2D, cx: number, cy: number) {    if (this.g.shielded) {
       c.globalAlpha = 0.62 + 0.12 * Math.sin(this.g.frame * 0.16);
       c.fillRect(cx - 6, cy - 9, 12, 1);
       c.fillRect(cx - 6, cy + 8, 12, 1);
@@ -1622,7 +2518,7 @@ export class Renderer {
       c.fillRect(cx - 1, cy - 15, 2, 2);
     }
     if (this.g.magnet > 0) {
-      const pulse = Math.sin(this.g.frame * 0.25) * 1.5;
+      const pulse = Math.round(Math.sin(this.g.frame * 0.25) * 1.5);
       c.strokeStyle = '#00f0ff';
       c.lineWidth = 1;
       c.globalAlpha = 0.35 + Math.sin(this.g.frame * 0.2) * 0.25;
@@ -1891,8 +2787,6 @@ export class Renderer {
 
   private drawForeground() {
     const c = this.ctx;
-    // dust motes
-    c.fillStyle = '#ffffff';
     for (const [mx, my, spd, ph] of this.motes) {
       const x = ((mx - this.g.camX * spd * 0.5) % VW + VW) % VW;
       const y = my + Math.sin(this.g.frame * 0.02 + ph) * 6;
@@ -2078,25 +2972,61 @@ export class Renderer {
       const midX = Math.round(W / 2);
       const vsY = mobile || isNarrow ? 78 : 26;
       const p1Score = this.g.score;
-      const firstOpp = this.g.opponentStates.values().next().value;
-      if (firstOpp) {
-        const p2Score = firstOpp.score;
-        const p1Ahead = p1Score >= p2Score;
-        const p1Col = p1Ahead ? '#3ef2c8' : '#ffd166';
-        const p2Col = !p1Ahead ? '#3ef2c8' : '#ff70a6';
+      const isAlive = this.g.phase !== 'dead' && this.g.phase !== 'over';
 
-        const p1Txt = `YOU:${p1Score}`;
-        const vsTxt = ` VS `;
-        const p2Txt = `${firstOpp.name.slice(0, 6)}:${p2Score}`;
+      const items: Array<{ txt: string; col: string }> = [];
+      items.push({
+        txt: `YOU:${isAlive ? p1Score : 'DEAD'}`,
+        col: isAlive ? '#3ef2c8' : '#6b5880',
+      });
 
-        const totalW = textWidth(p1Txt, 1) + textWidth(vsTxt, 1) + textWidth(p2Txt, 1);
+      const oppColors = ['#ffd166', '#ff70a6', '#7ef7ff', '#ffd700', '#ff9ebb'];
+      let oppIdx = 0;
+      for (const opp of this.g.opponentStates.values()) {
+        const col = opp.isAlive ? oppColors[oppIdx % oppColors.length] : '#6b5880';
+        const oppName = (opp.name ? opp.name.trim().slice(0, 6) : `P${oppIdx + 2}`).toUpperCase();
+        items.push({
+          txt: `${oppName}:${opp.isAlive ? opp.score : 'DEAD'}`,
+          col,
+        });
+        oppIdx++;
+      }
+
+      if (items.length === 2) {
+        // Classic 1v1 format: "YOU:120 VS OPP:95"
+        const p1 = items[0];
+        const p2 = items[1];
+        const vsTxt = ' VS ';
+        const totalW = textWidth(p1.txt, 1) + textWidth(vsTxt, 1) + textWidth(p2.txt, 1);
         const startX = midX - Math.floor(totalW / 2);
 
-        drawText(c, p1Txt, startX, vsY, 1, p1Col, '#150a24');
-        const vsX = startX + textWidth(p1Txt, 1);
+        drawText(c, p1.txt, startX, vsY, 1, p1.col, '#150a24');
+        const vsX = startX + textWidth(p1.txt, 1);
         drawText(c, vsTxt, vsX, vsY, 1, '#ffffff', '#150a24');
         const p2X = vsX + textWidth(vsTxt, 1);
-        drawText(c, p2Txt, p2X, vsY, 1, p2Col, '#150a24');
+        drawText(c, p2.txt, p2X, vsY, 1, p2.col, '#150a24');
+      } else {
+        // Multi-player format: "YOU:120 | P2:95 | P3:DEAD"
+        const sep = ' | ';
+        let totalW = 0;
+        for (let i = 0; i < items.length; i++) {
+          totalW += textWidth(items[i].txt, 1);
+          if (i < items.length - 1) totalW += textWidth(sep, 1);
+        }
+        let curX = midX - Math.floor(totalW / 2);
+        for (let i = 0; i < items.length; i++) {
+          drawText(c, items[i].txt, curX, vsY, 1, items[i].col, '#150a24');
+          curX += textWidth(items[i].txt, 1);
+          if (i < items.length - 1) {
+            drawText(c, sep, curX, vsY, 1, '#ffffff', '#150a24');
+            curX += textWidth(sep, 1);
+          }
+        }
+      }
+
+      if (this.g.phase === 'dead') {
+        const specY = mobile || isNarrow ? 94 : 40;
+        drawTextCentered(c, 'SPECTATING - WAITING FOR MATCH END', midX, specY, 1, '#ffd166', '#150a24');
       }
     }
 
@@ -2106,23 +3036,22 @@ export class Renderer {
   private drawCombo(labelCenterX: number, y: number) {
     if (this.g.combo <= 1) return;
     const c = this.ctx;
+    const t = this.g.comboT / COMBO_TIME;
+    // Only rebuild the label string when its parts change.
     const key = this.g.combo + '|' + this.g.mult();
     if (key !== this.hudComboKey) {
       this.hudComboKey = key;
       this.hudComboStr = 'X' + this.g.mult() + ' COMBO ' + this.g.combo;
     }
     const label = this.hudComboStr;
-    const mult = this.g.mult();
-    let col = mult >= 4 ? '#ff4d6d' : mult >= 2 ? '#ffd166' : this.g.zone.accent;
-    const bw = Math.max(110, textWidth(label, 1) + 16);
+    const flash = this.g.comboPulse;
+    const col = flash > 0.4 ? '#ffffff' : '#ffd166';
+    // Bar grows with the label so a long "X8 COMBO 9999" can't overflow it.
+    const bw = Math.max(84, textWidth(label, 1) + 12);
     drawTextCentered(c, label, labelCenterX, y, 1, col, '#150a24');
     c.fillStyle = '#150a24';
-    c.fillRect(labelCenterX - bw / 2 - 1, y + 9, bw + 2, 9);
-    // thinner bar: 5px instead of 7
-    // color by time remaining: green -> orange -> red
-    const ratio = this.g.comboT / COMBO_TIME;
-    let barCol = ratio > 0.5 ? '#3ef2c8' : ratio > 0.2 ? '#ffd166' : '#ff4d6d';
-    c.fillStyle = barCol;
-    c.fillRect(labelCenterX - bw / 2, y + 10, Math.round(bw * (this.g.comboT / COMBO_TIME)), 5);
+    c.fillRect(labelCenterX - bw / 2 - 1, y + 9, bw + 2, 7);
+    c.fillStyle = t > 0.3 ? this.g.zone.accent : '#ff4d6d';
+    c.fillRect(labelCenterX - bw / 2, y + 10, Math.round(bw * t), 5);
   }
 }

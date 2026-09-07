@@ -104,6 +104,15 @@ export class WorldGen {
   }
 
   private blobKind(bg: BgKind): EnemyKind {
+    if (this.h.isCampaign) {
+      // Campaign worlds field their own castes
+      if (bg === 'construction') return 'hopper';
+      if (bg === 'pirates') return this.genCount % 2 === 0 ? 'roller' : 'slime';
+      if (bg === 'ocean') return 'slime';
+      if (bg === 'volcano') return 'hopper';
+      if (bg === 'hell') return 'scarab';
+      if (bg === 'heaven') return 'slime';
+    }
     if (bg === 'jungle') return this.genCount % 2 === 0 ? 'slime' : 'hopper';
     if (bg === 'desert') return this.genCount % 2 === 0 ? 'scarab' : 'slime';
     return 'slime';
@@ -112,19 +121,36 @@ export class WorldGen {
   private addBlob(p: Platform, x: number) {
     const kind = this.blobKind(this.biomeAtX(p.x));
     const dims =
-      kind === 'scarab' ? { w: 22, h: 10, dy: 10 } : kind === 'hopper' ? { w: 14, h: 15, dy: 15 } : { w: 18, h: 14, dy: 14 };
-    const speed = kind === 'scarab' ? 1.0 : 0.48;
+      kind === 'scarab'
+        ? { w: 22, h: 10, dy: 10 }
+        : kind === 'hopper'
+          ? { w: 14, h: 15, dy: 15 }
+          : kind === 'roller'
+            ? { w: 16, h: 16, dy: 16 }
+            : { w: 18, h: 14, dy: 14 };
+    const speed =
+      kind === 'scarab'
+        ? 1.0
+        : kind === 'roller'
+          ? 0.95
+          : kind === 'hopper'
+            ? 0.62
+            : 0.48;
+    const minX = p.x + 8;
+    const maxX = Math.max(minX, p.x + p.w - dims.w - 12);
+    const spawnX = clamp(x, minX, maxX);
     this.h.enemies.push({
       kind,
-      x,
+      x: spawnX,
       y: p.y - dims.dy,
       w: dims.w,
       h: dims.h,
-      vx: this.genCount % 2 === 0 ? -speed : speed,
+      // Rollers charge toward the runner
+      vx: kind === 'roller' ? -speed : this.genCount % 2 === 0 ? -speed : speed,
       vy: 0,
       jt: 0,
-      minX: p.x + 8,
-      maxX: p.x + p.w - dims.w - 12,
+      minX,
+      maxX,
       t: this.genCount * 0.6,
       baseY: p.y - dims.dy,
       dead: false,
@@ -195,8 +221,11 @@ export class WorldGen {
   }
 
   private biomeAtX(x: number): BgKind {
+    if (this.h.isCampaign) {
+      return this.h.zone.bg;
+    }
     const index = this.biomeIndexAtX(x);
-    return ZONES[this.h.zoneOrder[index % ZONES.length]].bg;
+    return ZONES[this.h.zoneOrder[index % ZONES.length]]?.bg || 'jungle';
   }
 
   private diffAtX(x: number) {

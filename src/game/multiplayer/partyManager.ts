@@ -16,7 +16,7 @@ import type {
 // CDN URLs are a fallback for hosts that can't serve the vendor file (e.g.
 // itch.io single-file embeds). The type-only import above is erased at
 // build time.
-const PEERJS_CDN_URLS = ['vendor/peerjs.min.js', 'https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js', 'https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js'];
+const PEERJS_CDN_URLS = ['/vendor/peerjs.min.js', 'vendor/peerjs.min.js', 'https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js', 'https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js'];
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -709,32 +709,49 @@ export class PartyManager {
   private startHostSyncLoop() {
     if (this.syncTimer) clearInterval(this.syncTimer);
     const sendState = () => {
-      if (this.role === 'host' && this.state === 'in_room') {
-        // Sweep ghost joiners (crashed tabs/devices, dead WebRTC links):
-        // joiners ping bc_join every 300ms, so 12s of silence means gone.
-        // Generous enough that a joiner's MQTT blip (3s reconnect period +
-        // broker keepalive grace) does not flap it out of the roster; the
-        // queued QoS1 pings land on reconnect and refresh the entry.
-        // Only runs in_room — joiners stop pinging during a match, and
-        // killing their entries mid-match would wipe live meters/score.
-        const now = Date.now();
-        let changed = false;
-        for (const [id, entry] of Array.from(this.localTabPlayers.entries())) {
-          if (id !== this.peerId && now - (entry.ts || now) > 12000) {
-            this.localTabPlayers.delete(id);
-            changed = true;
+      if (this.role === 'host') {
+        if (this.state === 'in_room') {
+          // Sweep ghost joiners (crashed tabs/devices, dead WebRTC links):
+          // joiners ping bc_join every 300ms, so 12s of silence means gone.
+          // Generous enough that a joiner's MQTT blip (3s reconnect period +
+          // broker keepalive grace) does not flap it out of the roster; the
+          // queued QoS1 pings land on reconnect and refresh the entry.
+          // Only runs in_room — joiners stop pinging during a match, and
+          // killing their entries mid-match would wipe live meters/score.
+          const now = Date.now();
+          let changed = false;
+          for (const [id, entry] of Array.from(this.localTabPlayers.entries())) {
+            if (id !== this.peerId && now - (entry.ts || now) > 12000) {
+              this.localTabPlayers.delete(id);
+              changed = true;
+            }
+          }
+          if (changed) {
+            const playersList = Array.from(this.localTabPlayers.values());
+            this.broadcast({ type: 'bc_room_state', players: playersList });
+            this.updateOpponentsFromList(playersList);
+          }
+          const playersList = Array.from(this.localTabPlayers.values());
+          this.broadcast({
+            type: 'bc_room_state',
+            players: playersList,
+          });
+        } else if (this.state === 'in_game') {
+          // Mid-match watchdog: if a joiner closed their tab or crashed mid-race,
+          // they stop transmitting ticks. After 12s of silence, mark them dead so
+          // checkBcMatchEnd() completes the match without hanging for 3 minutes.
+          const now = Date.now();
+          let deadTriggered = false;
+          for (const opp of this.opponents.values()) {
+            if (opp.isAlive && now - (opp.ts || now) > 12000) {
+              opp.isAlive = false;
+              deadTriggered = true;
+            }
+          }
+          if (deadTriggered) {
+            this.checkBcMatchEnd();
           }
         }
-        if (changed) {
-          const playersList = Array.from(this.localTabPlayers.values());
-          this.broadcast({ type: 'bc_room_state', players: playersList });
-          this.updateOpponentsFromList(playersList);
-        }
-        const playersList = Array.from(this.localTabPlayers.values());
-        this.broadcast({
-          type: 'bc_room_state',
-          players: playersList,
-        });
       }
     };
     sendState();
@@ -958,13 +975,10 @@ export class PartyManager {
       // The host owns BC-only match ending, and must run the check for EVERY
       // death — including its own (senderId === this.peerId is skipped
       // above), or a match where the host dies last would never finish.
-      // The match ends once all opponents are dead (host alive or not); the
+      // The match ends once ALL players (host + all opponents) are dead; the
       // host-side match watchdog is the backstop for AFK players.
       if (this.role === 'host' && this.state === 'in_game') {
-        const allOpponents = Array.from(this.opponents.values());
-        if (allOpponents.length > 0 && allOpponents.every((o) => !o.isAlive)) {
-          this.finishBcMatch();
-        }
+        this.checkBcMatchEnd();
       }
     } else if (type === 'bc_timer' && this.state === 'in_game') {
       // Host broadcasts remaining match time (ms). Joiners use it to render
@@ -979,13 +993,13 @@ export class PartyManager {
       if (result && this.state === 'in_game' && !this.matchResult) {
         this.stopMatchTimer();
         this.state = 'ended';
+        // Re-map isLocal for every entry based on this client's peerId
+        for (const entry of result.leaderboard) {
+          entry.isLocal = entry.peerId === this.peerId;
+        }
         const localEntry = result.leaderboard.find((e) => e.peerId === this.peerId);
         result.isWinner = localEntry ? localEntry.rank === 1 : false;
         result.rank = localEntry ? localEntry.rank : result.totalPlayers;
-        // The leaderboard was built by the HOST with its own peerId, so
-        // joiner entries are never flagged — without this the "(YOU)"
-        // highlight is missing for joiners.
-        if (localEntry) localEntry.isLocal = true;
         this.matchResult = result;
         this.onMatchEnd?.(result);
       }

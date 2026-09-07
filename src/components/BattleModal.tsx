@@ -215,24 +215,13 @@ export function BattleModal({
       }
     };
 
-    party.onMatchStart = (seed, startAt) => {
+    party.onMatchStart = (seed) => {
       onClearMatchResult();
       setMyReady(false);
-      const updateCd = () => {
-        const remaining = Math.max(0, Math.ceil((startAt - Date.now()) / 1000));
-        setCountdown(remaining);
-        if (remaining > 0) sfx.play('jump');
-        else sfx.play('slam');
-
-        if (remaining <= 0) {
-          // Belt-and-suspenders: if the player exited the room mid-countdown
-          // (party.leave() -> state 'idle'), never start the battle.
-          if (party.state === 'in_game') onStartOnlineBattle(seed);
-        } else {
-          countdownTimerRef.current = window.setTimeout(updateCd, 250);
-        }
-      };
-      updateCd();
+      setCountdown(null);
+      if (party.state === 'in_game') {
+        onStartOnlineBattle(seed);
+      }
     };
 
     party.onStatusMsg = (msg) => {
@@ -240,14 +229,12 @@ export function BattleModal({
     };
 
     return () => {
-      // While a match is in flight the countdown chain must survive
-      // resubscriptions; once the player leaves, kill the pending tick.
-      if (party.state !== 'in_game') window.clearTimeout(countdownTimerRef.current);
+      window.clearTimeout(countdownTimerRef.current);
       party.onRoomStateChange = undefined;
       party.onMatchStart = undefined;
       party.onStatusMsg = undefined;
     };
-  }, [onStartOnlineBattle, roomCode, joined]);
+  }, [onStartOnlineBattle, onClearMatchResult, roomCode, joined]);
 
   // Auto-join from URL hash (#battle=CODE)
   useEffect(() => {

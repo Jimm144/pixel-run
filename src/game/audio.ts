@@ -14,7 +14,17 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-type MusicBiome = 'jungle' | 'desert' | 'tundra' | 'city';
+export type MusicBiome =
+  | 'jungle'
+  | 'desert'
+  | 'tundra'
+  | 'city'
+  | 'construction'
+  | 'pirates'
+  | 'ocean'
+  | 'volcano'
+  | 'hell'
+  | 'heaven';
 type SfxName =
   | 'jump'
   | 'djump'
@@ -42,7 +52,7 @@ interface BiomeMusic {
   arp: readonly number[];
 }
 
-const BIOME_MUSIC: Record<MusicBiome, BiomeMusic> = {
+const BIOME_MUSIC: Partial<Record<MusicBiome, BiomeMusic>> = {
   jungle: {
     base: 220,
     baseInterval: 0.20,
@@ -156,6 +166,14 @@ const BIOME_MUSIC: Record<MusicBiome, BiomeMusic> = {
     ],
   },
 };
+
+// Campaign Biome Music mappings
+BIOME_MUSIC.construction = BIOME_MUSIC.city;
+BIOME_MUSIC.pirates = BIOME_MUSIC.desert;
+BIOME_MUSIC.ocean = BIOME_MUSIC.tundra;
+BIOME_MUSIC.volcano = BIOME_MUSIC.desert;
+BIOME_MUSIC.hell = BIOME_MUSIC.city;
+BIOME_MUSIC.heaven = BIOME_MUSIC.tundra;
 
 interface PooledTone {
   osc: OscillatorNode;
@@ -589,7 +607,8 @@ export class Sfx {
       return;
     const now = ctx.currentTime;
     if (this.musicNextTime < now - 0.3) this.musicNextTime = now + 0.02;
-    const pattern = BIOME_MUSIC[this.musicBiome];
+    const pattern = BIOME_MUSIC[this.musicBiome] || BIOME_MUSIC.city || BIOME_MUSIC.jungle;
+    if (!pattern) return;
     const base = pattern.base;
     const interval = pattern.baseInterval / this.musicSpeed;
     const noteVol = 0.07 + this.musicIntensity * 0.02;

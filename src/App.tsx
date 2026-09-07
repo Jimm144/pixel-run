@@ -36,6 +36,7 @@ import { SkinsModal } from './components/SkinsModal';
 import { SkinUnlockModal } from './components/SkinUnlockModal';
 import { FeedbackModal } from './components/FeedbackModal';
 import { SaveLoadModal } from './components/SaveLoadModal';
+import { UpdateModal } from './components/UpdateModal';
 import { backupProgressCookie, restoreCookieBackup } from './game/saveManager';
 import { type UiTheme, cycleUiTheme, loadUiTheme, saveUiTheme } from './game/uiThemes';
 import { BattleModal } from './components/BattleModal';
@@ -389,6 +390,7 @@ export function App() {
   }, [equippedSkin]);
 
   const [swUpdate, setSwUpdate] = useState<ServiceWorkerRegistration | null>(null);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const swRegRef = useRef<ServiceWorkerRegistration | null>(null);
 
   /* ---- UI theme (loaded/applied synchronously at module init) */
@@ -540,21 +542,18 @@ export function App() {
   // Browsers only let audio start after a user gesture — resume the context
   // on the first one so music/SFX are never silently blocked.
   useEffect(() => {
-    const unlockOnce = () => {
+    const handleGestureUnlock = () => {
       unlock();
-      setMusicVolume(volumes.music);
-      setSfxVolume(volumes.sfx);
-      sfx.setMusicMuted(volumes.music === 0);
-      sfx.setSfxMuted(volumes.sfx === 0);
-      sfx.setMuffled(ui === 'start' || ui === 'paused' || skinsModalOpen);
+      window.removeEventListener('pointerdown', handleGestureUnlock);
+      window.removeEventListener('keydown', handleGestureUnlock);
     };
-    window.addEventListener('pointerdown', unlockOnce);
-    window.addEventListener('keydown', unlockOnce);
+    window.addEventListener('pointerdown', handleGestureUnlock);
+    window.addEventListener('keydown', handleGestureUnlock);
     return () => {
-      window.removeEventListener('pointerdown', unlockOnce);
-      window.removeEventListener('keydown', unlockOnce);
+      window.removeEventListener('pointerdown', handleGestureUnlock);
+      window.removeEventListener('keydown', handleGestureUnlock);
     };
-  }, [ui, skinsModalOpen, volumes]);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -746,9 +745,9 @@ export function App() {
   }, []);
 
   /** Battle-aware restart for R / RESTART / RETRY: replays the same local
-   *  battle, re-runs an active online match on its seed, and falls back to a
-   *  fresh solo run. Never starts a solo game out of a battle context, and
-   *  does nothing while the results modal is up. */
+   *  battle, ignores R in active online races (rematch is via modal), and
+   *  falls back to a fresh solo run. Never starts a solo game out of a battle
+   *  context, and does nothing while the results modal is up. */
   const restart = useCallback(() => {
     const g = gameRef.current;
     if (!g || matchResult) return;
@@ -758,11 +757,7 @@ export function App() {
       return;
     }
     if (g.mode === 'online') {
-      if (party.state === 'in_game') {
-        g.best = bestScore();
-        g.startRun(g.matchSeed);
-        setUi('playing');
-      }
+      // Online rematch is coordinated through the results modal / lobby, not R-key restart
       return;
     }
     start();
@@ -789,11 +784,16 @@ export function App() {
   }, []);
 
   const toMenu = useCallback(() => {
+    party.leave();
+    setMatchResult(null);
+    setBattleModalOpen(false);
     const g = gameRef.current;
     // Commit the quest run BEFORE the engine resets its run stats, or the
     // partial-run progress would be zeroed and lost on quit-to-menu.
     commitQuestRun();
-    if (g) g.toReady();
+    if (g) {
+      g.toReady();
+    }
     setQuestRecord(loadQuestRecord());
     sfx.play('ui');
     setUi('start');
@@ -854,6 +854,13 @@ export function App() {
     backupProgressCookie();
   }, [commitQuestRun, lifetimeStats, triggerSkinToast]);
 
+  const handleMatchEnd = useCallback((res: MatchResult) => {
+    gameRef.current?.enterMatchOver();
+    setMatchResult(res);
+    setBattleModalOpen(true);
+    setUi('results');
+  }, []);
+
   /* -------------------------------------------------------------- auto-pause */
   // Auto pause when the page or its window loses focus
   useEffect(() => {
@@ -895,22 +902,7 @@ export function App() {
 
   /* -------------------------------------------------------------- multiplayer match end & deep link */
   useEffect(() => {
-    const g = gameRef.current;
-    if (g) {
-      g.onMatchEnd = (res) => {
-        setMatchResult(res);
-        setBattleModalOpen(true);
-        setUi('results');
-      };
-    }
-    party.onMatchEnd = (res) => {
-      // Freeze the world behind the results modal for online matches too
-      // (local battles already enter phase 'over' inside the engine).
-      gameRef.current?.enterMatchOver();
-      setMatchResult(res);
-      setBattleModalOpen(true);
-      setUi('results');
-    };
+    party.onMatchEnd = handleMatchEnd;
 
     if (typeof window !== 'undefined' && window.location.hash.startsWith('#battle=')) {
       setBattleModalOpen(true);
@@ -918,7 +910,7 @@ export function App() {
     return () => {
       party.onMatchEnd = undefined;
     };
-  }, []);
+  }, [handleMatchEnd]);
 
   return (
     <div className="fixed inset-0 h-full h-[100dvh] w-full w-[100dvw] flex min-h-0 min-w-0 items-center justify-center overflow-hidden bg-[var(--ui-bg)] font-pixel">
@@ -945,9 +937,10 @@ export function App() {
           onRestart={restart}
           onMenu={toMenu}
           onQuestProgress={handleQuestProgress}
-          modalOpen={battleModalOpen || showFeedbackModal || skinsModalOpen || !!unlockedSkinPopup || !!saveLoadModal}
+          onMatchEnd={handleMatchEnd}
+          modalOpen={battleModalOpen || showFeedbackModal || skinsModalOpen || !!unlockedSkinPopup || !!saveLoadModal || updateModalOpen}
         />
-        {ui === 'start' && !skinsModalOpen && (
+        {ui === 'start' && !skinsModalOpen && !updateModalOpen && (
           <StartScreen
             best={best}
             lastRun={lastRun?.score ?? 0}
@@ -977,7 +970,9 @@ export function App() {
             }}
             onExportSave={handleExportSave}
             onImportSave={handleImportSave}
-            onCheckUpdate={handleCheckUpdate}
+            onCheckUpdate={() => {
+              setUpdateModalOpen(true);
+            }}
             onCycleTheme={handleCycleTheme}
             themeName={uiTheme.name}
           />
@@ -1076,12 +1071,27 @@ export function App() {
             touch={touch}
           />
         )}
-        {swUpdate && ui !== 'playing' && (
-          <div className="fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 border-2 border-[var(--ui-gold)] bg-[var(--ui-panel)]/95 px-3 py-1.5 font-pixel text-[var(--ui-gold)] shadow-[3px_3px_0_var(--ui-bg)]">
+        {updateModalOpen && (
+          <UpdateModal
+            onClose={() => setUpdateModalOpen(false)}
+            swUpdate={swUpdate}
+            onApplyUpdate={handleApplyUpdate}
+            onCheckUpdate={handleCheckUpdate}
+            touch={touch}
+          />
+        )}
+        {swUpdate && ui !== 'playing' && !updateModalOpen && (
+          <div
+            className="fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 border-2 border-[var(--ui-gold)] bg-[var(--ui-panel)]/95 px-3 py-1.5 font-pixel text-[var(--ui-gold)] shadow-[3px_3px_0_var(--ui-bg)] cursor-pointer"
+            onClick={() => setUpdateModalOpen(true)}
+          >
             <span className="text-[8px] tablet:text-[10px]">UPDATE READY</span>
             <button
               type="button"
-              onClick={handleApplyUpdate}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleApplyUpdate();
+              }}
               className="border-2 border-[var(--ui-gold)] bg-[var(--ui-gold)]/20 px-2 py-0.5 text-[8px] text-[#ffffff] transition-colors hover:bg-[var(--ui-gold)]/40 tablet:text-[10px]"
             >
               RELOAD

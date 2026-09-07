@@ -26,12 +26,21 @@ export class ParticleSystem {
     grav = 0.14,
     drag = 1,
   ) {
-    // Hard cap: recycle the oldest live particle, ring-buffer style.
+    // Hard cap: recycle the particle with the lowest remaining life
     if (this.alive.length >= P_CAP) {
-      const oldest = this.alive[0];
-      this.alive[0] = this.alive[this.alive.length - 1];
+      let minIdx = 0;
+      let minLife = this.alive[0].life;
+      const sample = Math.min(this.alive.length, 16);
+      for (let i = 1; i < sample; i++) {
+        if (this.alive[i].life < minLife) {
+          minLife = this.alive[i].life;
+          minIdx = i;
+        }
+      }
+      const recycled = this.alive[minIdx];
+      this.alive[minIdx] = this.alive[this.alive.length - 1];
       this.alive.pop();
-      this.free.push(oldest);
+      this.free.push(recycled);
     }
     let p = this.free.pop();
     if (!p) {

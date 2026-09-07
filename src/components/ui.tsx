@@ -68,6 +68,35 @@ export function PixelCloseIcon({ className = 'h-3.5 w-3.5' }: { className?: stri
   );
 }
 
+/** Shared pixel reload / sync icon. */
+export function PixelReloadIcon({ className = 'h-3 w-3' }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 10 10"
+      className={`inline-block shrink-0 align-middle ${className}`}
+      fill="currentColor"
+      shapeRendering="crispEdges"
+    >
+      {/* Top arrow (clockwise to right) */}
+      <rect x="1" y="3" width="1" height="3" />
+      <rect x="2" y="2" width="1" height="1" />
+      <rect x="3" y="1" width="4" height="1" />
+      {/* Top arrowhead pointing right */}
+      <rect x="6" y="0" width="1" height="3" />
+      <rect x="7" y="1" width="1" height="1" />
+
+      {/* Bottom arrow (clockwise to left) */}
+      <rect x="8" y="4" width="1" height="3" />
+      <rect x="7" y="7" width="1" height="1" />
+      <rect x="3" y="8" width="4" height="1" />
+      {/* Bottom arrowhead pointing left */}
+      <rect x="3" y="7" width="1" height="3" />
+      <rect x="2" y="8" width="1" height="1" />
+    </svg>
+  );
+}
+
 /** Shared 7x7 pixel arrow glyph in 4 directions. */
 export function PixelArrow({ dir, className = '' }: { dir: 'up' | 'down' | 'left' | 'right'; className?: string }) {
   if (dir === 'up') {

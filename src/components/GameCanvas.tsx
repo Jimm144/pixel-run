@@ -3,6 +3,7 @@ import type { RefObject } from 'react';
 import { BASE_VW, Game, setViewportSize, VH, VW, type Stats } from '../game/engine';
 import { PauseIcon } from './ui';
 import type { QuestRunStats } from '../game/quests';
+import type { MatchResult } from '../game/multiplayer/types';
 import { useGameInput, type UI } from './useGameInput';
 
 interface Props {
@@ -16,12 +17,13 @@ interface Props {
   onRestart: () => void;
   onMenu?: () => void;
   onQuestProgress: (stats: QuestRunStats) => void;
+  onMatchEnd?: (res: MatchResult) => void;
   ui: UI;
   showTouch: boolean;
   modalOpen?: boolean;
 }
 
-export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onToggleMute, onRestartHint, onRestart, onMenu, onQuestProgress, ui, showTouch, modalOpen }: Props) {
+export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onToggleMute, onRestartHint, onRestart, onMenu, onQuestProgress, onMatchEnd, ui, showTouch, modalOpen }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   /** Zone accent for the touch pause button — follows the biome. */
@@ -35,6 +37,13 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
   useEffect(() => {
     questProgressRef.current = onQuestProgress;
   }, [onQuestProgress]);
+
+  useEffect(() => {
+    if (gameRef.current) {
+      gameRef.current.onDeath = onDeath;
+      if (onMatchEnd) gameRef.current.onMatchEnd = onMatchEnd;
+    }
+  }, [onDeath, onMatchEnd, gameRef]);
 
   const { wrapHandlers, diveHandlers, pauseHandlers } = useGameInput({
     gameRef,
@@ -57,6 +66,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
     const game = new Game(ctx);
     // onDeath is a stable useCallback in App — closing over it here is safe.
     game.onDeath = onDeath;
+    if (onMatchEnd) game.onMatchEnd = onMatchEnd;
     gameRef.current = game;
 
     let raf = 0;

@@ -659,7 +659,7 @@ export function evaluateSkinUnlocks(
   const unlocked = new Set(loadUnlockedSkins());
   const newUnlocks: SkinId[] = [];
   const currentLifetime = loadLifetimeStats();
-  const nextStats: LifetimeStats = { ...currentLifetime, ...stats, gems: currentLifetime.gems };
+  const nextStats: LifetimeStats = { ...currentLifetime, ...stats, gems: stats.gems !== undefined ? stats.gems : currentLifetime.gems };
 
   // Update lifetime stats only if not completed/capped
   if (currentRun) {

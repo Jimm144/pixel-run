@@ -6,7 +6,7 @@ import type { MqttClient } from 'mqtt';
 // every client publishes to the room topic and receives everyone else's
 // messages (self-messages never echo back, which the message handlers
 // already guard against with peerId checks).
-const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
+const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081'];
 
 // Stable per page load (not per connection attempt): mqtt.js reconnects
 // with the same options, and with clean:false the broker keeps the session
@@ -19,7 +19,7 @@ const CLIENT_ID = `pxrun_${Math.random().toString(36).substring(2, 10)}`;
 // keeping the single-file bundle small and the page load fast. The CDN URLs
 // are a fallback for hosts that can't serve the vendor file (e.g. itch.io
 // single-file embeds). The type-only import above is erased at build time.
-const MQTT_CDN_URLS = ['vendor/mqtt.min.js', 'https://unpkg.com/mqtt@5.15.2/dist/mqtt.min.js', 'https://cdn.jsdelivr.net/npm/mqtt@5.15.2/dist/mqtt.min.js'];
+const MQTT_CDN_URLS = ['/vendor/mqtt.min.js', 'vendor/mqtt.min.js', 'https://unpkg.com/mqtt@5.15.2/dist/mqtt.min.js', 'https://cdn.jsdelivr.net/npm/mqtt@5.15.2/dist/mqtt.min.js'];
 
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {

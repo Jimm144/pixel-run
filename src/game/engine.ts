@@ -35,6 +35,7 @@ import {
   SLAM_PTS,
   STOMP_PTS,
   VW,
+  WALL_MARGIN,
   ZONE_LEN_M,
   type Enemy,
   type GenHost,
@@ -108,6 +109,12 @@ type GameState = {
     | 'playerControls'
     | 'mode'
     | 'matchOver'
+    | 'isCampaign'
+    | 'campaignLevel'
+    | 'campaignTarget'
+    | 'campaignWon'
+    | 'winT'
+    | 'onCampaignWin'
   >]: Game[K];
 };
 
@@ -129,6 +136,26 @@ export class Game implements GenHost, RenderHost {
   mode: 'solo' | 'local' | 'online' = 'solo';
   /** Convenience flag: true once the match has ended (implies phase 'over'). */
   matchOver = false;
+  isCampaign = false;
+  campaignLevel = 0;
+  /** Campaign goal in engine distance units (meters * 10); 0 = no goal. */
+  campaignTarget = 0;
+  campaignWon = false;
+  /** Frames of victory sprint after crossing the flag. */
+  winT = 0;
+  /** Fired once when the campaign flag is reached (phase flips to 'over'). */
+  onCampaignWin: ((level: number, meters: number) => void) | null = null;
+
+  private confettiTick() {
+    this.particles.burst(
+      this.px + 6 + (Math.random() * 24 - 12),
+      this.py - 6,
+      8,
+      ['#ffd166', '#ffffff', this.zone.accent, '#ff4d6d', '#3ef2c8'],
+      2.4,
+      0.5,
+    );
+  }
   get isLocalBattle(): boolean {
     return this.mode === 'local';
   }
@@ -254,6 +281,7 @@ export class Game implements GenHost, RenderHost {
   seenSpiker = false;
   pendingGems = 0;
   pendingCoins = 0;
+  prevFeet = 0;
 
   /* ---- seeded determinism */
   rng: Mulberry32 = new Mulberry32();
@@ -385,6 +413,7 @@ export class Game implements GenHost, RenderHost {
       lpBonus: [],
       deathCause: 'pit',
       seenSpiker: false,
+      prevFeet: 0,
       pendingGems: 0,
       pendingCoins: 0,
     };
@@ -432,6 +461,7 @@ export class Game implements GenHost, RenderHost {
 
   startRun(seed?: number) {
     this.reset(seed);
+    this.isCampaign = false;
     this.mode = party.isMultiplayer ? 'online' : 'solo';
     this.p2 = undefined;
     this.opponentStates = party.opponents;
@@ -863,6 +893,20 @@ export class Game implements GenHost, RenderHost {
       return;
     }
 
+    // campaign win lap: the runner sprints past the flag trailing confetti
+    // for a beat before the victory screen takes over. invuln is pinned so
+    // nothing can kill during the celebration.
+    if (this.winT > 0) {
+      this.winT--;
+      if (this.winT % 6 === 0) {
+        this.confettiTick();
+      }
+      if (this.winT === 0) {
+        this.phase = 'over';
+        this.onCampaignWin?.(this.campaignLevel, Math.floor(this.distance / 10));
+      }
+    }
+
     const alive = this.phase === 'playing' || this.phase === 'ready';
     if (!alive) return;
 
@@ -920,7 +964,7 @@ export class Game implements GenHost, RenderHost {
       this.sx = 0.8;
       this.sy = 1.25;
     }
-    const hasPropeller = (this.propellerHat > 0 || this.propellerFlashing) && !this.onGround && !this.diving;
+    const hasPropeller = (this.propellerHat > 0 || this.propellerFlashing) && !this.onGround && !this.diving && this.padFlight <= 0;
     let g = GRAV_FALL;
     if (this.diving) g = GRAV_DIVE;
     else if (hasPropeller) {
@@ -940,7 +984,11 @@ export class Game implements GenHost, RenderHost {
     }
 
     /* ---- integrate + collide */
+    const wasAirborne = !this.onGround;
+    const wasDiving = this.diving;
+    const preVy = this.vy;
     const prevBottom = this.py + PLAYER_H;
+    this.prevFeet = prevBottom;
     this.px += this.vx;
     if (!this.resolveX()) {
       this.syncDistanceScore();
@@ -973,7 +1021,7 @@ export class Game implements GenHost, RenderHost {
     }
 
     /* ---- world */
-    const survivedEntities = this.updateEntities();
+    const survivedEntities = this.updateEntities(wasAirborne, wasDiving, preVy, prevBottom);
     // Collision handlers can end the run before the normal score section.
     // Keep the distance and pickups from the death frame in the final score.
     if (!survivedEntities) this.syncDistanceScore();
@@ -1047,13 +1095,16 @@ export class Game implements GenHost, RenderHost {
       const zi = Math.floor(m / ZONE_LEN_M);
       if (zi !== this.zoneIdx) {
         this.zoneIdx = zi;
-        this.texts.popText(
-          this.px + 40,
-          46,
-          ZONES[this.zoneOrder[zi % ZONES.length]].name,
-          '#ffffff',
-          1,
-        );
+        if (!this.isCampaign) {
+          const zoneName = ZONES[this.zoneOrder[zi % ZONES.length]]?.name || 'ZONE';
+          this.texts.popText(
+            this.px + 40,
+            46,
+            zoneName,
+            '#ffffff',
+            1,
+          );
+        }
       }
     }
 
@@ -1096,24 +1147,16 @@ export class Game implements GenHost, RenderHost {
    * null in solo play so the behaviour stays byte-identical.
    */
   private multiCamTarget(): number | null {
+    if (!this.isLocalBattle) return null;
     let minX = this.px;
     let maxX = this.px;
     let n = 1;
-    if (this.isLocalBattle) {
-      for (let i = 1; i < this.localPlayers.length; i++) {
-        const p = this.localPlayers[i];
-        if (!p.isAlive) continue;
-        if (p.px < minX) minX = p.px;
-        if (p.px > maxX) maxX = p.px;
-        n++;
-      }
-    } else if (this.isMultiplayer) {
-      for (const opp of this.opponentStates.values()) {
-        if (!opp.isAlive || opp.px === undefined) continue;
-        if (opp.px < minX) minX = opp.px;
-        if (opp.px > maxX) maxX = opp.px;
-        n++;
-      }
+    for (let i = 1; i < this.localPlayers.length; i++) {
+      const p = this.localPlayers[i];
+      if (!p.isAlive) continue;
+      if (p.px < minX) minX = p.px;
+      if (p.px > maxX) maxX = p.px;
+      n++;
     }
     if (n < 2) return null;
     const spread = maxX - minX;
@@ -1165,8 +1208,8 @@ export class Game implements GenHost, RenderHost {
       if (p.float) continue;
       const bh = GROUND_BOTTOM - p.y;
       if (
-        this.px + pw > p.x &&
-        this.px < p.x + p.w &&
+        this.px + pw > p.x + WALL_MARGIN &&
+        this.px < p.x + p.w - WALL_MARGIN &&
         this.py + ph > p.y + 3 &&
         this.py < p.y + bh
       ) {
@@ -1296,7 +1339,7 @@ export class Game implements GenHost, RenderHost {
     this.addShake(e.kind === 'spiker' ? 0.42 : 0.18 + (this.mult() - 1) * 0.06);
   }
 
-  private updateEntities(): boolean {
+  private updateEntities(wasAirborne: boolean, wasDiving: boolean, preVy: number, prevBottom: number): boolean {
     const pw = PLAYER_W;
     const ph = PLAYER_H;
 
@@ -1521,10 +1564,10 @@ export class Game implements GenHost, RenderHost {
     }
 
     /* enemies: player collision */
-    const fallVy = this.vy;
-    const prevFeet = pyc + ph - fallVy;
     let stompedThisFrame = false;
     let shieldTriggered = false;
+    const isDiving = this.diving || wasDiving;
+
     for (const e of this.enemies) {
       if (e.dead) continue;
       if (e.x < this.camX - 40 || e.x > this.camX + VW + 90) continue;
@@ -1540,11 +1583,11 @@ export class Game implements GenHost, RenderHost {
       }
 
       // Generous downward sweep when diving so diving reliably crushes enemies without fatal clipping
-      const isDiveSweep = this.diving && (
+      const isDiveSweep = isDiving && (
         pxc + pw > e.x - 2 &&
         pxc < e.x + e.w + 2 &&
         pyc + ph >= e.y &&
-        prevFeet <= e.y + e.h + 10
+        prevBottom <= e.y + e.h + 12
       );
 
       const isNormalOverlap =
@@ -1554,7 +1597,7 @@ export class Game implements GenHost, RenderHost {
         pyc < e.y + e.h - hPadBottom;
 
       if (isDiveSweep || isNormalOverlap) {
-        if (this.diving) {
+        if (isDiving) {
           this.killEnemy(e, SLAM_PTS, e.kind === 'spiker' ? 'SMASH' : 'SLAM');
           stompedThisFrame = true;
         } else if (e.kind === 'spiker') {
@@ -1569,16 +1612,17 @@ export class Game implements GenHost, RenderHost {
             return false;
           }
         } else {
-          // Reliable stomp detection: descending, near jump apex, or feet touching upper portion of enemy
-          const isDescending = fallVy >= -0.8;
-          const isAboveMidpoint = pyc + ph <= e.y + e.h * 0.85;
-          const wasAbove = prevFeet <= e.y + 4;
-          const isFlyerStomp = e.kind === 'flyer' && (isDescending || pyc + ph <= e.y + e.h + 2);
+          // Stomp vs Side-hit detection:
+          // A hit is a lethal side-collision ONLY if the player was already running/walking
+          // on flat ground into the enemy WITHOUT jumping/falling, OR if the player jumped
+          // upward from beneath and hit the enemy with their head while rising fast.
+          // In all other cases (falling, landing from jump, mid-air touch, flyer touch), it is a STOMP!
+          const isGroundedWalkHit = !wasAirborne && this.onGround && preVy <= 0 && this.vy <= 0 && !isDiving;
+          const isUpwardHeadBump = (preVy < -2.5 || this.vy < -2.5) && (pyc + ph > e.y + e.h - 1);
 
           const stomping =
             stompedThisFrame ||
-            isFlyerStomp ||
-            (isDescending && (isAboveMidpoint || wasAbove));
+            (!isGroundedWalkHit && !isUpwardHeadBump);
 
           if (stomping) {
             this.killEnemy(e, STOMP_PTS);
@@ -1598,21 +1642,27 @@ export class Game implements GenHost, RenderHost {
     }
     if (stompedThisFrame) {
       this.vy = -(this.jumpHeld ? 8.2 : 6.4);
+      this.onGround = false;
+      this.coyote = 0;
       this.diving = false;
       this.jumps = Math.min(this.jumps, 1);
       this.cut = false;
       this.sx = 1.12;
       this.sy = 0.9;
-      this.freeze = 0;
     }
 
     /* spikes */
     if (!shieldTriggered && this.invuln === 0) {
       for (const s of this.spikes) {
         if (s.x > this.camX + VW + 20 || s.x + s.n * 8 < this.camX - 20) continue;
+        // Volcano/hell geysers erupt on a cycle — only lethal while blowing
+        if (this.isCampaign && (this.zone.bg === 'volcano' || this.zone.bg === 'hell')) {
+          const cyc = (this.frame + Math.floor(s.x * 0.21)) % 240;
+          if (cyc >= 110) continue; // 110 erupting, 130 cooling
+        }
         // 2px landing forgiveness — clipping the very edge of a spike patch
         // on the landing frame feels unfair (common "bullshit death").
-        const wasJustAbove = prevFeet <= s.y + 7;
+        const wasJustAbove = prevBottom <= s.y + 7;
         if (wasJustAbove && pyc + ph > s.y + 5 && pyc + ph - (s.y + 5) < 3) continue;
         if (
           pxc + pw - 4 > s.x + 2 &&
@@ -1627,8 +1677,7 @@ export class Game implements GenHost, RenderHost {
       }
     }
 
-    /* local battle: enemy + spike contact for players 2-4. Stomping stays
-     * main-player-only, so any overlap here is a fatal hit. */
+    /* local battle: enemy + spike contact for players 2-4. */
     if (this.isLocalBattle) {
       for (let i = 1; i < this.localPlayers.length; i++) {
         const lp = this.localPlayers[i];
@@ -1648,14 +1697,16 @@ export class Game implements GenHost, RenderHost {
             ly + ph > e.y + hPadTop &&
             ly < e.y + e.h - hPadBottom
           ) {
-            // Battle players stomp exactly like the main runner: falling onto
-            // an enemy (or diving) kills it and bounces, otherwise it's fatal.
-            const landingStomp = e.kind !== 'spiker' && lp.vy > 0 && ly + ph - lp.vy <= e.y + e.h;
+            const isLocalGroundedWalkHit = lp.onGround && lp.vy === 0 && !lp.diving;
+            const isLocalUpwardHeadBump = lp.vy < -2.5 && ly + ph > e.y + e.h - 1;
+            const landingStomp = e.kind !== 'spiker' && !isLocalGroundedWalkHit && !isLocalUpwardHeadBump;
             const smash = e.kind === 'spiker' && lp.diving;
             if (landingStomp || smash) {
               e.dead = true;
               this.lpBonus[i] = (this.lpBonus[i] || 0) + (smash ? SLAM_PTS : STOMP_PTS);
               lp.vy = -(lp.jumpHeld ? 8.2 : 6.4);
+              lp.onGround = false;
+              lp.coyote = 0;
               lp.diving = false;
               this.particles.burst(e.x + e.w / 2, e.y + e.h / 2, 14, [this.zone.slimeBody, this.zone.accent, '#ffffff'], 2.6, 0.16);
               sfx.play(e.kind === 'spiker' ? 'slam' : 'stomp');

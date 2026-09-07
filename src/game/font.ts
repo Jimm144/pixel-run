@@ -155,7 +155,7 @@ function blit(
   const a = atlas(color);
   const { advance, width, height } = glyphMetrics(scale);
   const smoothing = ctx.imageSmoothingEnabled;
-  ctx.imageSmoothingEnabled = false;
+  if (smoothing) ctx.imageSmoothingEnabled = false;
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (ch === ' ') continue;
@@ -173,7 +173,7 @@ function blit(
       height,
     );
   }
-  ctx.imageSmoothingEnabled = smoothing;
+  if (smoothing) ctx.imageSmoothingEnabled = smoothing;
 }
 
 export function drawText(
@@ -186,7 +186,7 @@ export function drawText(
   shadow?: string,
   uppercase = true,
 ) {
-  const rendered = uppercase ? text.toUpperCase() : text;
+  const rendered = uppercase && /[a-z]/.test(text) ? text.toUpperCase() : text;
   const px = Math.round(x);
   const py = Math.round(y);
   if (shadow) blit(ctx, rendered, px, py + Math.max(1, Math.round(scale)), scale, shadow);

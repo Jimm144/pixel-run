@@ -21,12 +21,18 @@ export const GAME_STORAGE_KEYS = [
   'pixeldash.lastrun.v1',
   'pixeldash.volumes.v1',
   'pixeldash.runs',
+  'pixeldash.total_runs.v1',
   'pixeldash.quests.v2',
   'pixeldash.quests.v1',
   'pixeldash.lifetime_stats',
   'pixeldash.unlocked_skins',
   'pixeldash.equipped_skin',
   'pixeldash.local_battle_config.v1',
+  'pixeldash.discord_reward_claimed',
+  'pixeldash.campaign.v1',
+  'pixeldash.ui_theme.v1',
+  'pixeldash.feedback_never_show',
+  'pixeldash.last_feedback_prompt_run',
 ];
 
 /**
@@ -58,8 +64,8 @@ const COOKIE_BACKUP_KEYS = [
   'pixeldash.unlocked_skins',
   'pixeldash.equipped_skin',
   'pixeldash.total_runs.v1',
-  'pixeldash.runs',
   'pixeldash.discord_reward_claimed',
+  'pixeldash.campaign.v1',
 ];
 
 function encodeCookieValue(value: string): string {
