@@ -231,7 +231,7 @@ export function BattleModal({
       }
     };
 
-    party.onMatchStart = (seed, startAt) => {
+    const handleMatchStart = (seed: number, startAt: number) => {
       onClearMatchResult();
       setMyReady(false);
       if (party.state === 'in_game') {
@@ -256,6 +256,11 @@ export function BattleModal({
         countdownTimerRef.current = window.setTimeout(begin, delay);
       }
     };
+    party.onMatchStart = handleMatchStart;
+    const pendingStart = party.consumePendingMatchStart();
+    if (pendingStart && party.state === 'in_game') {
+      handleMatchStart(pendingStart.seed, pendingStart.startAt);
+    }
 
     party.onStatusMsg = (msg) => {
       setStatusMsg(msg);

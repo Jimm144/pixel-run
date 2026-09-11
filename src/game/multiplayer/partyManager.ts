@@ -157,6 +157,10 @@ export class PartyManager {
   private hostPeerId: string | null = null;
   /** Match identity prevents delayed packets from crossing rematches. */
   private activeMatchId: string | null = null;
+  private pendingMatchStart: { seed: number; startAt: number; matchId: string } | null = null;
+  private startBroadcastTimer: number | null = null;
+  private readyRetryTimer: number | null = null;
+  private rematchRetryTimer: number | null = null;
 
   // Callbacks
   onRoomStateChange?: (opponents: OpponentInfo[]) => void;
@@ -167,6 +171,12 @@ export class PartyManager {
   /** Remaining match time (ms) as broadcast by the host (bc_timer). The UI
    *  uses this to render the online battle countdown. */
   onMatchTimer?: (remainingMs: number) => void;
+
+  consumePendingMatchStart() {
+    const pending = this.pendingMatchStart;
+    this.pendingMatchStart = null;
+    return pending;
+  }
 
   constructor() {
     this.initGlobalLobbies();
@@ -191,6 +201,7 @@ export class PartyManager {
     this.lastRoomRevision = -1;
     this.hostPeerId = this.peerId;
     this.activeMatchId = null;
+    this.pendingMatchStart = null;
     this.lastRetainedStateAt = 0;
 
     const code = generateRoomCode();
@@ -259,6 +270,7 @@ export class PartyManager {
     this.lastRoomRevision = -1;
     this.hostPeerId = null;
     this.activeMatchId = null;
+    this.pendingMatchStart = null;
     this.lastRetainedStateAt = 0;
 
     // Initialize Sync Channels
@@ -1011,7 +1023,7 @@ export class PartyManager {
           // Stale dup of an older message arriving late over a slow
           // transport (MQTT behind WebRTC): must not overwrite fresher
           // ready state, or READY toggles on the host screen.
-          if (joinerSeq >= 0 && existing.seq !== undefined && joinerSeq <= existing.seq) return;
+          if (existing.seq !== undefined && (joinerSeq < 0 || joinerSeq <= existing.seq)) return;
           // Re-ping of an already-known tab: refresh identity only, keep
           // live meters/score/alive state (pings repeat every 300ms).
           const changed = existing.name !== joinerName || existing.skinId !== joinerSkin || existing.ready !== joinerReady;
@@ -1052,6 +1064,7 @@ export class PartyManager {
       if (leaverId && leaverId !== this.peerId) {
         if (this.role === 'host') {
           const entry = this.localTabPlayers.get(leaverId);
+          if (entry && entry.seq !== undefined && leaveSeq < 0) return;
           if (entry && leaveSeq >= 0 && entry.seq !== undefined && leaveSeq <= entry.seq) {
             // Stale leave from before a rejoin: keep the fresher entry.
           } else {
@@ -1101,7 +1114,7 @@ export class PartyManager {
         // Host snapshots are authoritative. Duplicate transports can deliver
         // the same state out of order, so an older revision is never allowed
         // to resurrect a player or undo a ready toggle.
-        if (this.role === 'joiner' && revision >= 0 && revision < this.lastRoomRevision) return;
+        if (this.role === 'joiner' && this.lastRoomRevision >= 0 && (revision < 0 || revision < this.lastRoomRevision)) return;
         if (this.role === 'joiner' && revision >= 0) this.lastRoomRevision = revision;
         this.awaitingFirstRoomState = false;
         this.lastRoomProofAt = Date.now();
@@ -1114,7 +1127,7 @@ export class PartyManager {
       if (senderId && senderId !== this.peerId) {
         if (this.role === 'host') {
           const entry = this.localTabPlayers.get(senderId);
-          if (entry && !(readySeq >= 0 && entry.seq !== undefined && readySeq <= entry.seq)) {
+          if (entry && !(entry.seq !== undefined && (readySeq < 0 || readySeq <= entry.seq))) {
             const changed = entry.ready !== ready;
             entry.ready = ready;
             if (readySeq >= 0) entry.seq = readySeq;
@@ -1135,7 +1148,14 @@ export class PartyManager {
       // startAt comes from the host's clock; device clocks are not required
       // to be synchronized. Match IDs, room state, and the current-state
       // guard handle stale starts without rejecting a valid countdown.
-      if (this.activeMatchId === matchId) return;
+      if (this.activeMatchId === matchId) {
+        if (this.pendingMatchStart && this.onMatchStart) {
+          const pending = this.pendingMatchStart;
+          this.pendingMatchStart = null;
+          this.onMatchStart(pending.seed, pending.startAt);
+        }
+        return;
+      }
       // Only a lobby (or the results screen awaiting a rematch) is a
       // legitimate start trigger. This guard drops two dangerous stale
       // deliveries: a bc_start that arrives after leave() (state 'idle' —
@@ -1145,6 +1165,10 @@ export class PartyManager {
       if (this.state === 'in_room' || this.state === 'ended') {
         if (hostId) this.hostPeerId = hostId;
         this.activeMatchId = matchId;
+        if (this.rematchRetryTimer !== null) {
+          window.clearInterval(this.rematchRetryTimer);
+          this.rematchRetryTimer = null;
+        }
         this.state = 'in_game';
         this.matchResult = null;
         this.localAlive = true;
@@ -1164,7 +1188,8 @@ export class PartyManager {
         this.matchDeadlineAt = Date.now() + PartyManager.MATCH_TIME_LIMIT_MS;
         this.lastHostTrafficAt = Date.now();
         this.startJoinerWatchdog();
-        this.onMatchStart?.(seed, startAt);
+        if (this.onMatchStart) this.onMatchStart(seed, startAt);
+        else this.pendingMatchStart = { seed, startAt, matchId };
       }
     } else if (type === 'bc_tick' && this.state === 'in_game' && this.isCurrentMatchPacket(data)) {
       const senderId = data.peerId as string;
@@ -1265,8 +1290,9 @@ export class PartyManager {
         this.startMatch();
       }
     } else if (type === 'bc_rematch') {
-      // Legacy rematch packets are intentionally ignored. A match start is
-      // now the sole authoritative transition into a new race.
+      // Older cached joiners still use this packet as their rematch request.
+      // Only a host showing results may turn it into a new start.
+      if (this.role === 'host' && this.state === 'ended') this.startMatch();
       return;
     } else if (type === 'bc_join_reject') {
       if (data.targetPeerId === this.peerId && this.state === 'in_room') {
@@ -1281,7 +1307,7 @@ export class PartyManager {
     players: Array<{ peerId: string; name: string; skinId: SkinId; isHost: boolean; ready?: boolean }>,
     revision = -1,
   ) {
-    if (this.role === 'joiner' && revision >= 0 && revision < this.lastRoomRevision) return;
+    if (this.role === 'joiner' && this.lastRoomRevision >= 0 && (revision < 0 || revision < this.lastRoomRevision)) return;
     const next = new Map<string, OpponentInfo>();
     for (const p of players) {
       if (p.peerId === this.peerId) continue;
@@ -1389,6 +1415,18 @@ export class PartyManager {
       window.clearInterval(this.joinerWatchdogTimer);
       this.joinerWatchdogTimer = null;
     }
+    if (this.startBroadcastTimer !== null) {
+      window.clearInterval(this.startBroadcastTimer);
+      this.startBroadcastTimer = null;
+    }
+    if (this.readyRetryTimer !== null) {
+      window.clearInterval(this.readyRetryTimer);
+      this.readyRetryTimer = null;
+    }
+    if (this.rematchRetryTimer !== null) {
+      window.clearInterval(this.rematchRetryTimer);
+      this.rematchRetryTimer = null;
+    }
     this.matchDeadlineAt = null;
     this.lastMatchTimerSec = -1;
   }
@@ -1481,7 +1519,19 @@ export class PartyManager {
 
   setReady(ready: boolean) {
     this.localReady = ready;
-    this.broadcast({ type: 'bc_ready', peerId: this.peerId, ready, seq: this.nextLobbySeq() });
+    const seq = this.nextLobbySeq();
+    const message = { type: 'bc_ready', peerId: this.peerId, ready, seq };
+    if (this.readyRetryTimer !== null) window.clearInterval(this.readyRetryTimer);
+    let attempts = 0;
+    const send = () => {
+      this.broadcast(message);
+      if (++attempts >= 4 && this.readyRetryTimer !== null) {
+        window.clearInterval(this.readyRetryTimer);
+        this.readyRetryTimer = null;
+      }
+    };
+    send();
+    this.readyRetryTimer = window.setInterval(send, 350);
   }
 
   setRoomVisibility(isPublic: boolean) {
@@ -1495,6 +1545,7 @@ export class PartyManager {
     const startAt = Date.now() + 3000;
     const matchId = this.createMatchId();
     this.activeMatchId = matchId;
+    this.pendingMatchStart = null;
     this.localAlive = true;
     this.localTick = null;
     if (this.role === 'host') {
@@ -1521,17 +1572,30 @@ export class PartyManager {
     }
 
     // BroadcastChannel, WebRTC & MQTT Relay sync
-    this.broadcast({
+    const startMessage = {
       type: 'bc_start',
       seed,
       startAt,
       matchId,
       hostId: this.hostPeerId,
-    });
+    };
+    this.broadcast(startMessage);
 
     this.state = 'in_game';
     this.matchResult = null;
-    this.onMatchStart?.(seed, startAt);
+    if (this.onMatchStart) this.onMatchStart(seed, startAt);
+    else this.pendingMatchStart = { seed, startAt, matchId };
+    if (this.role === 'host') {
+      let attempts = 0;
+      this.startBroadcastTimer = window.setInterval(() => {
+        if (this.state !== 'in_game' || attempts++ >= 8) {
+          if (this.startBroadcastTimer !== null) window.clearInterval(this.startBroadcastTimer);
+          this.startBroadcastTimer = null;
+          return;
+        }
+        this.broadcast(startMessage);
+      }, 500);
+    }
   }
 
   sendTick(payload: PlayerTickPayload) {
@@ -1584,7 +1648,21 @@ export class PartyManager {
     if (this.role === 'host') {
       this.startMatch();
     } else if (this.state === 'ended') {
-      this.broadcast({ type: 'bc_rematch_request', peerId: this.peerId, previousMatchId: this.activeMatchId });
+      const request = { type: 'bc_rematch_request', peerId: this.peerId, previousMatchId: this.activeMatchId };
+      const legacyRequest = { type: 'bc_rematch', peerId: this.peerId };
+      if (this.rematchRetryTimer !== null) window.clearInterval(this.rematchRetryTimer);
+      let attempts = 0;
+      const send = () => {
+        if (this.state !== 'ended' || attempts++ >= 5) {
+          if (this.rematchRetryTimer !== null) window.clearInterval(this.rematchRetryTimer);
+          this.rematchRetryTimer = null;
+          return;
+        }
+        this.broadcast(request);
+        this.broadcast(legacyRequest);
+      };
+      send();
+      this.rematchRetryTimer = window.setInterval(send, 450);
     }
   }
 
@@ -1672,6 +1750,7 @@ export class PartyManager {
     this.lastRoomRevision = -1;
     this.hostPeerId = null;
     this.activeMatchId = null;
+    this.pendingMatchStart = null;
     this.opponents.clear();
     this.localTabPlayers.clear();
     this.matchResult = null;
