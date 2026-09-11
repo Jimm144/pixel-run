@@ -834,10 +834,7 @@ export class PartyManager {
   }
 
   private isCurrentMatchPacket(data: Record<string, unknown>): boolean {
-    if (!this.activeMatchId) return false;
-    // A cached older client may omit matchId. Keep that client playable while
-    // still rejecting explicitly mismatched packets from newer matches.
-    if (data.matchId !== undefined && data.matchId !== this.activeMatchId) return false;
+    if (!this.activeMatchId || data.matchId !== this.activeMatchId) return false;
     const hostId = typeof data.hostId === 'string' ? data.hostId : null;
     return !hostId || !this.hostPeerId || hostId === this.hostPeerId;
   }
@@ -1762,7 +1759,25 @@ export class PartyManager {
     if (!trimmed) return;
     if (trimmed === this.localName) return;
     this.localName = trimmed;
-    if (this.role === 'host') this.publishLobbyHeartbeat();
+    if (this.role === 'host') {
+      const local = this.peerId ? this.localTabPlayers.get(this.peerId) : undefined;
+      if (local && local.name !== trimmed) {
+        local.name = trimmed;
+        this.bumpRoomRevision();
+        this.broadcastRoomState(true);
+        this.updateOpponentsFromList(Array.from(this.localTabPlayers.values()), this.roomRevision);
+      }
+      this.publishLobbyHeartbeat();
+    } else if (this.role === 'joiner' && this.state === 'in_room') {
+      this.broadcast({
+        type: 'bc_join',
+        peerId: this.peerId,
+        name: this.localName,
+        skinId: this.localSkin,
+        ready: this.localReady,
+        seq: this.nextLobbySeq(),
+      });
+    }
   }
 }
 

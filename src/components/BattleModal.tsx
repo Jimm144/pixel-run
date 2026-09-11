@@ -104,11 +104,13 @@ export function BattleModal({
   const [joined, setJoined] = useState(false);
   const [myReady, setMyReady] = useState(false);
   const [onlineName, setOnlineName] = useState<string>(() => {
+    const fallback = `RUNNER ${100 + Math.floor(Math.random() * 900)}`;
     try {
       const saved = localStorage.getItem(ONLINE_NAME_KEY);
-      if (saved) return saved;
+      if (saved && saved.trim().toUpperCase() !== 'RUNNER') return saved;
+      localStorage.setItem(ONLINE_NAME_KEY, fallback);
     } catch {}
-    return localName;
+    return fallback || localName;
   });
 
   const updateOnlineName = (v: string) => {

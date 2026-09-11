@@ -2055,6 +2055,7 @@ export class Game implements GenHost, RenderHost {
     this.flushLifetimeStats();
     if (this.phase === 'over') return;
     if (this.phase !== 'playing' && this.phase !== 'ready') return;
+    if (this.phase === 'playing' && this.countdown > 0) return;
     if (this.phase === 'playing' && cause !== 'pit') {
       if (this.shielded && this.absorbShieldHit()) return;
       if (this.invuln > 0) return;
