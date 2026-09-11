@@ -285,7 +285,7 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
               <button
                 type="button"
                 onClick={() => setMode('prompt')}
-                className="border-2 border-[var(--ui-border)] bg-[#160b2c] px-3 py-1.5 text-center font-pixel text-[10px] text-[var(--ui-muted)] shadow-[1px_1px_0_var(--ui-bg)] hover:text-[#ffffff] active:translate-x-[1px] active:translate-y-[1px]"
+                className="border-2 border-[var(--ui-border)] bg-[var(--ui-panel2)] px-3 py-1.5 text-center font-pixel text-[10px] text-[var(--ui-muted)] shadow-[1px_1px_0_var(--ui-bg)] hover:text-[#ffffff] active:translate-x-[1px] active:translate-y-[1px]"
               >
                 CANCEL
               </button>

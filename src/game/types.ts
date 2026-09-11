@@ -123,6 +123,8 @@ export interface Pickup {
   t: number;
   gem: boolean;
   dead: boolean;
+  /** Cross-tab identity, computed once at spawn (see coinId). */
+  id?: string;
 }
 export interface PowerUp {
   x: number;
@@ -237,6 +239,17 @@ export function hash(n: number) {
   const s = Math.sin(n * 127.1) * 43758.5453;
   return s - Math.floor(s);
 }
+
+/**
+ * Deterministic cross-tab identity for a coin: rounded world-x + rounded
+ * world-y. The world is generated from the shared match seed, so every tab
+ * produces the same pickups at the same absolute position — no zone index
+ * (startX shifts with the viewport) and no spawn-slot index (culling
+ * diverges once tabs collect different coins) are safe across tabs. The y
+ * component keeps two different coins that happen to share a rounded world-x
+ * from being deduped as the same coin when tabs' worlds diverge slightly.
+ */
+export const coinId = (x: number, y: number) => Math.round(x) + ':' + Math.round(y);
 
 /* -------------------------------------------------- cross-module contracts */
 /**

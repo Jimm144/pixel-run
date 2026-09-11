@@ -453,7 +453,7 @@ export function SkinsModal({
           className={`flex min-h-[20px] w-full items-center justify-center border px-1 py-1 text-center font-pixel text-[7px] leading-tight ${
           active
             ? 'border-[#ff70a6]/80 bg-[#33081e] text-[#ff70a6]'
-            : 'border-[var(--ui-border3)] bg-[#1c162e] text-[var(--ui-muted)]'
+            : 'border-[var(--ui-border3)] bg-[var(--ui-panel2)] text-[var(--ui-muted)]'
         }`}
         >
           {skin.unlock.desc}
@@ -465,7 +465,7 @@ export function SkinsModal({
         <div className={`flex h-[20px] sm:h-[22px] w-full items-center justify-center border px-1 text-center font-pixel text-[8px] ${
           discordClaimed
             ? 'border-[var(--ui-accent)]/60 bg-[var(--ui-accent-dim)] text-[var(--ui-accent)]'
-            : 'border-[#5865f2]/60 bg-[#151942] text-[#9da9ff]'
+            : 'border-[#5865f2]/60 bg-[var(--ui-panel2)] text-[#9da9ff]'
         }`}>
           {discordClaimed ? 'REWARD CLAIMED' : 'JOIN THE DISCORD'}
         </div>
@@ -670,7 +670,7 @@ export function SkinsModal({
                   }}
                   className={`flex h-[104px] w-full flex-col justify-between border-2 p-3 text-left transition-all sm:h-[112px] ${
                     selected || isCardFocused
-                      ? 'border-[var(--ui-accent)] bg-[#221038] shadow-[2px_2px_0_var(--ui-accent)]'
+                      ? 'border-[var(--ui-accent)] bg-[var(--ui-panel2)] shadow-[2px_2px_0_var(--ui-accent)]'
                       : 'border-[#2a1b49] bg-[var(--ui-panel2)] shadow-[2px_2px_0_var(--ui-bg)] hover:border-[#4f3680]'
                   } ${isCardFocused ? 'nav-focus' : ''}`}
                 >

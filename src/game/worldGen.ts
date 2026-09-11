@@ -10,6 +10,7 @@ import {
   PAT,
   PLAYER_H,
   VH,
+  coinId,
   type BiomeEventTrigger,
   type EnemyKind,
   type GenHost,
@@ -91,7 +92,7 @@ export class WorldGen {
     for (let i = 0; i < n; i++) {
       const t = (i + 0.5) / n;
       const y = topY - Math.sin(t * Math.PI) * arcH;
-      this.h.pickups.push({ x: x0 + (x1 - x0) * t, y, t: this.rnd(0, 6), gem: false, dead: false });
+      this.h.pickups.push({ x: x0 + (x1 - x0) * t, y, t: this.rnd(0, 6), gem: false, dead: false, id: coinId(x0 + (x1 - x0) * t, y) });
     }
   }
 
@@ -99,7 +100,8 @@ export class WorldGen {
     const n = clamp(Math.floor((x1 - x0) / 26) + 1, 2, max);
     for (let i = 0; i < n; i++) {
       const t = n === 1 ? 0.5 : i / (n - 1);
-      this.h.pickups.push({ x: x0 + (x1 - x0) * t, y, t: i * 0.7, gem: false, dead: false });
+      const cx = x0 + (x1 - x0) * t;
+      this.h.pickups.push({ x: cx, y, t: i * 0.7, gem: false, dead: false, id: coinId(cx, y) });
     }
   }
 
@@ -398,12 +400,15 @@ export class WorldGen {
     const count = Math.min(n, pts.length >> 1);
     for (let i = 0; i < count; i++) {
       const idx = Math.floor(((i + 0.5) / count) * (pts.length >> 1));
+      const cx = pts[idx * 2];
+      const cy = pts[idx * 2 + 1];
       this.h.pickups.push({
-        x: pts[idx * 2],
-        y: pts[idx * 2 + 1],
+        x: cx,
+        y: cy,
         t: i * 0.6,
         gem: false,
         dead: false,
+        id: coinId(cx, cy),
       });
     }
   }

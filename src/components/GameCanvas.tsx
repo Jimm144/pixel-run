@@ -73,6 +73,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
     let last = performance.now();
     let acc = 0;
     let wasPaused = false;
+    let lastQuestSig = -1;
     const STEP = 1000 / 60;
     const loop = (t: number) => {
       raf = requestAnimationFrame(loop);
@@ -114,7 +115,15 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
         }
         // Quest progress only counts toward the daily record in solo runs —
         // battle pickups must not complete (or push totals past) quests.
-        if (game.phase === 'playing' && game.mode === 'solo') questProgressRef.current(game.getQuestRunStats());
+        // The scan allocates a stats snapshot, so only run it when a tracked
+        // stat actually changed since the last scan.
+        if (game.phase === 'playing' && game.mode === 'solo') {
+          const sig = game.questScanSig();
+          if (sig !== lastQuestSig) {
+            lastQuestSig = sig;
+            questProgressRef.current(game.getQuestRunStats());
+          }
+        }
       }
     };
     raf = requestAnimationFrame(loop);
@@ -123,6 +132,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       // Drop the ref so the unmounted Game can be collected and stale
       // listeners (pointerup etc.) never find an orphaned instance.
       gameRef.current = null;
+      game.destroy();
     };
   }, [gameRef]);
 

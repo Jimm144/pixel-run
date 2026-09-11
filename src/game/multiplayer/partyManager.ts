@@ -59,7 +59,7 @@ export const MAX_PLAYERS = 8;
 function generateRoomCode(): string {
   const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   let code = '';
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 5; i++) {
     code += letters.charAt(Math.floor(Math.random() * letters.length));
   }
   return code;
@@ -111,6 +111,12 @@ export class PartyManager {
    *  so every client can render the countdown. */
   private matchTimer: number | null = null;
   private lastMatchTimerSec = -1;
+  /** Joiner-side match watchdog: if the host dies mid-match its traffic
+   *  (bc_room_state/bc_timer/bc_tick) stops; after ~15s of silence with the
+   *  local player dead (or past the match deadline) the joiner ends the
+   *  match itself instead of hanging in 'in_game' forever. */
+  private joinerWatchdogTimer: number | null = null;
+  private lastHostTrafficAt = 0;
   // Storage-fallback tick coalescing (bc_tick is ~30x/s; cap storage writes).
   private lastTickStorageWrite = 0;
   private pendingTickStorage: (Record<string, unknown> & { ts: number; roomId?: string | null }) | null = null;
@@ -193,8 +199,9 @@ export class PartyManager {
     // Hard validation BEFORE leave()/channel setup: the code feeds MQTT topic
     // segments (pixelrun/room/<code>) and the BroadcastChannel name, so an
     // unvalidated value like "a/#" would subscribe to EVERY room on the
-    // public broker. Only 4 uppercase alphanumerics are ever valid.
-    if (!/^[A-Z0-9]{4}$/.test(cleanCode)) {
+    // public broker. Only uppercase alphanumerics (4- or 5-char room codes)
+    // are ever valid.
+    if (!/^[A-Z0-9]{4,5}$/.test(cleanCode)) {
       this.onStatusMsg?.('INVALID ROOM CODE');
       return false;
     }
@@ -417,6 +424,10 @@ export class PartyManager {
 
   private async initSyncChannels(roomId: string, role: 'host' | 'joiner') {
     const channelName = `pixelrun_room_${roomId.toLowerCase()}`;
+    // Deterministic broker choice: the same room code always maps to the same
+    // broker, so host and joiners never fail over to different public brokers.
+    let codeHash = 0;
+    for (let i = 0; i < roomId.length; i++) codeHash = (codeHash * 31 + roomId.charCodeAt(i)) >>> 0;
 
     // 1. BroadcastChannel (0ms local tabs)
     if (typeof BroadcastChannel !== 'undefined') {
@@ -558,6 +569,32 @@ export class PartyManager {
           });
         });
       }
+
+      // WebRTC stays best-effort: reconnect once if the socket drops, and
+      // if the peer never opens the relay continues MQTT-only instead of
+      // hanging a join on WebRTC.
+      if (this.peer) {
+        const peer = this.peer;
+        let reconnectTried = false;
+        peer.on('disconnected', () => {
+          if (reconnectTried || peer.destroyed) return;
+          reconnectTried = true;
+          try {
+            peer.reconnect();
+          } catch {
+            // Ignore
+          }
+        });
+        window.setTimeout(() => {
+          if (this.peer !== peer || peer.open) return;
+          try {
+            peer.destroy();
+          } catch {
+            // Ignore
+          }
+          if (this.peer === peer) this.peer = null;
+        }, 8000);
+      }
     } catch {
       // Ignore
     }
@@ -596,6 +633,7 @@ export class PartyManager {
           }
         };
       }
+      this.mqtt.setPreferredBroker(codeHash);
       this.mqtt.ensureStarted();
       this.mqtt.setTopics([`${ROOM_TOPIC_PREFIX}${roomId.toLowerCase()}`, LOBBY_TOPIC_WILDCARD]);
     }
@@ -667,18 +705,16 @@ export class PartyManager {
         this.pendingTickStorage = null;
         this.lastTickStorageWrite = now;
       }
-      const key = `pixelrun_sync_${this.roomId.toLowerCase()}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      // One fixed key per room, overwritten per write: the expiry-timeout
+      // churn of a fresh key per broadcast is not needed — the _nonce makes
+      // every write a new value (so listeners fire), and restarts win.
+      const key = `pixelrun_sync_${this.roomId.toLowerCase()}`;
       try {
         const payload = JSON.stringify({ ...outStore, _ts: Date.now(), _nonce: Math.random() });
         localStorage.setItem(key, payload);
       } catch {
         // Ignore
       }
-      setTimeout(() => {
-        try {
-          localStorage.removeItem(key);
-        } catch {}
-      }, 1500);
     }
 
     // 3. WebRTC DataConnections
@@ -917,6 +953,9 @@ export class PartyManager {
         this.localTick = null;
         this.localReady = false;
         this.lastRoomProofAt = Date.now();
+        this.matchDeadlineAt = Date.now() + PartyManager.MATCH_TIME_LIMIT_MS;
+        this.lastHostTrafficAt = Date.now();
+        this.startJoinerWatchdog();
         this.onMatchStart?.(seed, startAt);
       }
     } else if (type === 'bc_tick' && this.state === 'in_game') {
@@ -938,6 +977,7 @@ export class PartyManager {
         typeof payload.score === 'number' &&
         Number.isFinite(payload.score)
       ) {
+        this.lastHostTrafficAt = Date.now();
         const opp = this.opponents.get(senderId);
         if (opp) {
           opp.px = payload.px;
@@ -985,6 +1025,8 @@ export class PartyManager {
       // the battle countdown; nothing else needs it locally.
       const remaining = typeof data.remainingMs === 'number' && Number.isFinite(data.remainingMs) ? data.remainingMs : undefined;
       if (remaining !== undefined) this.onMatchTimer?.(Math.max(0, remaining));
+      if (typeof data.deadlineAt === 'number' && Number.isFinite(data.deadlineAt)) this.matchDeadlineAt = data.deadlineAt;
+      this.lastHostTrafficAt = Date.now();
     } else if (type === 'bc_match_end') {
       const result = data.result as MatchResult;
       // Guard against double end and against results that arrive after we
@@ -1130,8 +1172,30 @@ export class PartyManager {
       window.clearInterval(this.matchTimer);
       this.matchTimer = null;
     }
+    if (this.joinerWatchdogTimer !== null) {
+      window.clearInterval(this.joinerWatchdogTimer);
+      this.joinerWatchdogTimer = null;
+    }
     this.matchDeadlineAt = null;
     this.lastMatchTimerSec = -1;
+  }
+
+  /** Joiner-side host-death watchdog: the host ends the match at the
+   *  deadline or when everyone dies — but if its tab dies mid-match, no
+   *  traffic arrives. After ~15s of silence with the local player dead (or
+   *  the local match deadline passed), the joiner runs the host's own
+   *  finish-match path. */
+  private startJoinerWatchdog() {
+    this.stopMatchTimer();
+    this.joinerWatchdogTimer = window.setInterval(() => {
+      if (this.role !== 'joiner' || this.state !== 'in_game') return;
+      const now = Date.now();
+      const silent = now - this.lastHostTrafficAt > 15000;
+      const deadlinePassed = this.matchDeadlineAt !== null && now >= this.matchDeadlineAt;
+      if (silent && (!this.localAlive || deadlinePassed)) {
+        this.finishBcMatch();
+      }
+    }, 3000);
   }
 
   private finishBcMatch() {

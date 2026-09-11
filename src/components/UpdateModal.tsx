@@ -58,6 +58,10 @@ export function UpdateModal({
     swUpdate ? 'UPDATE READY TO INSTALL!' : null,
   );
 
+  useEffect(() => {
+    setStatusMessage(swUpdate ? 'UPDATE READY TO INSTALL!' : null);
+  }, [swUpdate]);
+
   const handleCheck = useCallback(async () => {
     if (checking) return;
     sfx.play('ui');

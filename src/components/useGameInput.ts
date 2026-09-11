@@ -593,6 +593,18 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
       startBattleGpPolling();
     };
     window.addEventListener('gamepadconnected', onGpConnected);
+    // Gamepads already paired before load fire no 'gamepadconnected' — probe
+    // for them on a slow cadence so P2-P4 controllers still drive.
+    const gpProbeId = window.setInterval(() => {
+      if (isPollingBattleGp) return;
+      const pads = navigator.getGamepads?.() ?? [];
+      for (const pad of pads) {
+        if (pad && pad.connected) {
+          startBattleGpPolling();
+          break;
+        }
+      }
+    }, 600);
 
     const cleanupGamepad = inputManager.onGamepadUpdate((state) => {
       const g = gameRef.current;
@@ -672,6 +684,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
 
     return () => {
       cancelAnimationFrame(gpAnimId);
+      window.clearInterval(gpProbeId);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);

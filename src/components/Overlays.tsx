@@ -1,8 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import type { Stats } from '../game/engine';
-import { drawPlayerSprite } from '../game/playerSprite';
 import { DailyQuestPanel } from './QuestPanels';
-import { PauseIcon, PixelButton, Panel, Stat, PixelCloseIcon } from './ui';
+import { PauseIcon, PixelButton, Panel, Stat } from './ui';
 import type { QuestDefinition, QuestRecord, QuestRunStats } from '../game/quests';
 import { sfx } from '../game/audio';
 
@@ -302,53 +301,6 @@ function PixelGithubIcon({ className = 'h-2.5 w-2.5 tablet:h-3 tablet:w-3' }: { 
   );
 }
 
-function GladiatorPreview() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.imageSmoothingEnabled = false;
-    drawPlayerSprite(ctx, 48, 58, { skinId: 'gladiator', frame: 0, run: 0, onGround: true, scale: 4 });
-  }, []);
-
-  return <canvas ref={canvasRef} width={96} height={112} className="h-20 w-[68px] shrink-0 [image-rendering:pixelated]" aria-hidden="true" />;
-}
-
-function DiscordPromo({ onClaim, onDismiss }: { onClaim: () => void; onDismiss: () => void }) {
-  return (
-    <div className="relative flex w-full items-center gap-2 border-2 border-[#5865f2] bg-[#151942] p-2 shadow-[3px_3px_0_var(--ui-bg)] tablet:gap-3 tablet:p-2.5">
-      <button
-        type="button"
-        aria-label="Dismiss Discord reward"
-        onClick={onDismiss}
-        className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center text-[#9da9ff] hover:text-white"
-      >
-        <PixelCloseIcon className="h-3 w-3" />
-      </button>
-      <div className="flex h-[76px] w-[68px] shrink-0 items-center justify-center border border-[#5865f2]/50 bg-[#0d102b]">
-        <GladiatorPreview />
-      </div>
-      <div className="min-w-0 flex-1 pr-3">
-        <p className="font-pixel text-[8px] leading-[1.6] text-[var(--ui-gold)]">
-          JOIN THE DISCORD TO GET THE LEGENDARY GLADIATOR SKIN
-        </p>
-        <button
-          type="button"
-          onClick={onClaim}
-          className="mt-2 border-2 border-[var(--ui-bg)] bg-[#5865f2] px-3 py-1.5 font-pixel text-[8px] text-white shadow-[2px_2px_0_var(--ui-bg)] hover:bg-[#7289da] active:translate-x-[1px] active:translate-y-[1px]"
-        >
-          JOIN DISCORD
-        </button>
-      </div>
-    </div>
-  );
-}
-
-
-
 function PixelReloadIcon({ className = 'h-2.5 w-2.5 tablet:h-3 tablet:w-3' }: { className?: string }) {
   return (
     <svg
@@ -411,9 +363,6 @@ export function StartScreen({
   questOnShare,
   onOpenSkins,
   onOpenBattle,
-  showDiscordPromo,
-  onDiscordPromoClaim,
-  onDiscordPromoDismiss,
   onExportSave,
   onImportSave,
   onCheckUpdate,
@@ -435,9 +384,6 @@ export function StartScreen({
   questOnShare?: () => void;
   onOpenSkins?: () => void;
   onOpenBattle?: () => void;
-  showDiscordPromo?: boolean;
-  onDiscordPromoClaim?: () => void;
-  onDiscordPromoDismiss?: () => void;
   onExportSave?: () => void;
   onImportSave?: () => void;
   onCheckUpdate?: () => void;
@@ -549,9 +495,6 @@ export function StartScreen({
           )}
         </div>
 
-        {showDiscordPromo && onDiscordPromoClaim && onDiscordPromoDismiss && (
-          <DiscordPromo onClaim={onDiscordPromoClaim} onDismiss={onDiscordPromoDismiss} />
-        )}
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 font-pixel text-[8px] tablet:text-[10px]">
           <a
             href="https://github.com/Jimm144/pixel-run"

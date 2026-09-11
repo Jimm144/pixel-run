@@ -49,7 +49,9 @@ import {
   type Spike,
   type Spring,
   type Stats,
+  type BiomeEventTrigger,
   Mulberry32,
+  coinId,
 } from './types';
 import { type SkinId, loadEquippedSkin, loadLifetimeStats, saveLifetimeStats, MILESTONES } from './skins';
 import { WorldGen } from './worldGen';
@@ -61,16 +63,14 @@ import { coinSync } from './coinSync';
 export { BASE_VW, BASE_VH, MAX_VH, VW, VH, worldOffsetY, setViewportSize } from './types';
 export type { Phase, Stats } from './types';
 
-/**
- * Deterministic cross-tab identity for a coin: rounded world-x + rounded
- * world-y. The world is generated from the shared match seed, so every tab
- * produces the same pickups at the same absolute position — no zone index
- * (startX shifts with the viewport) and no spawn-slot index (culling
- * diverges once tabs collect different coins) are safe across tabs. The y
- * component keeps two different coins that happen to share a rounded world-x
- * from being deduped as the same coin when tabs' worlds diverge slightly.
- */
-const coinId = (x: number, y: number) => Math.round(x) + ':' + Math.round(y);
+/** Cull predicates hoisted to module level so cull() never allocates closures. */
+const cullPlatform = (p: Platform, lim: number) => p.x + p.w < lim;
+const cullPickup = (k: Pickup, lim: number) => k.dead || k.x < lim;
+const cullPowerUp = (u: PowerUp, lim: number) => u.dead || u.x < lim;
+const cullTrigger = (t: BiomeEventTrigger, lim: number) => t.used || t.x < lim;
+const cullEnemy = (e: Enemy, lim: number) => e.dead || e.x < lim;
+const cullSpike = (s: Spike, lim: number) => s.x + s.n * 8 < lim;
+const cullSpring = (s: Spring, lim: number) => s.x + 14 < lim;
 
 /**
  * Initial values for every mutable piece of run state. reset() re-applies
@@ -115,8 +115,17 @@ type GameState = {
     | 'campaignWon'
     | 'winT'
     | 'onCampaignWin'
+    | 'runnersScratch'
   >]: Game[K];
 };
+
+/** Per-frame view of one active runner (main player or local battle player). */
+interface RunnerView {
+  px: number;
+  py: number;
+  isMain: boolean;
+  playerIdx: number;
+}
 
 /**
  * The game itself. Owns input, player physics, collisions, scoring, camera
@@ -168,6 +177,14 @@ export class Game implements GenHost, RenderHost {
    *  local player slot; re-zeroed by reset()/startLocalBattle. */
   lpBonus!: number[];
   opponentStates = new Map<string, OpponentInfo>();
+  /** Reusable per-frame runner views (no per-frame allocation); excluded from
+   *  reset state — contents are rewritten every updateEntities call. */
+  runnersScratch: RunnerView[] = [
+    { px: 0, py: 0, isMain: true, playerIdx: 0 },
+    { px: 0, py: 0, isMain: false, playerIdx: 1 },
+    { px: 0, py: 0, isMain: false, playerIdx: 2 },
+    { px: 0, py: 0, isMain: false, playerIdx: 3 },
+  ];
 
   /* ---- input */
   jumpHeld!: boolean;
@@ -312,6 +329,11 @@ export class Game implements GenHost, RenderHost {
     this.worldGen = new WorldGen(this);
     this.reset();
     coinSync.subscribe(this.onCoinCollected);
+  }
+
+  /** Release subscriptions so a disposed instance doesn't leak. */
+  destroy() {
+    coinSync.unsubscribe(this.onCoinCollected);
   }
 
   private defaults(): GameState {
@@ -610,8 +632,8 @@ export class Game implements GenHost, RenderHost {
     this.savedMoveDir = this.moveDir;
     // A tap buffered during the countdown must fire at GO after the pause —
     // it can't be re-derived from jumpHeld (the finger already lifted).
-    this.savedJumpBuf = this.countdown > 0 ? this.jumpBuf : 0;
-      this.savedDiveBuf = this.countdown > 0 ? this.diveBuf : 0;
+    this.savedJumpBuf = this.jumpBuf;
+    this.savedDiveBuf = this.diveBuf;
     this.jumpHeld = false;
     this.jumpBuf = 0;
     this.diveHeld = false;
@@ -681,6 +703,26 @@ export class Game implements GenHost, RenderHost {
       twoPowerups: this.questTwoPowerups,
       maxMoonPhase: this.questMaxMoonPhase,
     };
+  }
+
+  /** Cheap change-detector for the per-10-frame quest scan: a folded hash of
+   *  every stat the quest system tracks, so the scan (and its stats object
+   *  allocation) only runs when something actually moved. */
+  questScanSig(): number {
+    let s = this.score | 0;
+    s = (s * 31 + this.questCoins) | 0;
+    s = (s * 31 + Math.floor(this.distance / 10)) | 0;
+    s = (s * 31 + this.questEnemies) | 0;
+    s = (s * 31 + this.questPowerups) | 0;
+    s = (s * 31 + this.questJumps) | 0;
+    s = (s * 31 + this.bestCombo) | 0;
+    s = (s * 31 + this.questCleanMeters) | 0;
+    s = (s * 31 + this.questCleanScore) | 0;
+    s = (s * 31 + (this.questCleanRun ? 1 : 0)) | 0;
+    s = (s * 31 + this.questBiomeEffects.length) | 0;
+    s = (s * 31 + (this.questTwoPowerups ? 1 : 0)) | 0;
+    s = (s * 31 + this.questMaxMoonPhase) | 0;
+    return s;
   }
 
   /* ----------------------------------------------------------------- input */
@@ -798,10 +840,10 @@ export class Game implements GenHost, RenderHost {
     this.comboT = 0;
   }
 
-  private cullArr<T>(arr: T[], gone: (v: T) => boolean) {
+  private cullArr<T>(arr: T[], lim: number, gone: (v: T, lim: number) => boolean) {
     let w = 0;
     for (let r = 0; r < arr.length; r++) {
-      if (!gone(arr[r])) {
+      if (!gone(arr[r], lim)) {
         if (w !== r) arr[w] = arr[r];
         w++;
       }
@@ -811,13 +853,13 @@ export class Game implements GenHost, RenderHost {
 
   private cull() {
     const lim = this.camX - 90;
-    this.cullArr(this.platforms, (p) => p.x + p.w < lim);
-    this.cullArr(this.pickups, (k) => k.dead || k.x < lim);
-    this.cullArr(this.powerups, (u) => u.dead || u.x < lim);
-    this.cullArr(this.worldGen.eventTriggers, (t) => t.used || t.x < lim);
-    this.cullArr(this.enemies, (e) => e.dead || e.x < lim);
-    this.cullArr(this.spikes, (s) => s.x + s.n * 8 < lim);
-    this.cullArr(this.springs, (s) => s.x + 14 < lim);
+    this.cullArr(this.platforms, lim, cullPlatform);
+    this.cullArr(this.pickups, lim, cullPickup);
+    this.cullArr(this.powerups, lim, cullPowerUp);
+    this.cullArr(this.worldGen.eventTriggers, lim, cullTrigger);
+    this.cullArr(this.enemies, lim, cullEnemy);
+    this.cullArr(this.spikes, lim, cullSpike);
+    this.cullArr(this.springs, lim, cullSpring);
   }
 
   // Biome identity lives in the motion trail, not in the hero's fixed sprite.
@@ -1339,43 +1381,50 @@ export class Game implements GenHost, RenderHost {
     this.addShake(e.kind === 'spiker' ? 0.42 : 0.18 + (this.mult() - 1) * 0.06);
   }
 
+  /** Bank pickup/stomp points for one runner (was a per-frame closure). */
+  private addRunnerScore(playerIdx: number, pts: number) {
+    if (this.isLocalBattle) {
+      if (playerIdx === 0) {
+        const lp = this.localPlayers[0];
+        if (lp) lp.score += pts;
+        this.score += pts;
+      } else {
+        // stepLocalPlayer recomputes p.score from distance every
+        // frame, so direct score adds would be wiped — bank the
+        // pickup/stomp points here instead.
+        this.lpBonus[playerIdx] = (this.lpBonus[playerIdx] || 0) + pts;
+      }
+    } else {
+      this.score += pts;
+    }
+  }
+
   private updateEntities(wasAirborne: boolean, wasDiving: boolean, preVy: number, prevBottom: number): boolean {
     const pw = PLAYER_W;
     const ph = PLAYER_H;
 
-    // Gather all active living runner positions
-    const runners: Array<{ px: number; py: number; isMain: boolean; playerIdx: number; addScore: (pts: number) => void }> = [];
+    // Gather all active living runner positions into the reusable scratch
+    // views — no per-frame array/object/closure allocation.
+    const runners = this.runnersScratch;
+    let nRunners = 0;
     if (this.isLocalBattle) {
       for (let i = 0; i < this.localPlayers.length; i++) {
         const lp = this.localPlayers[i];
         if (lp && lp.isAlive) {
-          runners.push({
-            px: lp.px,
-            py: lp.py,
-            isMain: i === 0,
-            playerIdx: i,
-            addScore: (pts: number) => {
-              if (i === 0) {
-                lp.score += pts;
-                this.score += pts;
-              } else {
-                // stepLocalPlayer recomputes p.score from distance every
-                // frame, so direct score adds would be wiped — bank the
-                // pickup/stomp points here instead.
-                this.lpBonus[i] = (this.lpBonus[i] || 0) + pts;
-              }
-            },
-          });
+          const r = runners[nRunners++];
+          r.px = lp.px;
+          r.py = lp.py;
+          r.isMain = i === 0;
+          r.playerIdx = i;
         }
       }
     } else if (this.phase === 'playing' || this.phase === 'ready') {
-      runners.push({
-        px: this.px,
-        py: this.py,
-        isMain: true,
-        playerIdx: 0,
-        addScore: (pts: number) => { this.score += pts; },
-      });
+      const r = runners[0];
+      r.px = this.px;
+      r.py = this.py;
+      r.isMain = true;
+      r.playerIdx = 0;
+      nRunners = 1;
     }
 
     const pxc = this.px;
@@ -1386,7 +1435,7 @@ export class Game implements GenHost, RenderHost {
       if (c.dead) continue;
       // A coin another tab already collected never enters this world — checked
       // here (every frame, so the same frame it spawns) and at collection.
-      if (!c.gem && this.isMultiplayer && this.phase === 'playing' && coinSync.isCollected(coinId(c.x, c.y))) {
+      if (!c.gem && this.isMultiplayer && this.phase === 'playing' && coinSync.isCollected(c.id ?? coinId(c.x, c.y))) {
         c.dead = true;
         continue;
       }
@@ -1395,7 +1444,8 @@ export class Game implements GenHost, RenderHost {
       const r = c.gem ? 9 : 8;
 
       // Magnetic attraction pull when magnet powerup is active
-      for (const runner of runners) {
+      for (let ri = 0; ri < nRunners; ri++) {
+        const runner = runners[ri];
         const isMagnetActive = runner.isMain
           ? this.magnet > 0
           : (this.localPlayers[runner.playerIdx]?.magnet || 0) > 0;
@@ -1414,7 +1464,8 @@ export class Game implements GenHost, RenderHost {
         }
       }
 
-      for (const runner of runners) {
+      for (let ri = 0; ri < nRunners; ri++) {
+        const runner = runners[ri];
         if (
           Math.abs(c.x - (runner.px + pw / 2)) < r + pw / 2 - 2 &&
           Math.abs(c.y - (runner.py + ph / 2)) < r + ph / 2 - 3
@@ -1428,20 +1479,20 @@ export class Game implements GenHost, RenderHost {
             if (this.mode === 'solo' && this.phase === 'playing') {
               this.pendingGems++;
             }
-            runner.addScore(GEM_PTS);
+            this.addRunnerScore(runner.playerIdx, GEM_PTS);
             if (runner.isMain) this.addCombo(c.x, c.y - 6, GEM_PTS, 'GEM');
             this.particles.burst(c.x, c.y, 14, ['#7ef7ff', '#ffffff', '#3ef2c8'], 2.2, 0.05);
             this.addShake(0.14);
             sfx.play('gem');
             haptics.gem();
           } else {
-            if (this.isMultiplayer && this.phase === 'playing') coinSync.report(coinId(c.x, c.y));
+            if (this.isMultiplayer && this.phase === 'playing') coinSync.report(c.id ?? coinId(c.x, c.y));
             this.coins++;
             if (runner.isMain) this.questCoins++;
             if (this.mode === 'solo' && this.phase === 'playing') {
               this.pendingCoins++;
             }
-            runner.addScore(COIN_PTS);
+            this.addRunnerScore(runner.playerIdx, COIN_PTS);
             if (runner.isMain) this.addCombo(c.x, c.y - 4, COIN_PTS);
             this.particles.burst(c.x, c.y, 6, ['#ffd166', '#ffffff'], 1.7, 0.04);
             sfx.play('coin');
@@ -1457,7 +1508,8 @@ export class Game implements GenHost, RenderHost {
       if (power.dead) continue;
       power.t += 0.12;
       if (power.x < this.camX - 30 || power.x > this.camX + VW + 40) continue;
-      for (const runner of runners) {
+      for (let ri = 0; ri < nRunners; ri++) {
+        const runner = runners[ri];
         if (
           Math.abs(power.x - (runner.px + pw / 2)) < 10 + pw / 2 - 2 &&
           Math.abs(power.y - (runner.py + ph / 2)) < 10 + ph / 2 - 3
@@ -1520,7 +1572,7 @@ export class Game implements GenHost, RenderHost {
       }
 
       // Turn around at jump pads the same way as platform edges / other enemies.
-      if (e.kind !== 'flyer' && e.kind !== 'spiker') {
+      if (e.kind !== 'flyer' && e.kind !== 'spiker' && this.springs.length > 0) {
         for (const sp of this.springs) {
           if (e.y + e.h < sp.y - 2 || e.y > sp.y + 12) continue;
           const left = sp.x - 2;
@@ -1543,6 +1595,7 @@ export class Game implements GenHost, RenderHost {
     for (let i = 0; i < this.enemies.length; i++) {
       const a = this.enemies[i];
       if (a.dead || a.kind === 'flyer' || a.kind === 'spiker') continue;
+      if (a.x < this.camX - 40 || a.x > this.camX + VW + 90) continue;
       for (let j = i + 1; j < this.enemies.length; j++) {
         const b = this.enemies[j];
         if (b.dead || b.kind === 'flyer' || b.kind === 'spiker') continue;
@@ -1721,15 +1774,18 @@ export class Game implements GenHost, RenderHost {
         if (dead || !lp.isAlive) continue;
         for (const s of this.spikes) {
           if (s.x > this.camX + VW + 20 || s.x + s.n * 8 < this.camX - 20) continue;
-          if (
-            lx + pw - 2 > s.x + 1 &&
-            lx + 2 < s.x + s.n * 8 - 1 &&
-            ly + ph > s.y + 3 &&
-            ly < s.y + 10
-          ) {
-            this.killLocalPlayer(i, 'spike');
-            break;
-          }
+      if (
+        lx + pw - 2 > s.x + 1 &&
+        lx + 2 < s.x + s.n * 8 - 1 &&
+        ly + ph > s.y + 3 &&
+        ly < s.y + 10
+      ) {
+        // 2px landing forgiveness — edge-clipping a spike top mid-fall
+        // reads as unfair, same grace the main player gets.
+        if (lp.vy >= 0 && ly + ph - (s.y + 3) < 2) continue;
+        this.killLocalPlayer(i, 'spike');
+        break;
+      }
         }
       }
     }

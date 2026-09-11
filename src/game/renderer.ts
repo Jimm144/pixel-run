@@ -42,6 +42,8 @@ const ECLIPSE_SKY: [string, string, string, string] = ['#0a0208', '#1c0514', '#3
 const SKY_STOPS: [string, string, string, string] = ['', '', '', ''];
 /** Moon phase angles: Full, Waning Gibbous, Half, Waning Crescent, Eclipse. */
 const MOON_PHASE_ANGLES = [0, Math.PI * 0.33, Math.PI * 0.5, Math.PI * 0.67, Math.PI];
+/** Online opponent name colours, cycled by lobby index. */
+const OPP_COLORS = ['#ffd166', '#ff70a6', '#7ef7ff', '#ffd700', '#ff9ebb'];
 
 /**
  * Everything that paints a frame: all draw* methods, the baked sprite caches
@@ -95,6 +97,51 @@ export class Renderer {
   private hudGemsText = '';
   private hudComboKey = '';
   private hudComboStr = '';
+  /** Day/night math computed once per render() and reused by the ambient
+   *  overlay, drawSky and drawParallax (was recomputed 3x per frame). */
+  private nT = 0;
+  private nIsMoon = false;
+  private nEclipse = false;
+  private nCelestialX = 0;
+  private nMoonPhase = 0;
+  /** Bumped every time the lerped zone object is reassigned — part of the
+   *  sky-band cache key so a fade step invalidates the blended colours. */
+  private zoneEpoch = 0;
+  /** Blended sky band colours, cached per (zone epoch | 1/32-night bucket |
+   *  eclipse) — nightT is continuous, so it is quantised to 1/32 steps to
+   *  keep the mix() allocations off the steady-state frame path. */
+  private skyKey = -1;
+  private skyBands: string[] = ['', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+  /** Sun sprite is only rebaked when the lerped sun colours actually change. */
+  private sunKey = '';
+  private moonBaked = false;
+  /** Star twinkle bucket (0-7, -1 = skipped this frame) + rounded draw
+   *  position, precomputed per frame so globalAlpha changes at most 8 times. */
+  private starBucket = new Int8Array(90);
+  private starX = new Float64Array(90);
+  private starY = new Float64Array(90);
+  /** Biome-event particle scratch (tundra flakes are the max count). */
+  private evX = new Float64Array(120);
+  private evY = new Float64Array(120);
+  private evW = new Int16Array(120);
+  private evH = new Int16Array(120);
+  private evBucket = new Int8Array(120);
+  private evColor = new Int8Array(120);
+  private evExtra = new Int8Array(120);
+  /** Cached battle HUD strings — rebuilt only when their inputs change. */
+  private lbNameSrc: (string | undefined)[] = [undefined, undefined, undefined, undefined];
+  private lbName = ['', '', '', ''];
+  private lbVal = [-2, -2, -2, -2];
+  private lbTxt = ['', '', '', ''];
+  private onYouVal = -2;
+  private onYouTxt = '';
+  private onOppSrc: (string | undefined)[] = [];
+  private onOppName: string[] = [];
+  private onOppVal: number[] = [];
+  private onOppTxt: string[] = [];
+  private onOppCol: string[] = [];
+  private pingMsCached = -1;
+  private pingTxt = '';
   /** Per-opponent smoothed render positions (opponent px/py only move on tick
    *  arrival every ~33-66ms; exponential lerp hides the steps). */
   private oppSmooth = new Map<string, { x: number; y: number }>();
@@ -120,6 +167,8 @@ export class Renderer {
     this.zoneFadeT = 0;
     this.platI = 0;
     this.platNI = 1;
+    this.zoneEpoch = 0;
+    this.skyKey = -1;
     this.platformCaches.clear();
     this.oppSmooth.clear();
   }
@@ -151,11 +200,19 @@ export class Renderer {
 
   // Cache every derived platform colour once per zone change (never per frame).
   refreshZoneColors(_Z: Zone) {
-    // Band tiles are immutable and keyed by (geometry, pure zone colour) —
-    // the fade draws each biome with its own pure colours, so the cache
-    // stays bounded (one tile per biome band) and never needs clearing.
-    this.bakeSun();
-    this.bakeMoonPhases();
+    // The sun is baked from the lerped sunA/sunB, which change at each of the
+    // ~12 fade steps — cache the bake on those colours so a step only rebakes
+    // when they actually moved. The moon phases use fixed colours, so they
+    // are baked exactly once for the life of the renderer.
+    const key = this.g.zone.sunA + this.g.zone.sunB;
+    if (key !== this.sunKey) {
+      this.sunKey = key;
+      this.bakeSun();
+    }
+    if (!this.moonBaked) {
+      this.moonBaked = true;
+      this.bakeMoonPhases();
+    }
   }
 
   private bakeSun() {
@@ -397,6 +454,7 @@ export class Renderer {
       const ziChanged = zi !== this.lastZoneZi;
       this.lastZoneZi = zi;
       this.lastZoneT = t;
+      this.zoneEpoch++;
       const i = this.g.zoneOrder[zi % ZONES.length] || 0;
       const ni = this.g.zoneOrder[(zi + 1) % ZONES.length] || 0;
       this.platI = i;
@@ -410,6 +468,23 @@ export class Renderer {
 
     c.imageSmoothingEnabled = false;
     c.setTransform(1, 0, 0, 1, 0, 0);
+
+    // Day/night progression, computed once and shared by the ambient overlay,
+    // drawSky and drawParallax (the celestial geometry is identical in all
+    // three — it only depends on camX).
+    const period = VW + 140;
+    const progress = 300 - this.g.camX * 0.045;
+    const cycle = Math.floor(progress / period);
+    const isMoon = (((cycle % 2) + 2) % 2) === 1;
+    const angle = ((progress - 300) / period) * Math.PI;
+    const nightT = clamp(0.5 - 0.5 * Math.cos(angle), 0, 1);
+    const nightIndex = Math.max(0, Math.floor((-cycle - 1) / 2));
+    this.nT = nightT;
+    this.nIsMoon = isMoon;
+    this.nEclipse = isMoon && nightIndex >= 4;
+    this.nCelestialX = (((progress % period) + period) % period) - 70;
+    this.nMoonPhase = Math.min(4, nightIndex);
+
     this.drawSky();
 
     // Parallax background (clouds, far ridges, landmarks):
@@ -437,18 +512,9 @@ export class Renderer {
     this.texts.draw(c, this.g.camX);
 
     // Subtle atmospheric ambient lighting on foreground (noticeable difference between day and night, but not too extreme)
-    const period = VW + 140;
-    const progress = 300 - this.g.camX * 0.045;
-    const cycle = Math.floor(progress / period);
-    const isMoon = (((cycle % 2) + 2) % 2) === 1;
-    const angle = ((progress - 300) / period) * Math.PI;
-    const nightT = clamp(0.5 - 0.5 * Math.cos(angle), 0, 1);
-    const nightIndex = Math.max(0, Math.floor((-cycle - 1) / 2));
-    const isEclipse = isMoon && nightIndex >= 4;
-
-    if (nightT > 0.05) {
-      c.globalAlpha = isEclipse ? nightT * 0.16 : nightT * 0.13;
-      c.fillStyle = isEclipse ? '#680c26' : '#081232';
+    if (this.nT > 0.05) {
+      c.globalAlpha = this.nEclipse ? this.nT * 0.16 : this.nT * 0.13;
+      c.fillStyle = this.nEclipse ? '#680c26' : '#081232';
       c.fillRect(-40, -40, VW + 80, VH + 80);
       c.globalAlpha = 1;
     }
@@ -525,68 +591,84 @@ export class Renderer {
   private drawSky() {
     const c = this.ctx;
     const bh = Math.ceil(VH / 15);
+    const nightT = this.nT;
 
-    // Celestial geometry & Day/Night progression
-    const period = VW + 140;
-    const progress = 300 - this.g.camX * 0.045;
-    const celestialX = (((progress % period) + period) % period) - 70;
-    const cycle = Math.floor(progress / period);
-    const isMoon = (((cycle % 2) + 2) % 2) === 1;
-
-    // Continuous day/night curve: 0.0 (Day / Sun zenith) -> 0.5 (Dusk/Dawn) -> 1.0 (Night / Moon zenith)
-    const angle = ((progress - 300) / period) * Math.PI;
-    const dayFactor = Math.cos(angle);
-    const nightT = clamp(0.5 - 0.5 * dayFactor, 0, 1);
-
-    let moonPhase = 0;
-    let sprite: HTMLCanvasElement | null = null;
-    if (isMoon) {
-      const nightIndex = Math.max(0, Math.floor((-cycle - 1) / 2));
-      moonPhase = Math.min(4, nightIndex);
-      sprite = this.moonPhaseSprites[moonPhase] ?? this.moonPhaseSprites[0] ?? null;
-    } else {
-      sprite = this.sunSprite;
+    // Blend sky gradient: Day Sky -> Night Sky (and Eclipse sky if final phase).
+    // Quantise nightT to 1/32 steps and cache the 15 blended band colours —
+    // the bucket only changes every few frames, so the mix()/sampleSky()
+    // string allocations leave the steady-state frame path entirely.
+    const nightQ = Math.round(nightT * 32);
+    const key = (this.zoneEpoch * 33 + nightQ) * 2 + (this.nEclipse ? 1 : 0);
+    if (key !== this.skyKey) {
+      this.skyKey = key;
+      const nq = nightQ / 32;
+      const baseSky = this.g.zone.sky;
+      const targetSky = this.nEclipse ? ECLIPSE_SKY : this.g.zone.skyNight;
+      const s = SKY_STOPS;
+      s[0] = mix(baseSky[0], targetSky[0], nq);
+      s[1] = mix(baseSky[1], targetSky[1], nq);
+      s[2] = mix(baseSky[2], targetSky[2], nq);
+      s[3] = mix(baseSky[3], targetSky[3], nq);
+      const bands = this.skyBands;
+      for (let i = 0; i < 15; i++) {
+        bands[i] = sampleSky(s, (i + 0.5) / 15);
+      }
     }
 
-    // Blend sky gradient: Day Sky -> Night Sky (and Eclipse sky if final phase)
-    const baseSky = this.g.zone.sky;
-    const nightSky = this.g.zone.skyNight;
-    const isEclipse = isMoon && moonPhase === 4;
-
-    const targetSky = isEclipse ? ECLIPSE_SKY : nightSky;
-    const s = SKY_STOPS;
-    s[0] = mix(baseSky[0], targetSky[0], nightT);
-    s[1] = mix(baseSky[1], targetSky[1], nightT);
-    s[2] = mix(baseSky[2], targetSky[2], nightT);
-    s[3] = mix(baseSky[3], targetSky[3], nightT);
-
+    const bands = this.skyBands;
     for (let i = 0; i < 15; i++) {
-      c.fillStyle = sampleSky(s, (i + 0.5) / 15);
+      c.fillStyle = bands[i];
       c.fillRect(0, i * bh, VW, bh + 1);
     }
 
     // Celestial body (Sun / Moon)
-    if (sprite) {
-      // Mobile: low behind the mountains — only its top peeks over them.
-      c.drawImage(sprite, Math.round(celestialX) - 32, (this.mobileView ? 100 : 68) - 32);
+    if (this.nIsMoon) {
+      const sprite = this.moonPhaseSprites[this.nMoonPhase] ?? this.moonPhaseSprites[0] ?? null;
+      if (sprite) {
+        // Mobile: low behind the mountains — only its top peeks over them.
+        c.drawImage(sprite, Math.round(this.nCelestialX) - 32, (this.mobileView ? 100 : 68) - 32);
+      }
+    } else if (this.sunSprite) {
+      c.drawImage(this.sunSprite, Math.round(this.nCelestialX) - 32, (this.mobileView ? 100 : 68) - 32);
     }
 
-    // Stars: dynamically fade in at dusk/night, hidden during bright day
+    // Stars: dynamically fade in at dusk/night, hidden during bright day.
+    // Twinkle alpha is bucketed into 8 levels and drawn per bucket so
+    // globalAlpha changes at most 8 times per frame instead of per star.
     if (nightT > 0.15) {
       const starVisibility = Math.min(1, (nightT - 0.15) / 0.65);
-      const starCol = isEclipse ? '#ffd166' : this.g.zone.star;
-      c.fillStyle = starCol;
+      c.fillStyle = this.nEclipse ? '#ffd166' : this.g.zone.star;
       const baseTw = this.g.frame * 0.05;
       const camOffset = this.g.camX * 0.06;
       const yFactor = (VH * 0.66) / 140;
-      for (const [sx0, sy0, ph, sz] of this.stars) {
-        const x = ((sx0 - camOffset) % 1400 + 1400) % 1400;
-        if (x > VW) continue;
-        const tw = Math.sin(baseTw + ph);
-        if (tw < -0.4) continue;
+      const stars = this.stars;
+      const buckets = this.starBucket;
+      const xs = this.starX;
+      const ys = this.starY;
+      const n = stars.length;
+      for (let i = 0; i < n; i++) {
+        const star = stars[i];
+        const x = ((star[0] - camOffset) % 1400 + 1400) % 1400;
+        if (x > VW) {
+          buckets[i] = -1;
+          continue;
+        }
+        const tw = Math.sin(baseTw + star[2]);
+        if (tw < -0.4) {
+          buckets[i] = -1;
+          continue;
+        }
         const twinkle = 0.35 + 0.65 * (tw * 0.5 + 0.5);
-        c.globalAlpha = starVisibility * twinkle;
-        c.fillRect(Math.round(x), Math.round(sy0 * yFactor), sz, sz);
+        buckets[i] = Math.round(((twinkle - 0.35) / 0.65) * 7);
+        xs[i] = Math.round(x);
+        ys[i] = Math.round(star[1] * yFactor);
+      }
+      for (let b = 0; b < 8; b++) {
+        c.globalAlpha = starVisibility * (0.35 + 0.65 * (b / 7));
+        for (let i = 0; i < n; i++) {
+          if (buckets[i] !== b) continue;
+          c.fillRect(xs[i], ys[i], stars[i][3], stars[i][3]);
+        }
       }
       c.globalAlpha = 1;
     }
@@ -606,6 +688,12 @@ export class Renderer {
     const H = VH + 48;
 
     c.fillStyle = col;
+    // Columns that round to the same top merge into one wider rect — the
+    // painted pixels are identical to the per-column loop, but a band costs
+    // a fraction of the fillRect calls (the silhouette is piecewise-constant
+    // after rounding).
+    let runX = -20;
+    let runTop = -1;
     for (let screenX = -20; screenX <= VW + 20; screenX++) {
       const worldX = screenX + camOffset;
       const wx = worldX * freq + seed;
@@ -615,8 +703,13 @@ export class Renderer {
         Math.sin(wx * 4.7 + 0.6) * 0.17;
       if (sharpness > 0) h = 1 - Math.pow(1 - Math.abs(h), 1 + sharpness);
       const top = Math.max(0, Math.round(horizon - amp * (h * 0.5 + 0.5)));
-      c.fillRect(screenX, top, 1, H - top);
+      if (top !== runTop) {
+        if (runTop >= 0) c.fillRect(runX, runTop, screenX - runX, H - runTop);
+        runX = screenX;
+        runTop = top;
+      }
     }
+    if (runTop >= 0) c.fillRect(runX, runTop, VW + 21 - runX, H - runTop);
   }
 
   private getShadedLayerColors(Z: Zone, nightT: number, isEclipse: boolean) {
@@ -645,20 +738,17 @@ export class Renderer {
   private drawParallax() {
     const c = this.ctx;
 
-    // Celestial progress for atmospheric cloud and mountain lighting
-    const period = VW + 140;
-    const progress = 300 - this.g.camX * 0.045;
-    const angle = ((progress - 300) / period) * Math.PI;
-    const nightT = clamp(0.5 - 0.5 * Math.cos(angle), 0, 1);
-    const cycle = Math.floor(progress / period);
-    const isMoon = (((cycle % 2) + 2) % 2) === 1;
-    const nightIndex = Math.max(0, Math.floor((-cycle - 1) / 2));
-    const isEclipse = isMoon && Math.min(4, nightIndex) === 4;
+    // Shared per-frame day/night math (computed once in render()). Colour
+    // mixes use the same 1/32-quantised nightT as the sky bands so the
+    // palette steps in lockstep; alphas stay continuous.
+    const nightT = this.nT;
+    const isEclipse = this.nEclipse;
+    const nq = Math.round(nightT * 32) / 32;
 
     // Soft high-altitude distant clouds — gentle slow drift, far above the mountain peaks
     const dayCloud = mix('#ffffff', this.g.zone.star, 0.2);
     const nightCloud = mix(this.g.zone.far, '#0b0616', 0.6);
-    const cloudColor = mix(dayCloud, nightCloud, nightT);
+    const cloudColor = mix(dayCloud, nightCloud, nq);
     c.globalAlpha = 0.35 - nightT * 0.12;
     c.fillStyle = cloudColor;
     for (let i = 0; i < 5; i++) {
@@ -679,12 +769,12 @@ export class Renderer {
     // incoming biome smoothly fades in from 0 up to 1.
     const t = this.zoneFadeT;
     if (t <= 0) {
-      this.drawParallaxLayer(this.transOut, 1, nightT, isEclipse);
+      this.drawParallaxLayer(this.transOut, 1, nq, isEclipse);
     } else if (t >= 1) {
-      this.drawParallaxLayer(this.transIn, 1, nightT, isEclipse);
+      this.drawParallaxLayer(this.transIn, 1, nq, isEclipse);
     } else {
-      this.drawParallaxLayer(this.transOut, 1 - t, nightT, isEclipse);
-      this.drawParallaxLayer(this.transIn, t, nightT, isEclipse);
+      this.drawParallaxLayer(this.transOut, 1 - t, nq, isEclipse);
+      this.drawParallaxLayer(this.transIn, t, nq, isEclipse);
     }
   }
 
@@ -1000,26 +1090,41 @@ export class Renderer {
 
     if (roll < 0.5) {
       // 1. Basalt caldera horn with glowing magma crater rim
-      for (let colOffset = -Math.floor(halfW); colOffset <= Math.floor(halfW); colOffset++) {
+      // Equal-height neighbouring columns merge into one rect (same pixels).
+      const start = -Math.floor(halfW);
+      const end = Math.floor(halfW);
+      let runOff = start;
+      let runH = -1;
+      for (let colOffset = start; colOffset <= end; colOffset++) {
         const ratio = 1 - Math.abs(colOffset) / halfW;
         const colH = Math.round(h * ratio);
-        if (colH > 0) {
-          c.fillRect(Math.round(nx + colOffset), ground - colH, 1, colH + 2);
+        if (colH !== runH) {
+          if (runH > 0) c.fillRect(nx + runOff, ground - runH, colOffset - runOff, runH + 2);
+          runOff = colOffset;
+          runH = colH;
         }
       }
+      if (runH > 0) c.fillRect(nx + runOff, ground - runH, end + 1 - runOff, runH + 2);
       c.fillStyle = tipCol;
       c.fillRect(Math.round(nx - 3), ground - h, 7, 3);
       c.fillRect(Math.round(nx - 1), ground - h + 3, 2, 8);
       c.fillStyle = col;
     } else {
       // 2. Jagged obsidian rock spire
-      for (let colOffset = -Math.floor(halfW * 0.6); colOffset <= Math.floor(halfW * 0.6); colOffset++) {
+      const start = -Math.floor(halfW * 0.6);
+      const end = Math.floor(halfW * 0.6);
+      let runOff = start;
+      let runH = -1;
+      for (let colOffset = start; colOffset <= end; colOffset++) {
         const ratio = Math.pow(1 - Math.abs(colOffset) / (halfW * 0.6), 1.5);
         const colH = Math.round(h * ratio);
-        if (colH > 0) {
-          c.fillRect(Math.round(nx + colOffset), ground - colH, 1, colH + 2);
+        if (colH !== runH) {
+          if (runH > 0) c.fillRect(nx + runOff, ground - runH, colOffset - runOff, runH + 2);
+          runOff = colOffset;
+          runH = colH;
         }
       }
+      if (runH > 0) c.fillRect(nx + runOff, ground - runH, end + 1 - runOff, runH + 2);
     }
   }
 
@@ -1253,13 +1358,21 @@ export class Renderer {
       const h = Math.round((20 + Math.floor(hash(seed + 3) * 24)) * scale);
       const w = Math.round((28 + Math.floor(hash(seed + 4) * 20)) * scale);
       const halfW = w / 2;
-      for (let colOffset = -Math.floor(halfW); colOffset <= Math.floor(halfW); colOffset++) {
+      // Equal-height neighbouring columns merge into one rect (same pixels).
+      const start = -Math.floor(halfW);
+      const end = Math.floor(halfW);
+      let runOff = start;
+      let runH = -1;
+      for (let colOffset = start; colOffset <= end; colOffset++) {
         const ratio = 1 - Math.abs(colOffset) / halfW;
         const colH = Math.round(h * ratio);
-        if (colH > 0) {
-          c.fillRect(Math.round(nx + colOffset), ground - colH, 1, colH + 2);
+        if (colH !== runH) {
+          if (runH > 0) c.fillRect(nx + runOff, ground - runH, colOffset - runOff, runH + 2);
+          runOff = colOffset;
+          runH = colH;
         }
       }
+      if (runH > 0) c.fillRect(nx + runOff, ground - runH, end + 1 - runOff, runH + 2);
       c.fillStyle = tipCol;
       c.fillRect(Math.round(nx - 2), ground - h, 5, 2);
       c.fillRect(Math.round(nx - 4), ground - h + 2, 9, 2);
@@ -1269,13 +1382,20 @@ export class Renderer {
       const h = Math.round((24 + Math.floor(hash(seed + 3) * 20)) * scale);
       const w = Math.round(20 * scale);
       const halfW = w / 2;
-      for (let colOffset = -Math.floor(halfW); colOffset <= Math.floor(halfW); colOffset++) {
+      const start = -Math.floor(halfW);
+      const end = Math.floor(halfW);
+      let runOff = start;
+      let runH = -1;
+      for (let colOffset = start; colOffset <= end; colOffset++) {
         const ratio = Math.pow(1 - Math.abs(colOffset) / halfW, 1.4);
         const colH = Math.round(h * ratio);
-        if (colH > 0) {
-          c.fillRect(Math.round(nx + colOffset), ground - colH, 1, colH + 2);
+        if (colH !== runH) {
+          if (runH > 0) c.fillRect(nx + runOff, ground - runH, colOffset - runOff, runH + 2);
+          runOff = colOffset;
+          runH = colH;
         }
       }
+      if (runH > 0) c.fillRect(nx + runOff, ground - runH, end + 1 - runOff, runH + 2);
       c.fillStyle = tipCol;
       c.fillRect(Math.round(nx - 1), ground - h, 3, 3);
       c.fillRect(Math.round(nx - 3), ground - h + 3, 7, 2);
@@ -1347,11 +1467,18 @@ export class Renderer {
     } else {
       // 5. Angled high-tech skyscraper with helipad / spire
       c.fillRect(Math.round(nx), top + 8, bw, h);
-      // Angled roofline
+      // Angled roofline — equal-step runs merge into one rect (same pixels).
+      let runI = 0;
+      let runH = -1;
       for (let i = 0; i < bw; i++) {
         const stepH = Math.round(8 * (1 - i / bw));
-        c.fillRect(Math.round(nx + i), top + 8 - stepH, 1, stepH);
+        if (stepH !== runH) {
+          if (runH > 0) c.fillRect(nx + runI, top + 8 - runH, i - runI, runH);
+          runI = i;
+          runH = stepH;
+        }
       }
+      if (runH > 0) c.fillRect(nx + runI, top + 8 - runH, bw - runI, runH);
       c.fillRect(Math.round(nx + 2), top - 6, 2, 14);
       c.fillStyle = tipCol;
       c.fillRect(Math.round(nx + 1), top - 8, 4, 3);
@@ -2157,7 +2284,10 @@ export class Renderer {
         }
         continue;
       }
-      const wiggle = (this.g.frame & 3) < 2 ? 0 : 1;
+      // wiggle only when a player is close enough to be threatened
+      const nearX = this.g.localPlayers && this.g.localPlayers.length > 0 ? this.g.localPlayers[0].px : this.g.px;
+      const near = Math.abs(s.x + (s.n * 8) / 2 - nearX) < 140;
+      const wiggle = near && (this.g.frame & 3) < 2 ? 1 : 0;
       for (let i = 0; i < s.n; i++) {
         const x = x0 + i * 8;
         const y = Math.round(s.y);
@@ -2738,35 +2868,81 @@ export class Renderer {
     }
 
     if (this.g.eventKind === 'jungle') {
-      for (let i = 0; i < 22; i++) {
+      // Flake geometry/alpha bucket is precomputed into scratch arrays, then
+      // drawn grouped by fillStyle (i%N) x 4 alpha buckets so canvas state
+      // changes stay O(groups) instead of O(flakes).
+      const n = 22;
+      for (let i = 0; i < n; i++) {
         const x = wrap(hash(this.g.eventSeed + i * 7.1) * (VW + 30) - this.g.frame * (0.45 + (i % 3) * 0.12), VW + 30) - 15;
         const y = 24 + hash(this.g.eventSeed + i * 13.7) * Math.max(80, VH * 0.7);
-        c.globalAlpha = alpha * (0.65 + 0.35 * Math.sin(this.g.frame * 0.08 + i));
-        c.fillStyle = i % 3 === 0 ? Z.accent : Z.deco;
-        c.fillRect(Math.round(x), Math.round(y), i % 4 === 0 ? 3 : 2, 1);
-        if (i % 5 === 0) c.fillRect(Math.round(x + 1), Math.round(y + 1), 1, 2);
+        this.evX[i] = Math.round(x);
+        this.evY[i] = Math.round(y);
+        this.evW[i] = i % 4 === 0 ? 3 : 2;
+        this.evH[i] = 1;
+        this.evColor[i] = i % 3 === 0 ? 0 : 1;
+        this.evBucket[i] = Math.min(3, Math.round((0.65 + 0.35 * Math.sin(this.g.frame * 0.08 + i)) * 3));
+        this.evExtra[i] = i % 5 === 0 ? 1 : 0;
+      }
+      for (let cg = 0; cg < 2; cg++) {
+        c.fillStyle = cg === 0 ? Z.accent : Z.deco;
+        for (let b = 0; b < 4; b++) {
+          c.globalAlpha = alpha * (b / 3);
+          for (let i = 0; i < n; i++) {
+            if (this.evColor[i] !== cg || this.evBucket[i] !== b) continue;
+            c.fillRect(this.evX[i], this.evY[i], this.evW[i], this.evH[i]);
+            if (this.evExtra[i]) c.fillRect(this.evX[i] + 1, this.evY[i] + 1, 1, 2);
+          }
+        }
       }
     } else if (this.g.eventKind === 'desert') {
-      for (let i = 0; i < 20; i++) {
+      const n = 20;
+      for (let i = 0; i < n; i++) {
         const x = wrap(this.g.frame * (1.4 + i * 0.08) + this.g.eventSeed + i * 31, VW + 64) - 32;
         const y = 24 + hash(this.g.eventSeed + i * 9.3) * Math.max(90, VH - 48);
         const len = 10 + Math.round(hash(this.g.eventSeed + i * 5.2) * 24);
+        this.evX[i] = Math.round(x);
+        this.evY[i] = Math.round(y);
+        this.evW[i] = len;
+        this.evColor[i] = i % 2;
+        this.evExtra[i] = i % 4 === 0 ? 1 : 0;
+        this.evBucket[i] = Math.round(x + len * 0.35);
+      }
+      for (let cg = 0; cg < 2; cg++) {
         c.globalAlpha = alpha * 0.9;
-        c.fillStyle = i % 2 ? Z.coinFill : Z.deco;
-        c.fillRect(Math.round(x), Math.round(y), len, 1);
-        if (i % 4 === 0) c.fillRect(Math.round(x + len * 0.35), Math.round(y + 1), 6, 1);
+        c.fillStyle = cg === 0 ? Z.coinFill : Z.deco;
+        for (let i = 0; i < n; i++) {
+          if (this.evColor[i] !== cg) continue;
+          c.fillRect(this.evX[i], this.evY[i], this.evW[i], 1);
+          if (this.evExtra[i]) c.fillRect(this.evBucket[i], this.evY[i] + 1, 6, 1);
+        }
       }
     } else if (this.g.eventKind === 'tundra') {
-      for (let i = 0; i < 120; i++) {
+      const n = 120;
+      for (let i = 0; i < n; i++) {
         const x = wrap(hash(this.g.eventSeed + i * 4.2) * VW - this.g.frame * (0.5 + (i % 4) * 0.12), VW);
         const y = wrap(hash(this.g.eventSeed + i * 11.6) * (VH + 30) + this.g.frame * (1.1 + (i % 3) * 0.22), VH + 30) - 15;
-        c.globalAlpha = Math.min(0.62, alpha * (1.45 + (i % 3) * 0.15));
-        c.fillStyle = i % 4 === 0 ? '#ffffff' : Z.accent;
-        c.fillRect(Math.round(x), Math.round(y), i % 5 === 0 ? 2 : 1, i % 4 === 0 ? 3 : 2);
+        this.evX[i] = Math.round(x);
+        this.evY[i] = Math.round(y);
+        this.evW[i] = i % 5 === 0 ? 2 : 1;
+        this.evH[i] = i % 4 === 0 ? 3 : 2;
+        this.evColor[i] = i % 4 === 0 ? 0 : 1;
+        const a = Math.min(0.62, alpha * (1.45 + (i % 3) * 0.15));
+        this.evBucket[i] = Math.min(3, Math.round((a / 0.62) * 3));
+      }
+      for (let cg = 0; cg < 2; cg++) {
+        c.fillStyle = cg === 0 ? '#ffffff' : Z.accent;
+        for (let b = 0; b < 4; b++) {
+          c.globalAlpha = 0.62 * (b / 3);
+          for (let i = 0; i < n; i++) {
+            if (this.evColor[i] !== cg || this.evBucket[i] !== b) continue;
+            c.fillRect(this.evX[i], this.evY[i], this.evW[i], this.evH[i]);
+          }
+        }
       }
     } else if (this.g.eventKind === 'city') {
       // neon rain — thin cyan streaks, a few with a glint tip
-      for (let i = 0; i < 70; i++) {
+      const n = 70;
+      for (let i = 0; i < n; i++) {
         const x = wrap(
           hash(this.g.eventSeed + i * 6.3) * (VW + 24) - this.g.frame * (1.5 + (i % 3) * 0.35),
           VW + 24,
@@ -2776,10 +2952,23 @@ export class Renderer {
           VH + 80,
         ) - 40;
         const len = 5 + Math.round(hash(this.g.eventSeed + i * 3.1) * 9);
-        c.globalAlpha = alpha * (0.75 + 0.25 * Math.sin(this.g.frame * 0.09 + i * 1.7));
-        c.fillStyle = i % 3 === 0 ? '#7ef7ff' : Z.accent;
-        c.fillRect(Math.round(x), Math.round(y), 1, len);
-        if (i % 6 === 0) c.fillRect(Math.round(x), Math.round(y + len + 1), 1, 1);
+        this.evX[i] = Math.round(x);
+        this.evY[i] = Math.round(y);
+        this.evH[i] = len;
+        this.evColor[i] = i % 3 === 0 ? 0 : 1;
+        this.evBucket[i] = Math.min(3, Math.round((0.75 + 0.25 * Math.sin(this.g.frame * 0.09 + i * 1.7)) * 3));
+        this.evExtra[i] = i % 6 === 0 ? 1 : 0;
+      }
+      for (let cg = 0; cg < 2; cg++) {
+        c.fillStyle = cg === 0 ? '#7ef7ff' : Z.accent;
+        for (let b = 0; b < 4; b++) {
+          c.globalAlpha = alpha * (b / 3);
+          for (let i = 0; i < n; i++) {
+            if (this.evColor[i] !== cg || this.evBucket[i] !== b) continue;
+            c.fillRect(this.evX[i], this.evY[i], 1, this.evH[i]);
+            if (this.evExtra[i]) c.fillRect(this.evX[i], this.evY[i] + this.evH[i] + 1, 1, 1);
+          }
+        }
       }
     }
     c.globalAlpha = 1;
@@ -2917,17 +3106,21 @@ export class Renderer {
 
     drawText(c, gtxt, gx0 + 9, gy, 1, '#3ef2c8', '#150a24');
 
-    // 4. ONLINE PING BADGE
+    // 4. ONLINE PING BADGE — the string is only rebuilt when the ping value
+    // itself changes (it updates per network tick, not per frame).
     if (this.g.mode === 'online' || (this.g.opponentStates && this.g.opponentStates.size > 0)) {
       const pingMs = party.pingMs;
-      const pingTxt = pingMs > 0 ? `${pingMs}MS` : '<20MS';
+      if (pingMs !== this.pingMsCached) {
+        this.pingMsCached = pingMs;
+        this.pingTxt = pingMs > 0 ? `${pingMs}MS` : '<20MS';
+      }
       const pingCol = pingMs < 75 ? '#3ef2c8' : pingMs < 150 ? '#ffd166' : '#ff4d6d';
-      const pW = textWidth(pingTxt, 1) + 8;
+      const pW = textWidth(this.pingTxt, 1) + 8;
       const pX = W - rightMargin - pW;
       const pY = 38;
       c.fillStyle = pingCol;
       c.fillRect(pX, pY + 2, 3, 3);
-      drawText(c, pingTxt, pX + 5, pY, 1, pingCol, '#150a24');
+      drawText(c, this.pingTxt, pX + 5, pY, 1, pingCol, '#150a24');
     }
 
     // 5. COMBO
@@ -2937,22 +3130,36 @@ export class Renderer {
       this.drawCombo(Math.round(W / 2), 8);
     }
 
-    // 7. BATTLE LIVE STATUS
+    // 7. BATTLE LIVE STATUS — name/score strings are cached per player and
+    // only rebuilt when the score or alive flag changes (was built + measured
+    // twice per frame).
     if (this.g.mode === 'local' && this.g.localPlayers && this.g.localPlayers.length > 0) {
       const midX = Math.round(W / 2);
       const vsY = mobile || isNarrow ? 78 : 26;
       const lp = this.g.localPlayers;
       const sep = ' | ';
+      const sepW = textWidth(sep, 1);
+      for (let i = 0; i < lp.length; i++) {
+        const p = lp[i];
+        if (this.lbNameSrc[i] !== p.name) {
+          this.lbNameSrc[i] = p.name;
+          this.lbName[i] = p.name ? p.name.substring(0, 7) : `P${i + 1}`;
+        }
+        const val = p.isAlive ? p.score : -1;
+        if (this.lbVal[i] !== val) {
+          this.lbVal[i] = val;
+          this.lbTxt[i] = `${this.lbName[i]}:${val < 0 ? 'DEAD' : val}`;
+        }
+      }
       let totalW = 0;
       for (let i = 0; i < lp.length; i++) {
-        const txt = `${lp[i].name ? lp[i].name.substring(0, 7) : `P${i + 1}`}:${lp[i].isAlive ? lp[i].score : 'DEAD'}`;
-        totalW += textWidth(txt, 1);
-        if (i < lp.length - 1) totalW += textWidth(sep, 1);
+        totalW += textWidth(this.lbTxt[i], 1);
+        if (i < lp.length - 1) totalW += sepW;
       }
       let curX = midX - Math.floor(totalW / 2);
       for (let i = 0; i < lp.length; i++) {
-        const txt = `${lp[i].name ? lp[i].name.substring(0, 7) : `P${i + 1}`}:${lp[i].isAlive ? lp[i].score : 'DEAD'}`;
-        const col = lp[i].isAlive
+        const p = lp[i];
+        const col = p.isAlive
           ? i === 0
             ? '#3ef2c8'
             : i === 1
@@ -2961,66 +3168,68 @@ export class Renderer {
                 ? '#ff70a6'
                 : '#7ef7ff'
           : '#6b5880';
-        drawText(c, txt, curX, vsY, 1, col, '#150a24');
-        curX += textWidth(txt, 1);
+        drawText(c, this.lbTxt[i], curX, vsY, 1, col, '#150a24');
+        curX += textWidth(this.lbTxt[i], 1);
         if (i < lp.length - 1) {
           drawText(c, sep, curX, vsY, 1, '#ffffff', '#150a24');
-          curX += textWidth(sep, 1);
+          curX += sepW;
         }
       }
     } else if (this.g.mode === 'online' && this.g.opponentStates && this.g.opponentStates.size > 0) {
       const midX = Math.round(W / 2);
       const vsY = mobile || isNarrow ? 78 : 26;
-      const p1Score = this.g.score;
       const isAlive = this.g.phase !== 'dead' && this.g.phase !== 'over';
 
-      const items: Array<{ txt: string; col: string }> = [];
-      items.push({
-        txt: `YOU:${isAlive ? p1Score : 'DEAD'}`,
-        col: isAlive ? '#3ef2c8' : '#6b5880',
-      });
-
-      const oppColors = ['#ffd166', '#ff70a6', '#7ef7ff', '#ffd700', '#ff9ebb'];
-      let oppIdx = 0;
-      for (const opp of this.g.opponentStates.values()) {
-        const col = opp.isAlive ? oppColors[oppIdx % oppColors.length] : '#6b5880';
-        const oppName = (opp.name ? opp.name.trim().slice(0, 6) : `P${oppIdx + 2}`).toUpperCase();
-        items.push({
-          txt: `${oppName}:${opp.isAlive ? opp.score : 'DEAD'}`,
-          col,
-        });
-        oppIdx++;
+      const youVal = isAlive ? this.g.score : -1;
+      if (youVal !== this.onYouVal) {
+        this.onYouVal = youVal;
+        this.onYouTxt = `YOU:${isAlive ? this.g.score : 'DEAD'}`;
       }
 
-      if (items.length === 2) {
-        // Classic 1v1 format: "YOU:120 VS OPP:95"
-        const p1 = items[0];
-        const p2 = items[1];
-        const vsTxt = ' VS ';
-        const totalW = textWidth(p1.txt, 1) + textWidth(vsTxt, 1) + textWidth(p2.txt, 1);
-        const startX = midX - Math.floor(totalW / 2);
+      let oppIdx = 0;
+      for (const opp of this.g.opponentStates.values()) {
+        if (this.onOppSrc[oppIdx] !== opp.name) {
+          this.onOppSrc[oppIdx] = opp.name;
+          this.onOppName[oppIdx] = (opp.name ? opp.name.trim().slice(0, 6) : `P${oppIdx + 2}`).toUpperCase();
+        }
+        const val = opp.isAlive ? opp.score : -1;
+        if (this.onOppVal[oppIdx] !== val) {
+          this.onOppVal[oppIdx] = val;
+          this.onOppTxt[oppIdx] = `${this.onOppName[oppIdx]}:${val < 0 ? 'DEAD' : val}`;
+          this.onOppCol[oppIdx] = opp.isAlive ? OPP_COLORS[oppIdx % OPP_COLORS.length] : '#6b5880';
+        }
+        oppIdx++;
+      }
+      const oppCount = oppIdx;
 
-        drawText(c, p1.txt, startX, vsY, 1, p1.col, '#150a24');
-        const vsX = startX + textWidth(p1.txt, 1);
+      if (oppCount === 1) {
+        // Classic 1v1 format: "YOU:120 VS OPP:95"
+        const vsTxt = ' VS ';
+        const p1w = textWidth(this.onYouTxt, 1);
+        const vsw = textWidth(vsTxt, 1);
+        const p2w = textWidth(this.onOppTxt[0], 1);
+        const startX = midX - Math.floor((p1w + vsw + p2w) / 2);
+
+        drawText(c, this.onYouTxt, startX, vsY, 1, isAlive ? '#3ef2c8' : '#6b5880', '#150a24');
+        const vsX = startX + p1w;
         drawText(c, vsTxt, vsX, vsY, 1, '#ffffff', '#150a24');
-        const p2X = vsX + textWidth(vsTxt, 1);
-        drawText(c, p2.txt, p2X, vsY, 1, p2.col, '#150a24');
+        drawText(c, this.onOppTxt[0], vsX + vsw, vsY, 1, this.onOppCol[0], '#150a24');
       } else {
         // Multi-player format: "YOU:120 | P2:95 | P3:DEAD"
         const sep = ' | ';
-        let totalW = 0;
-        for (let i = 0; i < items.length; i++) {
-          totalW += textWidth(items[i].txt, 1);
-          if (i < items.length - 1) totalW += textWidth(sep, 1);
+        const sepW = textWidth(sep, 1);
+        let totalW = textWidth(this.onYouTxt, 1) + sepW * oppCount;
+        for (let i = 0; i < oppCount; i++) {
+          totalW += textWidth(this.onOppTxt[i], 1);
         }
         let curX = midX - Math.floor(totalW / 2);
-        for (let i = 0; i < items.length; i++) {
-          drawText(c, items[i].txt, curX, vsY, 1, items[i].col, '#150a24');
-          curX += textWidth(items[i].txt, 1);
-          if (i < items.length - 1) {
-            drawText(c, sep, curX, vsY, 1, '#ffffff', '#150a24');
-            curX += textWidth(sep, 1);
-          }
+        drawText(c, this.onYouTxt, curX, vsY, 1, isAlive ? '#3ef2c8' : '#6b5880', '#150a24');
+        curX += textWidth(this.onYouTxt, 1);
+        for (let i = 0; i < oppCount; i++) {
+          drawText(c, sep, curX, vsY, 1, '#ffffff', '#150a24');
+          curX += sepW;
+          drawText(c, this.onOppTxt[i], curX, vsY, 1, this.onOppCol[i], '#150a24');
+          curX += textWidth(this.onOppTxt[i], 1);
         }
       }
 

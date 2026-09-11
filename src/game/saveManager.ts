@@ -30,7 +30,7 @@ export const GAME_STORAGE_KEYS = [
   'pixeldash.local_battle_config.v1',
   'pixeldash.discord_reward_claimed',
   'pixeldash.campaign.v1',
-  'pixeldash.ui_theme.v1',
+  'pixeldash.uitheme',
   'pixeldash.feedback_never_show',
   'pixeldash.last_feedback_prompt_run',
 ];
@@ -66,6 +66,7 @@ const COOKIE_BACKUP_KEYS = [
   'pixeldash.total_runs.v1',
   'pixeldash.discord_reward_claimed',
   'pixeldash.campaign.v1',
+  'pixeldash.uitheme',
 ];
 
 function encodeCookieValue(value: string): string {

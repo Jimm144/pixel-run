@@ -91,6 +91,28 @@ export class MqttRelay {
     if (!this.client) void this.openClient();
   }
 
+  /** Deterministic broker start for a room: host and joiners derive the
+   *  index from the room code, so they always meet on the same broker
+   *  (automatic failover still applies if that broker can't connect). */
+  setPreferredBroker(index: number) {
+    const idx = ((Math.floor(index) % BROKERS.length) + BROKERS.length) % BROKERS.length;
+    if (this.client && this.connected && this.brokerIndex % BROKERS.length === idx && !this.opening) return;
+    if (this.client) {
+      try {
+        this.client.end(true);
+      } catch {
+        // Ignore
+      }
+      this.client = null;
+      this.connected = false;
+    }
+    this.brokerIndex = idx;
+  }
+
+  get connectedBrokerIndex(): number {
+    return this.brokerIndex % BROKERS.length;
+  }
+
   setTopics(topics: string[]) {
     const oldTopics = this.topics.filter((t) => !topics.includes(t));
     this.topics = topics;
@@ -154,9 +176,6 @@ export class MqttRelay {
   }
 
   private async openClientInner() {
-    const url = BROKERS[this.brokerIndex % BROKERS.length];
-    this.connectedOnce = false;
-
     let lib: typeof MqttApi;
     try {
       lib = await loadMqtt();
@@ -166,6 +185,10 @@ export class MqttRelay {
       return;
     }
     if (this.closed) return;
+    // Picked after the load await, so a setPreferredBroker() that lands
+    // while mqtt.js is still loading takes effect.
+    const url = BROKERS[this.brokerIndex % BROKERS.length];
+    this.connectedOnce = false;
 
     const client = lib.connect(url, {
       clientId: CLIENT_ID,

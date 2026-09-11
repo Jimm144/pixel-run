@@ -102,14 +102,22 @@ const CELL = FONT_W + 1;
 
 const atlasCache = new Map<string, HTMLCanvasElement>();
 /** Cap on cached atlases. Zone-fade HUD colours used to accumulate one atlas
- *  per distinct lerped colour forever; beyond this we drop the whole cache
- *  (rebaking a handful of atlases is trivial) so long sessions stay bounded. */
+ *  per distinct lerped colour forever; beyond this we drop the oldest half
+ *  (Map preserves insertion order) instead of clearing everything, so a cap
+ *  hit never forces a same-frame rebake of every colour still on screen. */
 const ATLAS_CAP = 128;
 
 function atlas(color: string): HTMLCanvasElement {
   let a = atlasCache.get(color);
   if (a) return a;
-  if (atlasCache.size >= ATLAS_CAP) atlasCache.clear();
+  if (atlasCache.size >= ATLAS_CAP) {
+    let dropped = 0;
+    const dropCount = atlasCache.size >> 1;
+    for (const key of atlasCache.keys()) {
+      atlasCache.delete(key);
+      if (++dropped >= dropCount) break;
+    }
+  }
   const cv = document.createElement('canvas');
   cv.width = CELL * GLYPHS.length;
   cv.height = FONT_H;
@@ -186,7 +194,7 @@ export function drawText(
   shadow?: string,
   uppercase = true,
 ) {
-  const rendered = uppercase && /[a-z]/.test(text) ? text.toUpperCase() : text;
+  const rendered = uppercase && text !== text.toUpperCase() ? text.toUpperCase() : text;
   const px = Math.round(x);
   const py = Math.round(y);
   if (shadow) blit(ctx, rendered, px, py + Math.max(1, Math.round(scale)), scale, shadow);

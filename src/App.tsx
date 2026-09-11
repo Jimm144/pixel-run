@@ -51,16 +51,12 @@ import {
   type SkinId,
   type LifetimeStats,
   SKINS,
-  DISCORD_URL,
-  claimDiscordReward,
-  isDiscordRewardClaimed,
 } from './game/skins';
 import { inputManager } from './game/input';
 import { party } from './game/multiplayer/partyManager';
 
 const QUEST_SHARE_WIDTH = 1200;
 const QUEST_SHARE_HEIGHT = 500;
-const DISCORD_PROMO_DISMISSED_KEY = 'pixeldash.discord_promo_dismissed';
 const SHARE_URL = 'https://pixelrun.localplayer.dev/';
 
 // Restore the domain-cookie progress backup BEFORE any React state
@@ -279,13 +275,6 @@ export function App() {
   const [saveLoadModal, setSaveLoadModal] = useState<'save' | 'load' | null>(null);
   const [skinToast, setSkinToast] = useState<string | null>(null);
   const [unlockedSkinPopup, setUnlockedSkinPopup] = useState<SkinId | null>(null);
-  const [discordPromoVisible, setDiscordPromoVisible] = useState(() => {
-    try {
-      return localStorage.getItem(DISCORD_PROMO_DISMISSED_KEY) !== '1' && !isDiscordRewardClaimed();
-    } catch {
-      return !isDiscordRewardClaimed();
-    }
-  });
   const skinToastTimer = useRef(0);
 
   const triggerSkinToast = useCallback((name: string, skinId?: SkinId) => {
@@ -295,30 +284,6 @@ export function App() {
     window.clearTimeout(skinToastTimer.current);
     skinToastTimer.current = window.setTimeout(() => setSkinToast(null), 3500);
   }, []);
-
-  const handleDiscordClaim = useCallback(() => {
-    window.open(DISCORD_URL, '_blank', 'noopener,noreferrer');
-    const reward = claimDiscordReward();
-    setDiscordPromoVisible(false);
-    setUnlockedSkins(reward.unlockedSkins);
-    setLifetimeStats(reward.updatedStats);
-    if (reward.newlyClaimed) {
-      triggerSkinToast('GLADIATOR', 'gladiator');
-      sfx.play('gem');
-    }
-    backupProgressCookie();
-  }, [triggerSkinToast]);
-
-  const dismissDiscordPromo = useCallback(() => {
-    setDiscordPromoVisible(false);
-    try {
-      localStorage.setItem(DISCORD_PROMO_DISMISSED_KEY, '1');
-    } catch {}
-  }, []);
-
-  useEffect(() => {
-    if (unlockedSkins.includes('gladiator')) setDiscordPromoVisible(false);
-  }, [unlockedSkins]);
 
   const pendingFeedbackPromptRef = useRef(false);
 
@@ -430,16 +395,8 @@ export function App() {
       window.addEventListener('load', registerSW);
     }
 
-    const onVisible = () => {
-      if (document.visibilityState === 'visible' && 'serviceWorker' in navigator) {
-        swRegRef.current?.update().catch(() => {});
-      }
-    };
-    document.addEventListener('visibilitychange', onVisible);
-
     return () => {
       window.removeEventListener('load', registerSW);
-      document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
 
@@ -872,9 +829,7 @@ export function App() {
       // or interacting with system bars without leaving the page. Only pause when the page
       // is truly hidden or when running on a mouse-driven desktop window.
       const isCoarse = window.matchMedia('(pointer: coarse)').matches;
-      if (document.hidden || !isCoarse) {
-        if (document.hidden) pause(false);
-      }
+      if (document.hidden || !isCoarse) pause(false);
     };
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('blur', onBlur);
@@ -955,9 +910,6 @@ export function App() {
             questRun={questRun}
             questOnDayRollover={handleQuestRollover}
             questOnShare={handleShareQuests}
-            showDiscordPromo={discordPromoVisible}
-            onDiscordPromoClaim={handleDiscordClaim}
-            onDiscordPromoDismiss={dismissDiscordPromo}
             onOpenSkins={() => {
               setLifetimeStats(loadLifetimeStats());
               setUnlockedSkins(loadUnlockedSkins());
@@ -1080,7 +1032,7 @@ export function App() {
             touch={touch}
           />
         )}
-        {swUpdate && ui !== 'playing' && !updateModalOpen && (
+        {swUpdate && ui === 'start' && !updateModalOpen && (
           <div
             className="fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 border-2 border-[var(--ui-gold)] bg-[var(--ui-panel)]/95 px-3 py-1.5 font-pixel text-[var(--ui-gold)] shadow-[3px_3px_0_var(--ui-bg)] cursor-pointer"
             onClick={() => setUpdateModalOpen(true)}

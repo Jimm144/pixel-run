@@ -155,6 +155,7 @@ export function BattleModal({
   /** Pending countdown tick — cleared on unmount so a closed modal never
    *  fires onStartOnlineBattle after the player left the room. */
   const countdownTimerRef = useRef(0);
+  const countdownIntervalRef = useRef(0);
 
   const hasAutoJoinHash = () =>
     typeof window !== 'undefined' && window.location.hash.startsWith('#battle=');
@@ -215,21 +216,44 @@ export function BattleModal({
       }
     };
 
-    party.onMatchStart = (seed) => {
+    party.onMatchStart = (seed, startAt) => {
       onClearMatchResult();
       setMyReady(false);
-      setCountdown(null);
       if (party.state === 'in_game') {
-        onStartOnlineBattle(seed);
+        const delay = Math.min(Math.max(startAt - Date.now(), 0), 3000);
+        const begin = () => {
+          window.clearInterval(countdownIntervalRef.current);
+          window.clearTimeout(countdownTimerRef.current);
+          setCountdown(null);
+          onStartOnlineBattle(seed);
+        };
+        if (delay <= 250) {
+          begin();
+          return;
+        }
+        const steps = Math.max(1, Math.ceil(delay / 1000));
+        setCountdown(steps);
+        let cur = steps;
+        countdownIntervalRef.current = window.setInterval(() => {
+          cur--;
+          setCountdown(Math.max(0, cur));
+        }, delay / steps);
+        countdownTimerRef.current = window.setTimeout(begin, delay);
       }
     };
 
     party.onStatusMsg = (msg) => {
       setStatusMsg(msg);
+      // Watchdog/cancel outcomes from the party layer must release the join
+      // button, or it would stay stuck on CANCEL forever.
+      if (/^(ROOM NOT FOUND|ROOM CLOSED|INVALID ROOM CODE)/.test(msg)) {
+        setIsJoining(false);
+      }
     };
 
     return () => {
       window.clearTimeout(countdownTimerRef.current);
+      window.clearInterval(countdownIntervalRef.current);
       party.onRoomStateChange = undefined;
       party.onMatchStart = undefined;
       party.onStatusMsg = undefined;
@@ -241,7 +265,7 @@ export function BattleModal({
     if (autoJoinAttemptedRef.current || party.state !== 'idle') return;
     if (hasAutoJoinHash()) {
       const codeFromUrl = window.location.hash.replace('#battle=', '').trim().toUpperCase();
-      if (codeFromUrl && codeFromUrl.length === 4) {
+      if (codeFromUrl && /^[A-Z0-9]{4,5}$/.test(codeFromUrl)) {
         autoJoinAttemptedRef.current = true;
         setTab('join');
         setInputCode(codeFromUrl);
@@ -318,13 +342,8 @@ export function BattleModal({
   }, [tab, localSkin, opponents, localSkins, playerCount]);
 
   const [isJoining, setIsJoining] = useState(false);
-  const joinTimeoutRef = useRef<number | null>(null);
 
   const handleCancelJoin = () => {
-    if (joinTimeoutRef.current) {
-      clearTimeout(joinTimeoutRef.current);
-      joinTimeoutRef.current = null;
-    }
     setIsJoining(false);
     party.leave();
     setJoined(false);
@@ -333,8 +352,8 @@ export function BattleModal({
 
   const handleJoinCode = async (codeToJoin?: string) => {
     const code = (codeToJoin || inputCode).trim().toUpperCase();
-    if (!/^[A-Z0-9]{4}$/.test(code)) {
-      setStatusMsg('ENTER 4-LETTER ROOM CODE');
+    if (!/^[A-Z0-9]{4,5}$/.test(code)) {
+      setStatusMsg('ENTER VALID ROOM CODE');
       return;
     }
     setJoined(false);
@@ -342,15 +361,9 @@ export function BattleModal({
     setRoomCode(code);
     setStatusMsg(`SEARCHING FOR ROOM ${code}...`);
 
-    if (joinTimeoutRef.current) clearTimeout(joinTimeoutRef.current);
-    joinTimeoutRef.current = window.setTimeout(() => {
-      if (!party.roomId || party.state === 'idle') {
-        setIsJoining(false);
-        party.leave();
-        setStatusMsg('ROOM NOT FOUND - CHECK CODE OR RETRY');
-      }
-    }, 12000);
-
+    // No UI-side timeout here: partyManager's own ~105s join watchdog bails
+    // with 'ROOM NOT FOUND - IT MAY HAVE CLOSED' if the room never proves
+    // it exists, and the onStatusMsg handler resets isJoining on it.
     await party.join(code, onlineName, localSkin);
   };
 
@@ -504,7 +517,7 @@ export function BattleModal({
             </p>
 
             {/* Leaderboard Table */}
-            <div className="my-3 flex w-full max-w-md flex-col gap-1 border border-[var(--ui-border2)] bg-[#080312] p-2.5">
+            <div className="my-3 flex w-full max-w-md flex-col gap-1 border border-[var(--ui-border2)] bg-[var(--ui-bg)] p-2.5">
               <div className="grid grid-cols-5 text-[8px] text-[var(--ui-muted)] pb-1 border-b border-[var(--ui-border2)]">
                 <span>RANK</span>
                 <span className="col-span-2 text-left">PLAYER</span>
@@ -560,7 +573,7 @@ export function BattleModal({
           /* 3. LOBBY & HOST/JOIN/LOCAL TABS */
           <div className="flex w-full flex-col items-center overflow-y-auto py-1.5">
             {/* Primary Mode Tabs */}
-            <div className="mb-4 flex w-full max-w-md border border-[var(--ui-border2)] bg-[#080312]">
+            <div className="mb-4 flex w-full max-w-md border border-[var(--ui-border2)] bg-[var(--ui-bg)]">
               <button
                 type="button"
                 onClick={() => {
@@ -588,7 +601,7 @@ export function BattleModal({
                     setRoomCode('');
                     setOpponents([]);
                   }
-                  setStatusMsg('ENTER 4-LETTER CODE TO JOIN');
+                  setStatusMsg('ENTER ROOM CODE TO JOIN');
                 }}
                 className={`flex-1 min-h-[40px] py-2 text-[10px] transition-colors ${
                   tab === 'join'
@@ -635,7 +648,7 @@ export function BattleModal({
                   onKeyDown={(e) => e.stopPropagation()}
                   maxLength={16}
                   placeholder="RUNNER"
-                  className="min-h-[32px] flex-1 select-text border border-[var(--ui-accent)]/60 bg-[#080312] px-2 py-1 text-center font-pixel text-[9px] uppercase text-[var(--ui-accent)] focus:border-[var(--ui-accent)] focus:outline-none"
+                  className="min-h-[32px] flex-1 select-text border border-[var(--ui-accent)]/60 bg-[var(--ui-bg)] px-2 py-1 text-center font-pixel text-[9px] uppercase text-[var(--ui-accent)] focus:border-[var(--ui-accent)] focus:outline-none"
                 />
               </div>
             )}
@@ -674,10 +687,10 @@ export function BattleModal({
                         handleJoinCode();
                       }
                     }}
-                    placeholder="CODE (E.G. ABCD)"
-                    maxLength={4}
+                    placeholder="CODE (E.G. ABCDE)"
+                    maxLength={5}
                     autoFocus
-                    className="flex-1 min-h-[44px] select-text border border-[var(--ui-accent)]/60 bg-[#080312] px-3 py-1 text-center font-pixel text-[10px] text-[var(--ui-gold)] uppercase focus:border-[var(--ui-accent)] focus:outline-none"
+                    className="flex-1 min-h-[44px] select-text border border-[var(--ui-accent)]/60 bg-[var(--ui-bg)] px-3 py-1 text-center font-pixel text-[10px] text-[var(--ui-gold)] uppercase focus:border-[var(--ui-accent)] focus:outline-none"
                   />
                   <button
                     type="button"
@@ -751,7 +764,7 @@ export function BattleModal({
                             setPlayerNames(next);
                           }}
                           maxLength={10}
-                          className="mt-2 w-full border bg-[#080312] text-center text-[10px] py-1.5 uppercase focus:outline-none"
+                          className="mt-2 w-full border bg-[var(--ui-bg)] text-center text-[10px] py-1.5 uppercase focus:outline-none"
                           style={{ borderColor: col, color: col }}
                         />
 
@@ -765,7 +778,7 @@ export function BattleModal({
                               next[idx] = e.target.value as SkinId;
                               setLocalSkins(next);
                             }}
-                            className="w-full min-h-[40px] border bg-[#080312] text-[10px] px-2 py-1.5 focus:outline-none cursor-pointer"
+                            className="w-full min-h-[40px] border bg-[var(--ui-bg)] text-[10px] px-2 py-1.5 focus:outline-none cursor-pointer"
                             style={{ borderColor: `${col}80`, color: col }}
                           >
                             {unlockedSkins.map((id) => (
@@ -794,7 +807,7 @@ export function BattleModal({
                               next[idx] = chosen;
                               setPlayerControlSchemes(next);
                             }}
-                            className="w-full min-h-[40px] border bg-[#080312] text-[10px] px-2 py-1.5 focus:outline-none cursor-pointer"
+                            className="w-full min-h-[40px] border bg-[var(--ui-bg)] text-[10px] px-2 py-1.5 focus:outline-none cursor-pointer"
                             style={{ borderColor: `${col}80`, color: '#ffffff' }}
                           >
                             <option value="wasd">WASD</option>
@@ -823,7 +836,7 @@ export function BattleModal({
 
             {/* Roster Section for Online Mode */}
             {tab !== 'local' && (
-              <div className="w-full max-w-md border border-[var(--ui-border2)] bg-[#080312] p-2.5 mb-3">
+              <div className="w-full max-w-md border border-[var(--ui-border2)] bg-[var(--ui-bg)] p-2.5 mb-3">
                 <div className="text-[8px] text-[var(--ui-muted)] mb-2 text-center">
                   ROSTER ({totalPlayers}/{MAX_PLAYERS})
                 </div>
@@ -867,7 +880,7 @@ export function BattleModal({
                   {Array.from({ length: Math.max(0, MAX_PLAYERS - totalPlayers) }).map((_, i) => (
                     <div
                       key={`empty-${i}`}
-                      className="flex flex-col items-center justify-center border border-dashed border-[var(--ui-border2)] bg-[#080312]/40 w-[88px] h-22"
+                      className="flex flex-col items-center justify-center border border-dashed border-[var(--ui-border2)] bg-[var(--ui-bg)]/40 w-[88px] h-22"
                     >
                       <span className="text-[8px] text-[var(--ui-muted)]">SLOT {totalPlayers + i + 1}</span>
                       <span className="text-[8px] text-[var(--ui-muted)]">EMPTY</span>
