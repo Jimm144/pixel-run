@@ -152,10 +152,15 @@ export function BattleModal({
   const oppCanvasesRef = useRef<Map<string, HTMLCanvasElement>>(new Map());
   const hostInitInFlightRef = useRef(false);
   const autoJoinAttemptedRef = useRef(false);
+  const joinAttemptRef = useRef(0);
+  const roomCodeRef = useRef('');
+  const rosterIdsRef = useRef(new Set<string>());
   /** Pending countdown tick — cleared on unmount so a closed modal never
    *  fires onStartOnlineBattle after the player left the room. */
   const countdownTimerRef = useRef(0);
   const countdownIntervalRef = useRef(0);
+
+  roomCodeRef.current = roomCode;
 
   const hasAutoJoinHash = () =>
     typeof window !== 'undefined' && window.location.hash.startsWith('#battle=');
@@ -163,6 +168,7 @@ export function BattleModal({
   // Initialize Host Room
   const initHost = useCallback(async () => {
     const code = await party.host(onlineName, localSkin, false);
+    if (party.role !== 'host' || party.roomId !== code) return;
     setRoomCode(code);
     setStatusMsg('ROOM IS READY - WAITING FOR PLAYERS');
   }, [onlineName, localSkin]);
@@ -198,21 +204,30 @@ export function BattleModal({
     }
   }, [tab, roomCode, matchResult, initHost]);
 
+  const clearRoster = () => {
+    rosterIdsRef.current = new Set();
+    setOpponents([]);
+    setJoined(false);
+    setMyReady(false);
+  };
+
   // Party event subscriptions
   useEffect(() => {
     party.onRoomStateChange = (oppList) => {
       setOpponents([...oppList]);
+      const nextIds = new Set(oppList.map((opp) => opp.peerId));
+      const hasNewOpponent = oppList.some((opp) => !rosterIdsRef.current.has(opp.peerId));
+      rosterIdsRef.current = nextIds;
       if (oppList.length > 0) {
-        sfx.play('gem');
+        if (hasNewOpponent) sfx.play('gem');
+        setIsJoining(false);
         setJoined(true);
         setStatusMsg(`${oppList.length + 1}/${MAX_PLAYERS} PLAYERS CONNECTED`);
-      } else {
-        if (party.role === 'host') {
-          setStatusMsg('ROOM IS READY - WAITING FOR PLAYERS');
-        } else {
-          setJoined(false);
-          setStatusMsg(roomCode ? `SEARCHING FOR ROOM ${roomCode}...` : 'SELECT OR ENTER A ROOM TO JOIN');
-        }
+      } else if (party.role === 'host') {
+        setStatusMsg('ROOM IS READY - WAITING FOR PLAYERS');
+      } else if (party.state === 'in_room') {
+        setJoined(false);
+        setStatusMsg(roomCodeRef.current ? `SEARCHING FOR ROOM ${roomCodeRef.current}...` : 'SELECT OR ENTER A ROOM TO JOIN');
       }
     };
 
@@ -246,8 +261,12 @@ export function BattleModal({
       setStatusMsg(msg);
       // Watchdog/cancel outcomes from the party layer must release the join
       // button, or it would stay stuck on CANCEL forever.
-      if (/^(ROOM NOT FOUND|ROOM CLOSED|INVALID ROOM CODE)/.test(msg)) {
+      if (/^(ROOM NOT FOUND|ROOM CLOSED|INVALID ROOM CODE|ROOM FULL|MATCH ALREADY STARTED)/.test(msg)) {
         setIsJoining(false);
+        setJoined(false);
+        setMyReady(false);
+        setOpponents([]);
+        rosterIdsRef.current = new Set();
       }
     };
 
@@ -258,7 +277,7 @@ export function BattleModal({
       party.onMatchStart = undefined;
       party.onStatusMsg = undefined;
     };
-  }, [onStartOnlineBattle, onClearMatchResult, roomCode, joined]);
+  }, [onStartOnlineBattle, onClearMatchResult]);
 
   // Auto-join from URL hash (#battle=CODE)
   useEffect(() => {
@@ -344,9 +363,11 @@ export function BattleModal({
   const [isJoining, setIsJoining] = useState(false);
 
   const handleCancelJoin = () => {
+    joinAttemptRef.current++;
     setIsJoining(false);
     party.leave();
     setJoined(false);
+    clearRoster();
     setStatusMsg('JOIN CANCELLED');
   };
 
@@ -356,7 +377,9 @@ export function BattleModal({
       setStatusMsg('ENTER VALID ROOM CODE');
       return;
     }
+    const attempt = ++joinAttemptRef.current;
     setJoined(false);
+    clearRoster();
     setIsJoining(true);
     setRoomCode(code);
     setStatusMsg(`SEARCHING FOR ROOM ${code}...`);
@@ -364,7 +387,12 @@ export function BattleModal({
     // No UI-side timeout here: partyManager's own ~105s join watchdog bails
     // with 'ROOM NOT FOUND - IT MAY HAVE CLOSED' if the room never proves
     // it exists, and the onStatusMsg handler resets isJoining on it.
-    await party.join(code, onlineName, localSkin);
+    const joinedRoom = await party.join(code, onlineName, localSkin);
+    if (attempt !== joinAttemptRef.current) return;
+    if (!joinedRoom) {
+      setIsJoining(false);
+      setJoined(false);
+    }
   };
 
   const copyTextToClipboard = async (text: string): Promise<boolean> => {
@@ -442,9 +470,9 @@ export function BattleModal({
   };
 
   const handleRematch = () => {
-    onClearMatchResult();
     setCountdown(null);
     if (matchResult?.mode === 'local') {
+      onClearMatchResult();
       const activeSkins = localSkins.slice(0, playerCount);
       const activeNames = playerNames.slice(0, playerCount);
       const activeControls = playerControlSchemes.slice(0, playerCount);
@@ -577,9 +605,13 @@ export function BattleModal({
               <button
                 type="button"
                 onClick={() => {
+                  joinAttemptRef.current++;
                   setTab('host');
                   setJoined(false);
                   if (party.role !== 'host' || !roomCode) {
+                    party.leave();
+                    setRoomCode('');
+                    clearRoster();
                     initHost();
                   }
                 }}
@@ -594,13 +626,12 @@ export function BattleModal({
               <button
                 type="button"
                 onClick={() => {
+                  joinAttemptRef.current++;
                   setTab('join');
                   setJoined(false);
-                  if (party.role === 'host') {
-                    party.leave();
-                    setRoomCode('');
-                    setOpponents([]);
-                  }
+                  party.leave();
+                  setRoomCode('');
+                  clearRoster();
                   setStatusMsg('ENTER ROOM CODE TO JOIN');
                 }}
                 className={`flex-1 min-h-[40px] py-2 text-[10px] transition-colors ${
@@ -614,10 +645,11 @@ export function BattleModal({
               <button
                 type="button"
                 onClick={() => {
+                  joinAttemptRef.current++;
                   setTab('local');
                   party.leave();
                   setRoomCode('');
-                  setOpponents([]);
+                  clearRoster();
                   setStatusMsg('');
                 }}
                 className={`flex-1 min-h-[40px] py-2 text-[10px] transition-colors ${

@@ -645,6 +645,7 @@ export function PauseScreen({
   onMusicVol,
   onSfxVol,
   touch = false,
+  hideRetry = false,
 }: {
   onResume: () => void;
   onRestart: () => void;
@@ -656,6 +657,7 @@ export function PauseScreen({
   onMusicVol: (v: number) => void;
   onSfxVol: (v: number) => void;
   touch?: boolean;
+  hideRetry?: boolean;
 }) {
   const handleMenu = onMenu ?? onQuit ?? (() => {});
 
@@ -683,14 +685,20 @@ export function PauseScreen({
           <PixelButton onClick={onResume} small className="py-2.5 tablet:py-3 tablet:text-[10px]">
             RESUME
           </PixelButton>
-          <div className="grid grid-cols-2 gap-2">
-            <PixelButton variant="danger" onClick={onRestart} small className="px-2 py-2.5 tablet:py-3 tablet:text-[10px] whitespace-nowrap">
-              {touch ? 'RETRY' : 'RETRY [R]'}
-            </PixelButton>
-            <PixelButton variant="ghost" onClick={handleMenu} small className="px-2 py-2.5 tablet:py-3 tablet:text-[10px] whitespace-nowrap">
+          {hideRetry ? (
+            <PixelButton variant="ghost" onClick={handleMenu} small className="py-2.5 tablet:py-3 tablet:text-[10px] whitespace-nowrap">
               {touch ? 'MENU' : 'MENU [ESC]'}
             </PixelButton>
-          </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              <PixelButton variant="danger" onClick={onRestart} small className="px-2 py-2.5 tablet:py-3 tablet:text-[10px] whitespace-nowrap">
+                {touch ? 'RETRY' : 'RETRY [R]'}
+              </PixelButton>
+              <PixelButton variant="ghost" onClick={handleMenu} small className="px-2 py-2.5 tablet:py-3 tablet:text-[10px] whitespace-nowrap">
+                {touch ? 'MENU' : 'MENU [ESC]'}
+              </PixelButton>
+            </div>
+          )}
         </div>
       </Panel>
     </div>
@@ -732,6 +740,7 @@ export function GameOverScreen({
   onMenu,
   onShare,
   touch,
+  hideRetry = false,
 }: {
   stats: Stats;
   best: number;
@@ -740,6 +749,7 @@ export function GameOverScreen({
   onMenu: () => void;
   onShare?: () => void;
   touch: boolean;
+  hideRetry?: boolean;
 }) {
   const causeLabel = (stats.cause && DEATH_CAUSE_LABELS[stats.cause]) || 'RUN TERMINATED';
 
@@ -781,9 +791,11 @@ export function GameOverScreen({
         </Panel>
         <div className="flex w-full max-w-[380px] flex-col items-center gap-2 tablet:max-w-[460px]">
           <div className="flex w-full gap-2">
-            <PixelButton onClick={onRestart} className="flex flex-[1.4] items-center justify-center py-3 text-[10px] tablet:py-3.5 tablet:text-[12px] whitespace-nowrap">
-              <span>{touch ? 'RETRY' : 'RETRY [R]'}</span>
-            </PixelButton>
+            {!hideRetry && (
+              <PixelButton onClick={onRestart} className="flex flex-[1.4] items-center justify-center py-3 text-[10px] tablet:py-3.5 tablet:text-[12px] whitespace-nowrap">
+                <span>{touch ? 'RETRY' : 'RETRY [R]'}</span>
+              </PixelButton>
+            )}
             <PixelButton variant="ghost" onClick={onMenu} className="flex flex-1 items-center justify-center py-3 text-[10px] tablet:py-3.5 tablet:text-[12px] whitespace-nowrap">
               <span>{touch ? 'MENU' : 'MENU [ESC]'}</span>
             </PixelButton>

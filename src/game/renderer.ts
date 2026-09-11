@@ -2802,20 +2802,51 @@ export class Renderer {
       }
       for (const opp of this.g.opponentStates.values()) {
         if (!opp.isAlive || opp.px === undefined || opp.py === undefined) continue;
-        // Smooth the rendered position toward the latest tick. Big jumps
-        // (respawn, throttled-tab catch-up) snap straight there instead of
-        // lerping across the screen. After match end the world is frozen, so
-        // snap too — no smoothing against a still target.
+        // Ghost smoothing: render ~120ms behind the latest tick by
+        // interpolating between timestamped snapshots. Packet loss and
+        // broker jitter then show as smooth motion instead of teleports.
+        // Only true teleports (respawn/rematch catch-up, frozen end screen)
+        // snap. On stale data, extrapolate briefly on velocity, then hold.
         let s = this.oppSmooth.get(opp.peerId);
         if (!s) {
           s = { x: opp.px, y: opp.py };
           this.oppSmooth.set(opp.peerId, s);
-        } else if (this.g.phase === 'over' || Math.abs(opp.px - s.x) > 40 || Math.abs(opp.py - s.y) > 60) {
+        } else if (this.g.phase === 'over') {
           s.x = opp.px;
           s.y = opp.py;
         } else {
-          s.x += (opp.px - s.x) * 0.35;
-          s.y += (opp.py - s.y) * 0.35;
+          let tx = opp.px;
+          let ty = opp.py;
+          const hist = opp.hist;
+          if (hist && hist.length >= 2) {
+            const now = Date.now();
+            const rt = now - 120;
+            let i = hist.length - 1;
+            while (i > 0 && hist[i].t > rt) i--;
+            const a = hist[i];
+            const b = hist[Math.min(i + 1, hist.length - 1)];
+            if (b.t > a.t && rt >= a.t) {
+              const f = Math.min(1, (rt - a.t) / (b.t - a.t));
+              tx = a.px + (b.px - a.px) * f;
+              ty = a.py + (b.py - a.py) * f;
+            } else if (rt >= b.t) {
+              const dtF = Math.min(15, (now - b.t) / 16.667);
+              tx = b.px + (opp.vx ?? 0) * dtF;
+              ty = b.py + (opp.vy ?? 0) * dtF;
+            }
+          }
+          const dx = tx - s.x;
+          const dy = ty - s.y;
+          const adx = Math.abs(dx);
+          const ady = Math.abs(dy);
+          if (adx > 160 || ady > 220) {
+            s.x = tx;
+            s.y = ty;
+          } else {
+            const k = adx > 40 || ady > 60 ? 0.5 : 0.18;
+            s.x += dx * k;
+            s.y += dy * k;
+          }
         }
         const oppCx = Math.round(s.x - cam + PLAYER_W / 2);
         const oppCy = Math.round(s.y + PLAYER_H / 2);

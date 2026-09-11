@@ -49,7 +49,10 @@ async function loadPeerJs(): Promise<typeof Peer> {
         }
       }
       throw new Error('PeerJS failed to load from CDN');
-    })();
+    })().catch((error) => {
+      peerLoading = null;
+      throw error;
+    });
   }
   return peerLoading;
 }
@@ -84,7 +87,7 @@ export class PartyManager {
   pingMs = 0;
 
   // Local tab party tracking for zero-latency multi-tab testing
-  private localTabPlayers = new Map<string, { peerId: string; name: string; skinId: SkinId; isHost: boolean; meters: number; score: number; isAlive: boolean; ready: boolean; ts: number; transport?: string }>();
+  private localTabPlayers = new Map<string, { peerId: string; name: string; skinId: SkinId; isHost: boolean; meters: number; score: number; isAlive: boolean; ready: boolean; ts: number; transport?: string; seq?: number }>();
   // Public rooms announced over the MQTT lobby topic (cross-device, unlike
   // the same-browser localStorage list).
   private mqttLobbies = new Map<string, { code: string; hostName: string; playerCount: number; maxPlayers: number; ts: number }>();
@@ -132,8 +135,28 @@ export class PartyManager {
   private lastRoomProofAt = 0;
   /** Next "STILL SEARCHING..." nudge threshold (silence seconds). */
   private lastNudgeAt = 0;
+  /** Monotonic seq for outbound lobby messages (bc_join/bc_ready/bc_leave).
+   *  The same message fans out over 4 transports with different latencies, so
+   *  a stale dup arriving late must never overwrite fresher state. */
+  private lobbySeq = 0;
+  /** Recently-left peerIds with their leave seq: drops stale in-flight
+   *  bc_join pings that would otherwise resurrect a player who cancelled. */
+  private recentLeaves = new Map<string, { seq: number; t: number }>();
+  /** One-time relay reset granted by the join watchdog before giving up. */
+  private relayResetDone = false;
+  /** Throttle for retained room_state publishes (instant proof for late joiners). */
+  private lastRetainedStateAt = 0;
   /** Throttle for the lobby refresh in handleLobbyMessage. */
   private lastLobbyRefresh = 0;
+  /** Invalidates async PeerJS setup when the user changes rooms quickly. */
+  private sessionEpoch = 0;
+  /** Host-owned roster revision; joiners ignore older snapshots. */
+  private roomRevision = 0;
+  private lastRoomRevision = -1;
+  /** Host identity for the current room incarnation. */
+  private hostPeerId: string | null = null;
+  /** Match identity prevents delayed packets from crossing rematches. */
+  private activeMatchId: string | null = null;
 
   // Callbacks
   onRoomStateChange?: (opponents: OpponentInfo[]) => void;
@@ -155,12 +178,20 @@ export class PartyManager {
 
   async host(name: string, skin: SkinId, isPublic = true): Promise<string> {
     this.leave();
+    const session = ++this.sessionEpoch;
     this.localName = name;
     this.localSkin = skin;
     this.isPublic = isPublic;
     this.role = 'host';
     this.state = 'in_room';
     this.peerId = `p_host_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    this.lobbySeq = 0;
+    this.relayResetDone = false;
+    this.roomRevision = 0;
+    this.lastRoomRevision = -1;
+    this.hostPeerId = this.peerId;
+    this.activeMatchId = null;
+    this.lastRetainedStateAt = 0;
 
     const code = generateRoomCode();
     this.roomId = code;
@@ -183,7 +214,8 @@ export class PartyManager {
     this.localTick = null;
 
     // Initialize Sync Channels
-    await this.initSyncChannels(code, 'host');
+    await this.initSyncChannels(code, 'host', session);
+    if (!this.isSessionActive(session, code, 'host')) return code;
 
     // Periodic host broadcast so joiners instantly receive room state
     this.startHostSyncLoop();
@@ -207,6 +239,7 @@ export class PartyManager {
     }
 
     this.leave();
+    const session = ++this.sessionEpoch;
 
     this.localName = name;
     this.localSkin = skin;
@@ -217,10 +250,20 @@ export class PartyManager {
     this.localAlive = true;
     this.localReady = false;
     this.localTick = null;
+    this.lobbySeq = 0;
+    this.relayResetDone = false;
     this.awaitingFirstRoomState = true;
+    this.joinStartedAt = Date.now();
+    this.lastRoomProofAt = 0;
+    this.lastNudgeAt = 0;
+    this.lastRoomRevision = -1;
+    this.hostPeerId = null;
+    this.activeMatchId = null;
+    this.lastRetainedStateAt = 0;
 
     // Initialize Sync Channels
-    await this.initSyncChannels(cleanCode, 'joiner');
+    await this.initSyncChannels(cleanCode, 'joiner', session);
+    if (!this.isSessionActive(session, cleanCode, 'joiner')) return false;
 
     // Periodic join ping until connected
     this.startJoinPingLoop();
@@ -235,10 +278,6 @@ export class PartyManager {
     // land on recovery. Until then the joiner keeps pinging and the user
     // sees "STILL SEARCHING..." nudges, so a room whose host recovers
     // seconds later is never abandoned.
-    this.joinStartedAt = Date.now();
-    this.lastRoomProofAt = 0;
-    this.lastNudgeAt = 0;
-
     return true;
   }
 
@@ -422,7 +461,12 @@ export class PartyManager {
     }
   }
 
-  private async initSyncChannels(roomId: string, role: 'host' | 'joiner') {
+  private isSessionActive(session: number, roomId: string, role: 'host' | 'joiner'): boolean {
+    return this.sessionEpoch === session && this.roomId === roomId && this.role === role;
+  }
+
+  private async initSyncChannels(roomId: string, role: 'host' | 'joiner', session: number): Promise<boolean> {
+    if (!this.isSessionActive(session, roomId, role)) return false;
     const channelName = `pixelrun_room_${roomId.toLowerCase()}`;
     // Deterministic broker choice: the same room code always maps to the same
     // broker, so host and joiners never fail over to different public brokers.
@@ -445,6 +489,7 @@ export class PartyManager {
       try {
         this.bc = new BroadcastChannel(channelName);
         this.bc.onmessage = (event) => {
+          if (!this.isSessionActive(session, roomId, role)) return;
           this.handleSyncMessage(event.data);
         };
       } catch {
@@ -461,6 +506,7 @@ export class PartyManager {
         this.storageListener = null;
       }
       this.storageListener = (e: StorageEvent) => {
+        if (!this.isSessionActive(session, roomId, role)) return;
         if (e.key && e.key.startsWith(`pixelrun_sync_${roomId.toLowerCase()}`) && e.newValue) {
           try {
             const data = JSON.parse(e.newValue);
@@ -474,15 +520,20 @@ export class PartyManager {
     }
 
     // 3. WebRTC PeerJS P2P Mesh (Multi-Device / Cross-Browser)
-    try {
-      if (this.peer) {
-        this.peer.destroy();
-        this.peer = null;
-      }
-      this.peerConnections.clear();
-      this.peerConnToSelfId.clear();
+    // Never make room discovery wait for PeerJS/CDN loading. MQTT and the
+    // local channel are enough to join; WebRTC is an optional fast path.
+    void (async () => {
+      try {
+        if (!this.isSessionActive(session, roomId, role)) return;
+        if (this.peer) {
+          this.peer.destroy();
+          this.peer = null;
+        }
+        this.peerConnections.clear();
+        this.peerConnToSelfId.clear();
 
-      const PeerClass = await loadPeerJs();
+        const PeerClass = await loadPeerJs();
+        if (!this.isSessionActive(session, roomId, role)) return;
 
       if (role === 'host') {
         const hostPeerId = `pxrun-host-${roomId.toLowerCase()}`;
@@ -500,17 +551,27 @@ export class PartyManager {
         });
 
         this.peer.on('connection', (conn) => {
+          if (!this.isSessionActive(session, roomId, role)) {
+            try { conn.close(); } catch {}
+            return;
+          }
           conn.on('open', () => {
+            if (!this.isSessionActive(session, roomId, role)) {
+              try { conn.close(); } catch {}
+              return;
+            }
             this.peerConnections.set(conn.peer, conn);
-            // Send current room state to newly connected peer
-            const playersList = Array.from(this.localTabPlayers.values());
             conn.send({
               type: 'bc_room_state',
-              players: playersList,
+              peerId: this.peerId,
+              hostId: this.peerId,
+              players: Array.from(this.localTabPlayers.values()),
+              revision: this.roomRevision,
             });
           });
 
           conn.on('data', (data: any) => {
+            if (!this.isSessionActive(session, roomId, role)) return;
             if (data && data.type === 'bc_join' && typeof data.peerId === 'string') {
               this.peerConnToSelfId.set(conn.peer, data.peerId);
             }
@@ -518,16 +579,13 @@ export class PartyManager {
           });
 
           conn.on('close', () => {
-            this.peerConnections.delete(conn.peer);
+            if (!this.isSessionActive(session, roomId, role)) return;
+            if (this.peerConnections.get(conn.peer) === conn) this.peerConnections.delete(conn.peer);
             // localTabPlayers is keyed by the joiner's self-generated peerId,
-            // NOT conn.peer (the PeerJS id) — resolve through the mapping.
-            const selfId = this.peerConnToSelfId.get(conn.peer);
+            // NOT conn.peer (the PeerJS id). A WebRTC close is not a room
+            // leave: MQTT/BC may still be healthy, so the heartbeat sweep or
+            // an explicit bc_leave owns roster removal.
             this.peerConnToSelfId.delete(conn.peer);
-            if (selfId) this.localTabPlayers.delete(selfId);
-            else this.localTabPlayers.delete(conn.peer);
-            const playersList = Array.from(this.localTabPlayers.values());
-            this.broadcast({ type: 'bc_room_state', players: playersList });
-            this.updateOpponentsFromList(playersList);
           });
         });
       } else {
@@ -546,10 +604,15 @@ export class PartyManager {
         });
 
         this.peer.on('open', () => {
+          if (!this.isSessionActive(session, roomId, role)) return;
           const hostPeerId = `pxrun-host-${roomId.toLowerCase()}`;
           const conn = this.peer!.connect(hostPeerId, { reliable: true });
 
           conn.on('open', () => {
+            if (!this.isSessionActive(session, roomId, role)) {
+              try { conn.close(); } catch {}
+              return;
+            }
             this.peerConnections.set(hostPeerId, conn);
             conn.send({
               type: 'bc_join',
@@ -557,15 +620,18 @@ export class PartyManager {
               name: this.localName,
               skinId: this.localSkin,
               ready: this.localReady,
+              seq: this.nextLobbySeq(),
             });
           });
 
           conn.on('data', (data: any) => {
+            if (!this.isSessionActive(session, roomId, role)) return;
             this.handleSyncMessage(data);
           });
 
           conn.on('close', () => {
-            this.peerConnections.delete(hostPeerId);
+            if (!this.isSessionActive(session, roomId, role)) return;
+            if (this.peerConnections.get(hostPeerId) === conn) this.peerConnections.delete(hostPeerId);
           });
         });
       }
@@ -595,9 +661,12 @@ export class PartyManager {
           if (this.peer === peer) this.peer = null;
         }, 8000);
       }
-    } catch {
-      // Ignore
-    }
+      } catch {
+        // Ignore
+      }
+    })();
+
+    if (!this.isSessionActive(session, roomId, role)) return false;
 
     // 4. Public MQTT relay (cross-network rooms with zero infrastructure).
     //    The broker is a dumb pipe: the host is the coordinator, and the
@@ -637,6 +706,7 @@ export class PartyManager {
       this.mqtt.ensureStarted();
       this.mqtt.setTopics([`${ROOM_TOPIC_PREFIX}${roomId.toLowerCase()}`, LOBBY_TOPIC_WILDCARD]);
     }
+    return this.isSessionActive(session, roomId, role);
   }
 
   private handleLobbyMessage(raw: string, topic?: string) {
@@ -735,7 +805,50 @@ export class PartyManager {
     //    the WebSocket room membership (they live outside it).
     if (this.mqtt && this.roomId) {
       try {
-        this.mqtt.publish(`${ROOM_TOPIC_PREFIX}${this.roomId.toLowerCase()}`, { ...out, transport: 'mqtt' }, data.type === 'bc_tick' ? 0 : 1);
+        const qos = data.type === 'bc_tick' || data.type === 'bc_join' || data.type === 'bc_room_state' ? 0 : 1;
+        this.mqtt.publish(`${ROOM_TOPIC_PREFIX}${this.roomId.toLowerCase()}`, { ...out, transport: 'mqtt' }, qos);
+      } catch {
+        // Ignore
+      }
+    }
+  }
+
+  private bumpRoomRevision() {
+    this.roomRevision = (this.roomRevision + 1) >>> 0;
+  }
+
+  private createMatchId(): string {
+    return `${this.peerId ?? 'host'}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  private isCurrentMatchPacket(data: Record<string, unknown>): boolean {
+    if (!this.activeMatchId) return false;
+    // A cached older client may omit matchId. Keep that client playable while
+    // still rejecting explicitly mismatched packets from newer matches.
+    if (data.matchId !== undefined && data.matchId !== this.activeMatchId) return false;
+    const hostId = typeof data.hostId === 'string' ? data.hostId : null;
+    return !hostId || !this.hostPeerId || hostId === this.hostPeerId;
+  }
+
+  private broadcastRoomState(retain = false) {
+    if (!this.roomId) return;
+    const players = Array.from(this.localTabPlayers.values());
+    const message = {
+      type: 'bc_room_state',
+      peerId: this.peerId,
+      hostId: this.peerId,
+      players,
+      revision: this.roomRevision,
+    };
+    this.broadcast(message);
+    if (retain && this.mqtt) {
+      try {
+        this.mqtt.publish(
+          `${ROOM_TOPIC_PREFIX}${this.roomId.toLowerCase()}`,
+          { ...message, retained: true, ts: Date.now() },
+          1,
+          true,
+        );
       } catch {
         // Ignore
       }
@@ -757,21 +870,29 @@ export class PartyManager {
           const now = Date.now();
           let changed = false;
           for (const [id, entry] of Array.from(this.localTabPlayers.entries())) {
-            if (id !== this.peerId && now - (entry.ts || now) > 12000) {
+            if (id !== this.peerId && now - (entry.ts || now) > 30000) {
               this.localTabPlayers.delete(id);
               changed = true;
             }
           }
           if (changed) {
-            const playersList = Array.from(this.localTabPlayers.values());
-            this.broadcast({ type: 'bc_room_state', players: playersList });
-            this.updateOpponentsFromList(playersList);
+            this.bumpRoomRevision();
+            this.broadcastRoomState(true);
+            this.updateOpponentsFromList(Array.from(this.localTabPlayers.values()), this.roomRevision);
           }
-          const playersList = Array.from(this.localTabPlayers.values());
-          this.broadcast({
-            type: 'bc_room_state',
-            players: playersList,
-          });
+          this.broadcastRoomState();
+          // Retained catch-up snapshot (5s cadence): a joiner arriving while
+          // the host tab is throttled still gets instant proof-of-life instead
+          // of staring at SEARCHING until the watchdog wrongly gives up.
+          const rid = this.roomId;
+          if (rid && now - this.lastRetainedStateAt > 5000) {
+            this.lastRetainedStateAt = now;
+            try {
+              this.mqtt?.publish(`${ROOM_TOPIC_PREFIX}${rid.toLowerCase()}`, { type: 'bc_room_state', peerId: this.peerId, hostId: this.peerId, players: Array.from(this.localTabPlayers.values()), revision: this.roomRevision, retained: true, ts: now }, 1, true);
+            } catch {
+              // Ignore
+            }
+          }
         } else if (this.state === 'in_game') {
           // Mid-match watchdog: if a joiner closed their tab or crashed mid-race,
           // they stop transmitting ticks. After 12s of silence, mark them dead so
@@ -794,6 +915,10 @@ export class PartyManager {
     this.syncTimer = window.setInterval(sendState, 300);
   }
 
+  private nextLobbySeq(): number {
+    return ++this.lobbySeq;
+  }
+
   private startJoinPingLoop() {
     if (this.syncTimer) clearInterval(this.syncTimer);
     const sendPing = () => {
@@ -804,6 +929,7 @@ export class PartyManager {
           name: this.localName,
           skinId: this.localSkin,
           ready: this.localReady,
+          seq: this.nextLobbySeq(),
         });
 
         // Room liveness watchdog (see join()): the host rebroadcasts
@@ -816,6 +942,22 @@ export class PartyManager {
           ? now - this.joinStartedAt
           : now - this.lastRoomProofAt;
         if (silentFor > 105000) {
+          // Before declaring the room dead, give the relay one recovery window.
+          // Do not blindly jump back to the preferred broker: the host may
+          // have failed over too, and moving only this client would split the
+          // room again.
+          if (!this.relayResetDone) {
+            this.relayResetDone = true;
+            try {
+              this.mqtt?.ensureStarted();
+            } catch {
+              // Ignore
+            }
+            this.joinStartedAt = Date.now();
+            this.lastNudgeAt = 0;
+            this.onStatusMsg?.('CONNECTION TROUBLE - RECONNECTING...');
+            return;
+          }
           this.leave();
           this.onStatusMsg?.('ROOM NOT FOUND - IT MAY HAVE CLOSED');
           return;
@@ -853,18 +995,38 @@ export class PartyManager {
       const joinerName = (data.name as string) || 'Runner';
       const joinerSkin = (data.skinId as SkinId) || 'bob';
       const joinerReady = data.ready === true;
+      const joinerSeq = typeof data.seq === 'number' ? data.seq : -1;
 
       if (joinerId && joinerId !== this.peerId) {
         const existing = this.localTabPlayers.get(joinerId);
+        if (this.state !== 'in_room') {
+          this.broadcast({ type: 'bc_join_reject', targetPeerId: joinerId, reason: 'MATCH_IN_PROGRESS' });
+          return;
+        }
+        if (!existing && this.localTabPlayers.size >= MAX_PLAYERS) {
+          this.broadcast({ type: 'bc_join_reject', targetPeerId: joinerId, reason: 'ROOM_FULL' });
+          return;
+        }
         if (existing) {
+          // Stale dup of an older message arriving late over a slow
+          // transport (MQTT behind WebRTC): must not overwrite fresher
+          // ready state, or READY toggles on the host screen.
+          if (joinerSeq >= 0 && existing.seq !== undefined && joinerSeq <= existing.seq) return;
           // Re-ping of an already-known tab: refresh identity only, keep
           // live meters/score/alive state (pings repeat every 300ms).
+          const changed = existing.name !== joinerName || existing.skinId !== joinerSkin || existing.ready !== joinerReady;
           existing.name = joinerName;
           existing.skinId = joinerSkin;
           existing.ready = joinerReady;
           existing.ts = Date.now();
+          if (joinerSeq >= 0) existing.seq = joinerSeq;
           if (!existing.transport) existing.transport = data.transport as string | undefined;
+          if (changed) this.bumpRoomRevision();
         } else {
+          // Stale in-flight ping from before this peer cancelled/left:
+          // creating an entry would resurrect them until the ghost sweep.
+          const lv = this.recentLeaves.get(joinerId);
+          if (lv && joinerSeq >= 0 && joinerSeq <= lv.seq) return;
           this.localTabPlayers.set(joinerId, {
             peerId: joinerId,
             name: joinerName,
@@ -876,70 +1038,104 @@ export class PartyManager {
             ready: joinerReady,
             ts: Date.now(),
             transport: data.transport as string | undefined,
+            seq: joinerSeq >= 0 ? joinerSeq : undefined,
           });
+          this.bumpRoomRevision();
         }
 
-        // Broadcast updated room state immediately
-        const playersList = Array.from(this.localTabPlayers.values());
-        this.broadcast({
-          type: 'bc_room_state',
-          players: playersList,
-        });
-
-        this.updateOpponentsFromList(playersList);
+        this.broadcastRoomState();
+        this.updateOpponentsFromList(Array.from(this.localTabPlayers.values()), this.roomRevision);
       }
     } else if (type === 'bc_leave') {
       const leaverId = data.peerId as string;
+      const leaveSeq = typeof data.seq === 'number' ? data.seq : -1;
       if (leaverId && leaverId !== this.peerId) {
         if (this.role === 'host') {
-          if (this.localTabPlayers.delete(leaverId)) {
-            const playersList = Array.from(this.localTabPlayers.values());
-            this.broadcast({ type: 'bc_room_state', players: playersList });
-            this.updateOpponentsFromList(playersList);
+          const entry = this.localTabPlayers.get(leaverId);
+          if (entry && leaveSeq >= 0 && entry.seq !== undefined && leaveSeq <= entry.seq) {
+            // Stale leave from before a rejoin: keep the fresher entry.
+          } else {
+            if (leaveSeq >= 0) {
+              this.recentLeaves.set(leaverId, { seq: leaveSeq, t: Date.now() });
+              if (this.recentLeaves.size > 50) {
+                const oldest = this.recentLeaves.keys().next();
+                if (!oldest.done) this.recentLeaves.delete(oldest.value);
+              }
+            }
+            if (this.localTabPlayers.delete(leaverId)) {
+              this.bumpRoomRevision();
+              this.broadcastRoomState(true);
+              this.updateOpponentsFromList(Array.from(this.localTabPlayers.values()), this.roomRevision);
+            }
           }
         } else {
           const leaver = this.opponents.get(leaverId);
-          if (this.opponents.delete(leaverId)) {
-            this.onRoomStateChange?.(Array.from(this.opponents.values()));
-          }
           // The host owns the room: when the host leaves, the room is gone.
           // Back out of the dead lobby instead of pinging its topic forever
           // (the liveness watchdog would eventually, but this is instant).
-          if (leaver?.isHost === true && this.state === 'in_room') {
-            this.leave();
-            this.onStatusMsg?.('ROOM CLOSED - HOST LEFT');
+          if (leaver?.isHost === true) {
+            if (this.state === 'in_game') {
+              this.finishBcMatch();
+              this.onStatusMsg?.('HOST LEFT - MATCH ENDED');
+            } else if (this.state === 'in_room') {
+              this.leave();
+              this.onStatusMsg?.('ROOM CLOSED - HOST LEFT');
+            }
           }
         }
       }
     } else if (type === 'bc_room_state') {
       const players = data.players as Array<{ peerId: string; name: string; skinId: SkinId; isHost: boolean; ready?: boolean }>;
+      const revision = typeof data.revision === 'number' && Number.isFinite(data.revision) ? data.revision : -1;
+      const snapshotHostId = typeof data.hostId === 'string' ? data.hostId : null;
       if (Array.isArray(players)) {
-        // Any room state proves the room exists — clears the join watchdog.
+        if (this.role === 'host') return;
+        if (snapshotHostId && this.hostPeerId && snapshotHostId !== this.hostPeerId) return;
+        if (snapshotHostId) this.hostPeerId = snapshotHostId;
+        // Retained catch-up state from a dead room's leftover is not proof:
+        // only a fresh (<10s) retained snapshot counts, live ones always do.
+        if (data.retained === true) {
+          const rts = typeof data.ts === 'number' && Number.isFinite(data.ts) ? data.ts : 0;
+          if (Date.now() - rts > 10000) return;
+        }
+        // Host snapshots are authoritative. Duplicate transports can deliver
+        // the same state out of order, so an older revision is never allowed
+        // to resurrect a player or undo a ready toggle.
+        if (this.role === 'joiner' && revision >= 0 && revision < this.lastRoomRevision) return;
+        if (this.role === 'joiner' && revision >= 0) this.lastRoomRevision = revision;
         this.awaitingFirstRoomState = false;
         this.lastRoomProofAt = Date.now();
-        this.updateOpponentsFromList(players);
+        this.updateOpponentsFromList(players, revision);
       }
     } else if (type === 'bc_ready') {
       const senderId = data.peerId as string;
       const ready = Boolean(data.ready);
+      const readySeq = typeof data.seq === 'number' ? data.seq : -1;
       if (senderId && senderId !== this.peerId) {
         if (this.role === 'host') {
           const entry = this.localTabPlayers.get(senderId);
-          if (entry) entry.ready = ready;
-          const playersList = Array.from(this.localTabPlayers.values());
-          this.broadcast({ type: 'bc_room_state', players: playersList });
-          this.updateOpponentsFromList(playersList);
-        } else {
-          const opp = this.opponents.get(senderId);
-          if (opp && opp.ready !== ready) {
-            opp.ready = ready;
-            this.onRoomStateChange?.(Array.from(this.opponents.values()));
+          if (entry && !(readySeq >= 0 && entry.seq !== undefined && readySeq <= entry.seq)) {
+            const changed = entry.ready !== ready;
+            entry.ready = ready;
+            if (readySeq >= 0) entry.seq = readySeq;
+            if (changed) this.bumpRoomRevision();
+            this.broadcastRoomState(true);
+            this.updateOpponentsFromList(Array.from(this.localTabPlayers.values()), this.roomRevision);
           }
         }
       }
     } else if (type === 'bc_start') {
-      const seed = typeof data.seed === 'number' ? data.seed : Math.floor(Math.random() * 1000000);
-      const startAt = typeof data.startAt === 'number' ? data.startAt : Date.now() + 3000;
+      const seed = typeof data.seed === 'number' && Number.isFinite(data.seed) ? data.seed : null;
+      const startAt = typeof data.startAt === 'number' && Number.isFinite(data.startAt) ? data.startAt : null;
+      const hostId = typeof data.hostId === 'string' ? data.hostId : null;
+      const matchId = typeof data.matchId === 'string'
+        ? data.matchId
+        : `${hostId ?? 'legacy'}:${seed ?? 'unknown'}:${startAt ?? 'unknown'}`;
+      if (seed === null || startAt === null || (hostId && this.hostPeerId && hostId !== this.hostPeerId)) return;
+      // startAt comes from the host's clock; device clocks are not required
+      // to be synchronized. Match IDs, room state, and the current-state
+      // guard handle stale starts without rejecting a valid countdown.
+      if (this.activeMatchId === matchId) return;
       // Only a lobby (or the results screen awaiting a rematch) is a
       // legitimate start trigger. This guard drops two dangerous stale
       // deliveries: a bc_start that arrives after leave() (state 'idle' —
@@ -947,18 +1143,30 @@ export class PartyManager {
       // ghost battle with a fresh random seed), and the host's own MQTT echo
       // of the start it just broadcast (state 'in_game').
       if (this.state === 'in_room' || this.state === 'ended') {
+        if (hostId) this.hostPeerId = hostId;
+        this.activeMatchId = matchId;
         this.state = 'in_game';
         this.matchResult = null;
         this.localAlive = true;
         this.localTick = null;
         this.localReady = false;
+        for (const opp of this.opponents.values()) {
+          opp.isAlive = true;
+          opp.meters = 0;
+          opp.score = 0;
+          opp.rank = undefined;
+          opp.netFrame = -1;
+          opp.hist = [];
+          opp.px = undefined;
+          opp.py = undefined;
+        }
         this.lastRoomProofAt = Date.now();
         this.matchDeadlineAt = Date.now() + PartyManager.MATCH_TIME_LIMIT_MS;
         this.lastHostTrafficAt = Date.now();
         this.startJoinerWatchdog();
         this.onMatchStart?.(seed, startAt);
       }
-    } else if (type === 'bc_tick' && this.state === 'in_game') {
+    } else if (type === 'bc_tick' && this.state === 'in_game' && this.isCurrentMatchPacket(data)) {
       const senderId = data.peerId as string;
       const payload = data.payload as PlayerTickPayload;
       // Type-guard the telemetry: NaN/Infinity or garbage payloads must never
@@ -975,11 +1183,15 @@ export class PartyManager {
         typeof payload.meters === 'number' &&
         Number.isFinite(payload.meters) &&
         typeof payload.score === 'number' &&
-        Number.isFinite(payload.score)
+        Number.isFinite(payload.score) &&
+        typeof payload.frame === 'number' &&
+        Number.isFinite(payload.frame)
       ) {
         this.lastHostTrafficAt = Date.now();
         const opp = this.opponents.get(senderId);
         if (opp) {
+          if (opp.netFrame !== undefined && payload.frame <= opp.netFrame) return;
+          opp.netFrame = payload.frame;
           opp.px = payload.px;
           opp.py = payload.py;
           opp.vx = payload.vx;
@@ -998,9 +1210,12 @@ export class PartyManager {
           }
           opp.isAlive = payload.alive === false ? false : opp.isAlive;
           opp.ts = Date.now();
+          const h = opp.hist ?? (opp.hist = []);
+          h.push({ t: opp.ts, px: payload.px, py: payload.py });
+          if (h.length > 10) h.splice(0, h.length - 10);
         }
       }
-    } else if (type === 'bc_death' && this.state === 'in_game') {
+    } else if (type === 'bc_death' && this.state === 'in_game' && this.isCurrentMatchPacket(data)) {
       const senderId = data.peerId as string;
       if (senderId && senderId !== this.peerId) {
         const opp = this.opponents.get(senderId);
@@ -1020,19 +1235,19 @@ export class PartyManager {
       if (this.role === 'host' && this.state === 'in_game') {
         this.checkBcMatchEnd();
       }
-    } else if (type === 'bc_timer' && this.state === 'in_game') {
+    } else if (type === 'bc_timer' && this.state === 'in_game' && this.isCurrentMatchPacket(data)) {
       // Host broadcasts remaining match time (ms). Joiners use it to render
       // the battle countdown; nothing else needs it locally.
       const remaining = typeof data.remainingMs === 'number' && Number.isFinite(data.remainingMs) ? data.remainingMs : undefined;
       if (remaining !== undefined) this.onMatchTimer?.(Math.max(0, remaining));
       if (typeof data.deadlineAt === 'number' && Number.isFinite(data.deadlineAt)) this.matchDeadlineAt = data.deadlineAt;
       this.lastHostTrafficAt = Date.now();
-    } else if (type === 'bc_match_end') {
+    } else if (type === 'bc_match_end' && this.isCurrentMatchPacket(data)) {
       const result = data.result as MatchResult;
       // Guard against double end and against results that arrive after we
       // left the room (handleExit during the countdown) — the results modal
       // must not pop over the menu.
-      if (result && this.state === 'in_game' && !this.matchResult) {
+      if (result && Array.isArray(result.leaderboard) && this.state === 'in_game' && !this.matchResult) {
         this.stopMatchTimer();
         this.state = 'ended';
         // Re-map isLocal for every entry based on this client's peerId
@@ -1045,30 +1260,28 @@ export class PartyManager {
         this.matchResult = result;
         this.onMatchEnd?.(result);
       }
-    } else if (type === 'bc_rematch') {
-      // Only meaningful in or after a match: a stale rematch delivered after
-      // leave() (state 'idle') must not resurrect a ghost lobby on the menu.
-      if (this.state !== 'in_game' && this.state !== 'ended') return;
-      this.stopMatchTimer();
-      if (this.role === 'host') {
-        // The host also receives its OWN broadcast (async, after rematch()
-        // already ran startMatch() and set 'in_game') — skip so the match is
-        // not started twice with two different seeds.
-        if (this.state === 'in_game') return;
-        this.state = 'in_room';
-        this.matchResult = null;
+    } else if (type === 'bc_rematch_request') {
+      if (this.role === 'host' && this.state === 'ended' && data.previousMatchId === this.activeMatchId) {
         this.startMatch();
-      } else {
-        this.state = 'in_room';
-        this.matchResult = null;
-        this.localAlive = true;
-        this.localTick = null;
-        this.localReady = false;
+      }
+    } else if (type === 'bc_rematch') {
+      // Legacy rematch packets are intentionally ignored. A match start is
+      // now the sole authoritative transition into a new race.
+      return;
+    } else if (type === 'bc_join_reject') {
+      if (data.targetPeerId === this.peerId && this.state === 'in_room') {
+        const reason = data.reason === 'ROOM_FULL' ? 'ROOM FULL' : 'MATCH ALREADY STARTED';
+        this.leave();
+        this.onStatusMsg?.(reason);
       }
     }
   }
 
-  private updateOpponentsFromList(players: Array<{ peerId: string; name: string; skinId: SkinId; isHost: boolean; ready?: boolean }>) {
+  private updateOpponentsFromList(
+    players: Array<{ peerId: string; name: string; skinId: SkinId; isHost: boolean; ready?: boolean }>,
+    revision = -1,
+  ) {
+    if (this.role === 'joiner' && revision >= 0 && revision < this.lastRoomRevision) return;
     const next = new Map<string, OpponentInfo>();
     for (const p of players) {
       if (p.peerId === this.peerId) continue;
@@ -1162,7 +1375,7 @@ export class PartyManager {
       if (sec !== this.lastMatchTimerSec && (sec <= 10 || now - lastBroadcastAt >= 5000)) {
         this.lastMatchTimerSec = sec;
         lastBroadcastAt = now;
-        this.broadcast({ type: 'bc_timer', remainingMs: remaining, deadlineAt: deadline });
+         this.broadcast({ type: 'bc_timer', remainingMs: remaining, deadlineAt: deadline, matchId: this.activeMatchId, hostId: this.hostPeerId });
       }
     }, 1000);
   }
@@ -1192,8 +1405,9 @@ export class PartyManager {
       const now = Date.now();
       const silent = now - this.lastHostTrafficAt > 15000;
       const deadlinePassed = this.matchDeadlineAt !== null && now >= this.matchDeadlineAt;
-      if (silent && (!this.localAlive || deadlinePassed)) {
+      if (silent && (!this.localAlive || deadlinePassed || now - this.lastHostTrafficAt > 20000)) {
         this.finishBcMatch();
+        this.onStatusMsg?.('HOST CONNECTION LOST - MATCH ENDED');
       }
     }, 3000);
   }
@@ -1251,10 +1465,14 @@ export class PartyManager {
       leaderboard,
     };
 
-    this.broadcast({
-      type: 'bc_match_end',
-      result,
-    });
+    if (this.role === 'host') {
+      this.broadcast({
+        type: 'bc_match_end',
+        result,
+        matchId: this.activeMatchId,
+        hostId: this.hostPeerId,
+      });
+    }
 
     this.state = 'ended';
     this.matchResult = result;
@@ -1263,7 +1481,7 @@ export class PartyManager {
 
   setReady(ready: boolean) {
     this.localReady = ready;
-    this.broadcast({ type: 'bc_ready', peerId: this.peerId, ready });
+    this.broadcast({ type: 'bc_ready', peerId: this.peerId, ready, seq: this.nextLobbySeq() });
   }
 
   setRoomVisibility(isPublic: boolean) {
@@ -1275,8 +1493,28 @@ export class PartyManager {
     if (this.state === 'in_game') return;
     const seed = Math.floor(Math.random() * 1000000);
     const startAt = Date.now() + 3000;
+    const matchId = this.createMatchId();
+    this.activeMatchId = matchId;
     this.localAlive = true;
     this.localTick = null;
+    if (this.role === 'host') {
+      for (const player of this.localTabPlayers.values()) {
+        if (!player.isHost) player.ready = false;
+      }
+      this.bumpRoomRevision();
+      this.broadcastRoomState();
+      this.updateOpponentsFromList(Array.from(this.localTabPlayers.values()), this.roomRevision);
+    }
+    for (const opp of this.opponents.values()) {
+      opp.isAlive = true;
+      opp.meters = 0;
+      opp.score = 0;
+      opp.rank = undefined;
+      opp.netFrame = -1;
+      opp.hist = [];
+      opp.px = undefined;
+      opp.py = undefined;
+    }
 
     if (this.role === 'host') {
       this.startMatchTimer(Date.now() + PartyManager.MATCH_TIME_LIMIT_MS);
@@ -1287,6 +1525,8 @@ export class PartyManager {
       type: 'bc_start',
       seed,
       startAt,
+      matchId,
+      hostId: this.hostPeerId,
     });
 
     this.state = 'in_game';
@@ -1301,6 +1541,8 @@ export class PartyManager {
         type: 'bc_tick',
         peerId: this.peerId,
         payload,
+        matchId: this.activeMatchId,
+        hostId: this.hostPeerId,
       });
     }
   }
@@ -1330,6 +1572,8 @@ export class PartyManager {
         peerId: this.peerId,
         meters,
         score,
+        matchId: this.activeMatchId,
+        hostId: this.hostPeerId,
       });
       // Host dies last: no foreign bc_death will arrive to end the match.
       this.checkBcMatchEnd();
@@ -1337,13 +1581,15 @@ export class PartyManager {
   }
 
   rematch() {
-    this.broadcast({ type: 'bc_rematch' });
     if (this.role === 'host') {
       this.startMatch();
+    } else if (this.state === 'ended') {
+      this.broadcast({ type: 'bc_rematch_request', peerId: this.peerId, previousMatchId: this.activeMatchId });
     }
   }
 
   leave() {
+    this.sessionEpoch++;
     this.stopMatchTimer();
     if (this.syncTimer) {
       clearInterval(this.syncTimer);
@@ -1364,7 +1610,7 @@ export class PartyManager {
     // Tell the room we are gone BEFORE tearing down the channels, so the
     // host removes us from localTabPlayers and rebroadcasts the room state.
     if (this.roomId && this.peerId) {
-      this.broadcast({ type: 'bc_leave', peerId: this.peerId });
+      this.broadcast({ type: 'bc_leave', peerId: this.peerId, seq: this.nextLobbySeq() });
     }
     if (this.bc) {
       try {
@@ -1380,11 +1626,12 @@ export class PartyManager {
       } catch {
         // Ignore
       }
-      try {
-        if (this.role === 'host' && this.roomId) {
-          this.mqtt.publish(lobbyTopic(this.roomId), '', 1, true);
-        }
-      } catch {
+        try {
+          if (this.role === 'host' && this.roomId) {
+            this.mqtt.publish(lobbyTopic(this.roomId), '', 1, true);
+            this.mqtt.publish(`${ROOM_TOPIC_PREFIX}${this.roomId.toLowerCase()}`, '', 1, true);
+          }
+        } catch {
         // Ignore
       }
       this.lastMqttLobbyPublish = 0;
@@ -1421,6 +1668,10 @@ export class PartyManager {
     this.state = 'idle';
     this.awaitingFirstRoomState = false;
     this.localReady = false;
+    this.roomRevision = 0;
+    this.lastRoomRevision = -1;
+    this.hostPeerId = null;
+    this.activeMatchId = null;
     this.opponents.clear();
     this.localTabPlayers.clear();
     this.matchResult = null;

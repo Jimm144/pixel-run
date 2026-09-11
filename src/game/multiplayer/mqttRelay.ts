@@ -52,7 +52,10 @@ async function loadMqtt(): Promise<typeof MqttApi> {
         }
       }
       throw new Error('mqtt failed to load from CDN');
-    })();
+    })().catch((error) => {
+      mqttLoading = null;
+      throw error;
+    });
   }
   return mqttLoading;
 }

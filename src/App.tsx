@@ -724,7 +724,9 @@ export function App() {
 
   const pause = useCallback((fromUser = false) => {
     const g = gameRef.current;
-    if (!g || g.phase !== 'playing') return;
+    // Online matches have one shared clock. Pausing one client would make its
+    // peer look disconnected and eventually trigger the host watchdog.
+    if (!g || g.phase !== 'playing' || g.mode === 'online') return;
     if (fromUser) sfx.play('ui');
     g.pause();
     setLive(g.stats);
@@ -816,6 +818,10 @@ export function App() {
     setMatchResult(res);
     setBattleModalOpen(true);
     setUi('results');
+  }, []);
+
+  const clearMatchResult = useCallback(() => {
+    setMatchResult(null);
   }, []);
 
   /* -------------------------------------------------------------- auto-pause */
@@ -935,6 +941,7 @@ export function App() {
             onResume={resume}
             onRestart={restart}
             onMenu={toMenu}
+            hideRetry={gameRef.current?.mode === 'online'}
             musicVol={volumes.music}
             sfxVol={volumes.sfx}
             onMusicVol={(v) => {
@@ -956,6 +963,7 @@ export function App() {
             onRestart={restart}
             onMenu={toMenu}
             onShare={handleShareScore}
+            hideRetry={gameRef.current?.mode === 'online'}
             touch={touch}
           />
         )}
@@ -1009,7 +1017,7 @@ export function App() {
             localSkin={equippedSkin}
             unlockedSkins={unlockedSkins}
             matchResult={matchResult}
-            onClearMatchResult={() => setMatchResult(null)}
+             onClearMatchResult={clearMatchResult}
           />
         )}
         {showFeedbackModal && (

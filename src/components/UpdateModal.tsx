@@ -14,39 +14,6 @@ export interface UpdateModalProps {
 const CURRENT_VERSION = 'v1.2.0';
 const BUILD_DATE = 'August 2026';
 
-const CHANGELOG = [
-  {
-    tag: 'NEW',
-    tagColor: 'var(--ui-gold)',
-    title: '6-WORLD CAMPAIGN MODE',
-    desc: 'Bespoke levels across Construction, Pirates, Ocean, Volcano, Hell, & Heaven with unique pixel platform textures and parallax skies.',
-  },
-  {
-    tag: 'NEW',
-    tagColor: 'var(--ui-danger)',
-    title: 'MULTIPLAYER BATTLES',
-    desc: 'Local 4-player shared screen & online PvP matchmaking with synchronized seeds, power-ups, and live leaderboards.',
-  },
-  {
-    tag: 'IMPROVED',
-    tagColor: 'var(--ui-accent)',
-    title: 'BALANCED STOMP PHYSICS',
-    desc: 'Airborne descents and high-velocity jump landings cleanly stomp all enemy types (tall slimes, hoppers, wide scarabs, flyers).',
-  },
-  {
-    tag: 'FEATURE',
-    tagColor: 'var(--ui-purple)',
-    title: 'LOCKER & 28+ SKINS',
-    desc: '6 rarity tiers (Common to Exotic), quest milestones, daily streaks, holiday exclusives, and custom trail particle effects.',
-  },
-  {
-    tag: 'FEATURE',
-    tagColor: 'var(--ui-accent2)',
-    title: 'SAVE & CLOUD BACKUP',
-    desc: 'Seamless JSON save export/import and automated cookie-cloud backup that survives domain switches.',
-  },
-];
-
 export function UpdateModal({
   onClose,
   swUpdate,
@@ -145,7 +112,7 @@ export function UpdateModal({
               <PixelReloadIcon className="h-3 w-3" />
             </span>
             <h2 className="font-pixel text-[12px] sm:text-[14px] uppercase tracking-wider text-[var(--ui-accent)]">
-              GAME UPDATES & CHANGELOG
+              GAME UPDATES
             </h2>
           </div>
           <button
@@ -202,41 +169,6 @@ export function UpdateModal({
                 <span>{checking ? 'CHECKING...' : 'CHECK FOR UPDATES'}</span>
               </button>
             )}
-          </div>
-        </div>
-
-        {/* What's New List */}
-        <div className="flex flex-col gap-2">
-          <span className="font-pixel text-[9px] uppercase tracking-wider text-[var(--ui-muted)]">
-            RECENT HIGHLIGHTS:
-          </span>
-
-          <div className="flex flex-col gap-2 max-h-[36vh] overflow-y-auto pr-1">
-            {CHANGELOG.map((item, idx) => (
-              <div
-                key={idx}
-                className="flex flex-col gap-1 border-2 border-[var(--ui-border)]/60 bg-[var(--ui-panel3)] p-2.5 shadow-[2px_2px_0_var(--ui-bg)]"
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className="border px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-wider"
-                    style={{
-                      borderColor: item.tagColor,
-                      color: item.tagColor,
-                      backgroundColor: `${item.tagColor}15`,
-                    }}
-                  >
-                    {item.tag}
-                  </span>
-                  <span className="font-pixel text-[9px] sm:text-[10px] text-[#ffffff]">
-                    {item.title}
-                  </span>
-                </div>
-                <p className="text-[8px] sm:text-[9px] leading-relaxed text-[var(--ui-muted)]">
-                  {item.desc}
-                </p>
-              </div>
-            ))}
           </div>
         </div>
 

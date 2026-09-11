@@ -18,6 +18,10 @@ export interface OpponentInfo {
   diving?: boolean;
   frame?: number;
   run?: number;
+  /** Recent position snapshots for render interpolation (newest last). */
+  hist?: Array<{ t: number; px: number; py: number }>;
+  /** Last engine frame accepted from this peer for the active match. */
+  netFrame?: number;
 }
 
 export interface PlayerTickPayload {

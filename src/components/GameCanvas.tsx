@@ -235,21 +235,23 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
 
       {showTouch && (
         <>
-          <div className="absolute top-[max(1rem,env(safe-area-inset-top))] right-[max(1rem,env(safe-area-inset-right))] z-20 tablet:top-8 tablet:right-8">
-            <button
-              type="button"
-              aria-label="Pause"
-              style={{ borderColor: biomeAccent, color: biomeAccent, opacity: counting ? 0.35 : 0.75 }}
-              className="relative flex h-12 w-12 items-center justify-center border-2 bg-[var(--ui-panel2)]/80 shadow-[4px_4px_0_var(--ui-bg)] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)] tablet:h-16 tablet:w-16"
-              {...pauseHandlers}
-            >
-              <span className="pointer-events-none absolute -top-[4px] -left-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
-              <span className="pointer-events-none absolute -top-[4px] -right-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
-              <span className="pointer-events-none absolute -bottom-[4px] -left-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
-              <span className="pointer-events-none absolute -bottom-[4px] -right-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
-              <PauseIcon className="h-5 w-5 tablet:h-6 tablet:w-6" />
-            </button>
-          </div>
+          {gameRef.current?.mode !== 'online' && (
+            <div className="absolute top-[max(1rem,env(safe-area-inset-top))] right-[max(1rem,env(safe-area-inset-right))] z-20 tablet:top-8 tablet:right-8">
+              <button
+                type="button"
+                aria-label="Pause"
+                style={{ borderColor: biomeAccent, color: biomeAccent, opacity: counting ? 0.35 : 0.75 }}
+                className="relative flex h-12 w-12 items-center justify-center border-2 bg-[var(--ui-panel2)]/80 shadow-[4px_4px_0_var(--ui-bg)] transition-[transform,box-shadow] duration-75 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)] tablet:h-16 tablet:w-16"
+                {...pauseHandlers}
+              >
+                <span className="pointer-events-none absolute -top-[4px] -left-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
+                <span className="pointer-events-none absolute -top-[4px] -right-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
+                <span className="pointer-events-none absolute -bottom-[4px] -left-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
+                <span className="pointer-events-none absolute -bottom-[4px] -right-[4px] h-2 w-2" style={{ backgroundColor: biomeAccent }} />
+                <PauseIcon className="h-5 w-5 tablet:h-6 tablet:w-6" />
+              </button>
+            </div>
+          )}
           <div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))] z-20 tablet:bottom-8 tablet:left-8">
             <button
               type="button"
