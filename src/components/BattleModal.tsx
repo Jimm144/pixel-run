@@ -272,6 +272,7 @@ export function BattleModal({
         setIsJoining(false);
         setJoined(false);
         setMyReady(false);
+        setRoomCode('');
         setOpponents([]);
         rosterIdsRef.current = new Set();
       }
@@ -373,6 +374,7 @@ export function BattleModal({
     joinAttemptRef.current++;
     setIsJoining(false);
     party.leave();
+    setRoomCode('');
     setJoined(false);
     clearRoster();
     setStatusMsg('JOIN CANCELLED');

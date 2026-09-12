@@ -100,6 +100,10 @@ export class MqttRelay {
   setPreferredBroker(index: number) {
     const idx = ((Math.floor(index) % BROKERS.length) + BROKERS.length) % BROKERS.length;
     if (this.client && this.connected && this.brokerIndex % BROKERS.length === idx && !this.opening) return;
+    if (this.failoverTimer !== null) {
+      window.clearTimeout(this.failoverTimer);
+      this.failoverTimer = null;
+    }
     if (this.client) {
       try {
         this.client.end(true);
@@ -185,6 +189,9 @@ export class MqttRelay {
     } catch {
       this.connected = false;
       this.onDisconnect?.();
+      window.setTimeout(() => {
+        if (!this.closed && !this.client) void this.openClient();
+      }, 3000);
       return;
     }
     if (this.closed) return;

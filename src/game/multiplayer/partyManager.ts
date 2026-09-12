@@ -817,7 +817,7 @@ export class PartyManager {
     //    the WebSocket room membership (they live outside it).
     if (this.mqtt && this.roomId) {
       try {
-        const qos = data.type === 'bc_tick' || data.type === 'bc_join' || data.type === 'bc_room_state' ? 0 : 1;
+        const qos: 0 | 1 = data.type === 'bc_tick' ? 0 : 1;
         this.mqtt.publish(`${ROOM_TOPIC_PREFIX}${this.roomId.toLowerCase()}`, { ...out, transport: 'mqtt' }, qos);
       } catch {
         // Ignore
