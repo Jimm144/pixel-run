@@ -504,7 +504,7 @@ export function BattleModal({
   const playerColors = ['var(--ui-accent)', 'var(--ui-gold)', '#ff70a6', 'var(--ui-accent-hi)'];
 
   return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-bg)] p-3 sm:p-4 font-pixel">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--ui-bg)]/80 p-3 sm:p-4 font-pixel">
       <div className="relative flex max-h-[92dvh] w-full max-w-[680px] flex-col items-center border-2 border-[var(--ui-accent)] bg-[var(--ui-panel)] p-4 sm:p-6 text-[#ffffff] shadow-[4px_4px_0_var(--ui-bg)]">
         {/* Top Header */}
         <div className="flex w-full items-center justify-between border-b-2 border-[var(--ui-border)] pb-2 mb-3">

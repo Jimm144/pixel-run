@@ -227,7 +227,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
         ref={canvasRef}
         width={VW}
         height={VH}
-        className="absolute block h-full max-h-none max-w-none w-full bg-[var(--ui-bg)]"
+        className="absolute block h-full max-h-none max-w-none w-full"
         style={{ imageRendering: 'pixelated' }}
       />
       <div className="pointer-events-none absolute inset-0 scanlines" />
