@@ -908,13 +908,13 @@ export class PartyManager {
             }
           }
         } else if (this.state === 'in_game') {
-          // Mid-match watchdog: if a joiner closed their tab or crashed mid-race,
-          // they stop transmitting ticks. After 12s of silence, mark them dead so
-          // checkBcMatchEnd() completes the match without hanging for 3 minutes.
+          // Mid-match watchdog: tolerate relay stalls before declaring a
+          // player dead. Explicit bc_death is authoritative; silence is only
+          // a long-crash backstop.
           const now = Date.now();
           let deadTriggered = false;
           for (const opp of this.opponents.values()) {
-            if (opp.isAlive && now - (opp.ts || now) > 12000) {
+            if (opp.isAlive && now - (opp.ts || now) > 45000) {
               opp.isAlive = false;
               deadTriggered = true;
             }
@@ -1225,7 +1225,11 @@ export class PartyManager {
         if (this.onMatchStart) this.onMatchStart(seed, clientStartAt);
         else this.pendingMatchStart = { seed, startAt: clientStartAt, matchId };
       }
-    } else if (type === 'bc_tick' && this.state === 'in_game' && this.isCurrentMatchPacket(data)) {
+    } else if (
+      type === 'bc_tick' &&
+      this.state === 'in_game' &&
+      (this.isCurrentMatchPacket(data) || (!data.matchId && this.activeMatchId !== null))
+    ) {
       const senderId = data.peerId as string;
       const payload = data.payload as PlayerTickPayload;
       // Type-guard the telemetry: NaN/Infinity or garbage payloads must never
@@ -1477,7 +1481,7 @@ export class PartyManager {
       const now = Date.now();
       const silent = now - this.lastHostTrafficAt > 15000;
       const deadlinePassed = this.matchDeadlineAt !== null && now >= this.matchDeadlineAt;
-      if (silent && (!this.localAlive || deadlinePassed || now - this.lastHostTrafficAt > 20000)) {
+      if (silent && (!this.localAlive || deadlinePassed || now - this.lastHostTrafficAt > 60000)) {
         this.finishBcMatch();
         this.onStatusMsg?.('HOST CONNECTION LOST - MATCH ENDED');
       }
