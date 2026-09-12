@@ -438,6 +438,9 @@ export class Renderer {
 
   render() {
     const c = this.ctx;
+    // Fallback only: normal sky/parallax drawing remains visible above it.
+    c.fillStyle = '#08040f';
+    c.fillRect(0, 0, VW, VH);
     // Crossfade into the next biome over the last 8% of a zone (~28m, brisk).
     // The parallax layer alpha blends continuously, but the palette itself is
     // quantised to FADE_STEPS so the sky bands, the baked sun and the font

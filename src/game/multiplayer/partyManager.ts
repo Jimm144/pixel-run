@@ -157,6 +157,9 @@ export class PartyManager {
   private hostPeerId: string | null = null;
   /** Match identity prevents delayed packets from crossing rematches. */
   private activeMatchId: string | null = null;
+  /** Host-clock minus client-clock, estimated with NTP-style pings. */
+  private clockOffsetMs = 0;
+  private clockOffsetReady = false;
   private pendingMatchStart: { seed: number; startAt: number; matchId: string } | null = null;
   private startBroadcastTimer: number | null = null;
   private readyRetryTimer: number | null = null;
@@ -202,6 +205,8 @@ export class PartyManager {
     this.hostPeerId = this.peerId;
     this.activeMatchId = null;
     this.pendingMatchStart = null;
+    this.clockOffsetMs = 0;
+    this.clockOffsetReady = false;
     this.lastRetainedStateAt = 0;
 
     const code = generateRoomCode();
@@ -271,6 +276,8 @@ export class PartyManager {
     this.hostPeerId = null;
     this.activeMatchId = null;
     this.pendingMatchStart = null;
+    this.clockOffsetMs = 0;
+    this.clockOffsetReady = false;
     this.lastRetainedStateAt = 0;
 
     // Initialize Sync Channels
@@ -938,6 +945,7 @@ export class PartyManager {
           ready: this.localReady,
           seq: this.nextLobbySeq(),
         });
+        this.broadcast({ type: 'bc_clock_ping', peerId: this.peerId, clientSentAt: Date.now() });
 
         // Room liveness watchdog (see join()): the host rebroadcasts
         // bc_room_state every 300ms while the lobby is up, so time since the
@@ -995,6 +1003,34 @@ export class PartyManager {
       if (rtt >= 0 && rtt < 1000) {
         this.pingMs = Math.round(this.pingMs > 0 ? this.pingMs * 0.75 + rtt * 0.25 : rtt);
       }
+    }
+
+    if (type === 'bc_clock_ping' && this.role === 'host') {
+      const targetPeerId = typeof data.peerId === 'string' ? data.peerId : null;
+      const clientSentAt = typeof data.clientSentAt === 'number' && Number.isFinite(data.clientSentAt) ? data.clientSentAt : null;
+      if (targetPeerId && clientSentAt !== null) {
+        const hostReceivedAt = Date.now();
+        this.broadcast({
+          type: 'bc_clock_pong',
+          targetPeerId,
+          clientSentAt,
+          hostReceivedAt,
+          hostSentAt: Date.now(),
+        });
+      }
+      return;
+    }
+    if (type === 'bc_clock_pong' && this.role === 'joiner' && data.targetPeerId === this.peerId) {
+      const clientSentAt = typeof data.clientSentAt === 'number' && Number.isFinite(data.clientSentAt) ? data.clientSentAt : null;
+      const hostReceivedAt = typeof data.hostReceivedAt === 'number' && Number.isFinite(data.hostReceivedAt) ? data.hostReceivedAt : null;
+      const hostSentAt = typeof data.hostSentAt === 'number' && Number.isFinite(data.hostSentAt) ? data.hostSentAt : null;
+      if (clientSentAt !== null && hostReceivedAt !== null && hostSentAt !== null) {
+        const clientReceivedAt = Date.now();
+        const offset = ((hostReceivedAt - clientSentAt) + (hostSentAt - clientReceivedAt)) / 2;
+        this.clockOffsetMs = this.clockOffsetReady ? this.clockOffsetMs * 0.75 + offset * 0.25 : offset;
+        this.clockOffsetReady = true;
+      }
+      return;
     }
 
     if (type === 'bc_join' && this.role === 'host') {
@@ -1160,6 +1196,9 @@ export class PartyManager {
       if (this.state === 'in_room' || this.state === 'ended') {
         if (hostId) this.hostPeerId = hostId;
         this.activeMatchId = matchId;
+        const clientStartAt = this.role === 'joiner' && this.clockOffsetReady
+          ? startAt - this.clockOffsetMs
+          : startAt;
         if (this.rematchRetryTimer !== null) {
           window.clearInterval(this.rematchRetryTimer);
           this.rematchRetryTimer = null;
@@ -1183,8 +1222,8 @@ export class PartyManager {
         this.matchDeadlineAt = Date.now() + PartyManager.MATCH_TIME_LIMIT_MS;
         this.lastHostTrafficAt = Date.now();
         this.startJoinerWatchdog();
-        if (this.onMatchStart) this.onMatchStart(seed, startAt);
-        else this.pendingMatchStart = { seed, startAt, matchId };
+        if (this.onMatchStart) this.onMatchStart(seed, clientStartAt);
+        else this.pendingMatchStart = { seed, startAt: clientStartAt, matchId };
       }
     } else if (type === 'bc_tick' && this.state === 'in_game' && this.isCurrentMatchPacket(data)) {
       const senderId = data.peerId as string;
