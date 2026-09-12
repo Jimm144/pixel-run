@@ -29,6 +29,7 @@ import {
   markRunStarted,
   formatDuration,
   saveQuestRecord,
+  shiftDate,
   type QuestRecord,
   type QuestRunStats,
 } from './game/quests';
@@ -286,6 +287,8 @@ export function App() {
   }, []);
 
   const pendingFeedbackPromptRef = useRef(false);
+  const pendingFeedbackRunCountRef = useRef(0);
+  const runFinalizedRef = useRef(false);
 
   const handleExportSave = useCallback(() => {
     const currentUnlocked = loadUnlockedSkins();
@@ -314,6 +317,9 @@ export function App() {
     setUnlockedSkins(freshUnlocked);
     setEquippedSkin(freshEquipped);
     setBest(freshBest);
+    const freshTheme = loadUiTheme();
+    setUiTheme(freshTheme);
+    setLastRun(loadLastRun());
     // The day-keyed record cache would serve stale pre-restore data.
     questRecordCache.current = null;
     setQuestRecord(loadQuestRecord());
@@ -540,6 +546,64 @@ export function App() {
     questCommittedRef.current = true;
   }, []);
 
+  /** Persist a finished (or abandoned) solo run: quests, best, last run,
+   *  unlocks, run count, cookie backup. Shared by death, retry and menu. */
+  const persistRunResult = useCallback((s: Stats) => {
+    commitQuestRun();
+    setQuestRecord(loadQuestRecord());
+    setStats(s);
+    const entry = { score: s.score, meters: s.meters, coins: s.coins ?? 0, ts: Date.now() };
+    saveLastRun(entry);
+    setLastRun(entry);
+
+    // Load the stored best once and pass it through — saveHighScore would
+    // otherwise re-read it internally.
+    const previous = loadHighScore();
+    const beatBest = s.score > 0 && (!previous || s.score > previous.score);
+    if (beatBest) setBest(saveHighScore(entry, previous)?.score ?? s.score);
+    setNewBest(beatBest);
+
+    // Evaluate skin unlocks with fresh stats from storage
+    const latestStats = loadLifetimeStats();
+    const { newUnlocks, updatedStats } = evaluateSkinUnlocks(latestStats, {
+      score: s.score,
+      meters: s.meters,
+      coins: s.coins ?? 0,
+      gems: s.gems,
+      kills: s.kills,
+      combo: s.combo,
+      moonPhase: s.moonPhase,
+    });
+    setLifetimeStats(updatedStats);
+    if (newUnlocks.length > 0) {
+      setUnlockedSkins(loadUnlockedSkins());
+      triggerSkinToast(SKINS[newUnlocks[0]].name, newUnlocks[0]);
+      sfx.play('gem');
+    }
+
+    const runCount = incrementTotalRuns();
+    if (shouldShowFeedbackPrompt(runCount)) {
+      pendingFeedbackPromptRef.current = true;
+      pendingFeedbackRunCountRef.current = runCount;
+    }
+
+    backupProgressCookie();
+  }, [commitQuestRun, triggerSkinToast]);
+
+  /** Retry/menu during a live run must still save the run (best, last run,
+   *  unlocks). The engine's delayed death report would otherwise be skipped. */
+  const finalizeActiveRun = useCallback(() => {
+    if (runFinalizedRef.current) return;
+    const g = gameRef.current;
+    if (!g) return;
+    if (g.mode !== 'solo') return;
+    if (g.phase !== 'playing' && g.phase !== 'dead') return;
+    const s = g.stats;
+    if (s.score <= 0 && s.meters <= 0) return;
+    runFinalizedRef.current = true;
+    persistRunResult(s);
+  }, [persistRunResult]);
+
   const handleQuestProgress = useCallback((run: QuestRunStats) => {
     const record = readQuestRecord(startDayKeyRef.current ?? undefined);
     const definitions = getDailyQuests(record.date);
@@ -555,15 +619,21 @@ export function App() {
     setQuestRecord(next);
     setQuestToast(newlyCompleted);
 
-    if (next.completed.length >= 3 && record.completed.length < 3) {
+    const fullSet = definitions.length > 0 && next.completed.length >= definitions.length;
+    const wasFullSet = definitions.length > 0 && record.completed.length >= definitions.length;
+    if (fullSet && !wasFullSet) {
       // Read fresh from storage — the React state may predate the run, and
       // spreading a stale snapshot would roll back live-counted lifetime coins.
       const nextLifetime = loadLifetimeStats();
       if (!nextLifetime.dailySetsDone) {
+        // Streak only advances on consecutive full-set days; a skipped day resets.
+        const yesterday = shiftDate(next.date, -1);
+        nextLifetime.dailyStreak = nextLifetime.lastSetDate === yesterday
+          ? Math.min(15, (nextLifetime.dailyStreak || 0) + 1)
+          : 1;
         nextLifetime.dailySets = (nextLifetime.dailySets || 0) + 1;
-        nextLifetime.dailyStreak = (nextLifetime.dailyStreak || 0) + 1;
+        nextLifetime.lastSetDate = next.date;
         if (nextLifetime.dailyStreak >= 15) {
-          nextLifetime.dailyStreak = 15;
           nextLifetime.dailySetsDone = true;
         }
       }
@@ -592,12 +662,14 @@ export function App() {
     questShareBusyRef.current = true;
     try {
       if (typeof navigator.clipboard?.write !== 'function' || typeof ClipboardItem === 'undefined') {
+        triggerSkinToast('SHARING NOT SUPPORTED HERE');
         questShareBusyRef.current = false;
         return;
       }
       const best = loadHighScore()?.score ?? 0;
        const blob = await createQuestShareCard(record, best);
       if (!blob) {
+        triggerSkinToast('SHARE CARD FAILED');
         questShareBusyRef.current = false;
         return;
       }
@@ -669,6 +741,7 @@ export function App() {
     setQuestRecord(current);
     g.best = bestScore();
     g.startRun();
+    runFinalizedRef.current = false;
     questToastSeenRef.current.clear();
     setQuestToast([]);
     setQuestRun(emptyQuestRunStats());
@@ -679,6 +752,7 @@ export function App() {
   const startOnlineBattle = useCallback((seed: number) => {
     const g = gameRef.current;
     if (!g) return;
+    if (!party.isMultiplayer) return;
     setBattleModalOpen(false);
     setMatchResult(null);
     g.best = bestScore();
@@ -708,6 +782,7 @@ export function App() {
   const restart = useCallback(() => {
     const g = gameRef.current;
     if (!g || matchResult) return;
+    finalizeActiveRun();
     if (g.mode === 'local') {
       const cfg = localBattleConfigRef.current;
       if (cfg) startLocalBattle(cfg.skins, cfg.names, cfg.controls);
@@ -718,7 +793,7 @@ export function App() {
       return;
     }
     start();
-  }, [matchResult, start, startLocalBattle]);
+  }, [matchResult, start, startLocalBattle, finalizeActiveRun]);
 
   const showRestartHint = useCallback(() => {}, []);
 
@@ -743,6 +818,7 @@ export function App() {
   }, []);
 
   const toMenu = useCallback(() => {
+    finalizeActiveRun();
     party.leave();
     setMatchResult(null);
     setBattleModalOpen(false);
@@ -759,59 +835,21 @@ export function App() {
     setBest(bestScore());
     if (pendingFeedbackPromptRef.current) {
       pendingFeedbackPromptRef.current = false;
+      saveLastFeedbackPromptRun(pendingFeedbackRunCountRef.current);
       setShowFeedbackModal(true);
     }
-  }, [commitQuestRun]);
+  }, [commitQuestRun, finalizeActiveRun]);
 
   const handleDeath = useCallback((s: Stats) => {
     const g = gameRef.current;
     if (g && g.mode !== 'solo') {
       return; // Do NOT show solo GameOverScreen in battle mode
     }
-
-    commitQuestRun();
-    setQuestRecord(loadQuestRecord());
-    setStats(s);
-    const entry = { score: s.score, meters: s.meters, coins: s.coins ?? 0, ts: Date.now() };
-    saveLastRun(entry);
-    setLastRun(entry);
-
-    // Load the stored best once and pass it through — saveHighScore would
-    // otherwise re-read it internally.
-    const previous = loadHighScore();
-    const beatBest = s.score > 0 && (!previous || s.score > previous.score);
-    if (beatBest) setBest(saveHighScore(entry, previous)?.score ?? s.score);
-    setNewBest(beatBest);
-
-    // Evaluate skin unlocks with fresh stats from storage
-    const latestStats = loadLifetimeStats();
-    const { newUnlocks, updatedStats } = evaluateSkinUnlocks(latestStats, {
-      score: s.score,
-      meters: s.meters,
-      coins: s.coins ?? 0,
-      gems: s.gems,
-      kills: s.kills,
-      combo: s.combo,
-      moonPhase: s.moonPhase,
-    });
-    setLifetimeStats(updatedStats);
-    if (newUnlocks.length > 0) {
-      setUnlockedSkins(loadUnlockedSkins());
-      triggerSkinToast(SKINS[newUnlocks[0]].name, newUnlocks[0]);
-      sfx.play('gem');
-    }
-
-    // Run feedback prompt trigger (10 runs, then every 200 runs unless never show)
-    // Deferred to title screen so it never covers Game Over stats.
-    const runCount = incrementTotalRuns();
-    if (shouldShowFeedbackPrompt(runCount)) {
-      pendingFeedbackPromptRef.current = true;
-      saveLastFeedbackPromptRun(runCount);
-    }
-
+    if (runFinalizedRef.current) return;
+    runFinalizedRef.current = true;
+    persistRunResult(s);
     setUi('over');
-    backupProgressCookie();
-  }, [commitQuestRun, lifetimeStats, triggerSkinToast]);
+  }, [persistRunResult]);
 
   const handleMatchEnd = useCallback((res: MatchResult) => {
     gameRef.current?.enterMatchOver();
@@ -1039,6 +1077,15 @@ export function App() {
             onCheckUpdate={handleCheckUpdate}
             touch={touch}
           />
+        )}
+        {ui === 'playing' && gameRef.current?.mode === 'online' && (
+          <button
+            type="button"
+            onClick={toMenu}
+            className="fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] right-[max(0.75rem,env(safe-area-inset-right))] z-40 border-2 border-[var(--ui-danger)] bg-[var(--ui-panel)]/90 px-3 py-1.5 font-pixel text-[8px] text-[var(--ui-danger)] shadow-[3px_3px_0_var(--ui-bg)] transition-colors hover:bg-[var(--ui-danger)]/20 tablet:text-[10px]"
+          >
+            LEAVE MATCH
+          </button>
         )}
         {swUpdate && ui === 'start' && !updateModalOpen && (
           <div

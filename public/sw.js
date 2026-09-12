@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pixel-run-1789209676386';
+const CACHE_NAME = 'pixel-run-1789223356049';
 
 // Install: precache the root page, font, and assets
 self.addEventListener('install', (event) => {
@@ -49,6 +49,7 @@ self.addEventListener('message', (event) => {
 // Fetch strategy:
 // Navigation requests (bookmarks/page loads): Network-First, with instant Offline Cache Fallback
 // Font/Media requests: Cache-First
+// All other requests: plain network passthrough (never cached)
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
@@ -81,22 +82,32 @@ self.addEventListener('fetch', (event) => {
   }
 
   // 2. Navigation / HTML requests: Network with Cache Fallback
-  event.respondWith(
-    fetch(request)
-      .then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-        }
-        return networkResponse;
-      })
-      .catch(async () => {
-        // When offline, match exact request or fallback to cached root / index.html
-        const cached = await caches.match(request);
-        if (cached) return cached;
-        const rootCached = (await caches.match('./')) || (await caches.match('index.html'));
-        if (rootCached) return rootCached;
-        return new Response('Offline', { status: 503, statusText: 'Offline' });
-      }),
-  );
+  if (request.mode === 'navigate' || request.destination === 'document') {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          if (
+            networkResponse &&
+            networkResponse.status === 200 &&
+            url.origin === self.location.origin
+          ) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return networkResponse;
+        })
+        .catch(async () => {
+          // When offline, match exact request or fallback to cached root / index.html
+          const cached = await caches.match(request);
+          if (cached) return cached;
+          const rootCached = (await caches.match('./')) || (await caches.match('index.html'));
+          if (rootCached) return rootCached;
+          return new Response('Offline', { status: 503, statusText: 'Offline' });
+        }),
+    );
+    return;
+  }
+
+  // 3. Everything else: network passthrough, no caching, no index.html fallback
+  event.respondWith(fetch(request).catch(() => Response.error()));
 });

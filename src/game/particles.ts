@@ -30,8 +30,7 @@ export class ParticleSystem {
     if (this.alive.length >= P_CAP) {
       let minIdx = 0;
       let minLife = this.alive[0].life;
-      const sample = Math.min(this.alive.length, 16);
-      for (let i = 1; i < sample; i++) {
+      for (let i = 1; i < this.alive.length; i++) {
         if (this.alive[i].life < minLife) {
           minLife = this.alive[i].life;
           minIdx = i;
@@ -93,7 +92,7 @@ export class ParticleSystem {
       // Drag is time-scaled like the motion above, so slow-mo (death hit) no
       // longer decelerates particles relatively faster than real time.
       if (p.drag !== 1) {
-        const d = p.drag ** sc;
+        const d = sc === 1 ? p.drag : p.drag ** sc;
         p.vx *= d;
         p.vy *= d;
       }

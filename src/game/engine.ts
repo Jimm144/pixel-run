@@ -313,7 +313,7 @@ export class Game implements GenHost, RenderHost {
   /** Another tab collected a coin — remove it from this world too. */
   private onCoinCollected = (id: string) => {
     for (const k of this.pickups) {
-      if (!k.dead && !k.gem && coinId(k.x, k.y) === id) {
+      if (!k.dead && !k.gem && (k.id ?? coinId(k.x, k.y)) === id) {
         k.dead = true;
         return;
       }
@@ -644,6 +644,7 @@ export class Game implements GenHost, RenderHost {
     this.moveDir = 0;
     this.ghosts.length = 0;
     sfx.setMuffled(true);
+    sfx.pauseMusic();
   }
   resume() {
     if (this.phase === 'paused') {
@@ -666,6 +667,7 @@ export class Game implements GenHost, RenderHost {
         this.countdownTicks = false; // silent countdown after unpause
       }
       sfx.setMuffled(false);
+      sfx.resumeMusic();
     }
   }
   toReady() {
@@ -919,6 +921,23 @@ export class Game implements GenHost, RenderHost {
     this.frame++;
     if (this.goTimer > 0) this.goTimer--;
 
+    // Local battle: P1 dead means spectate. Stop integrating the main body
+    // (it must not run on, drag the camera, or collect anything), but keep
+    // teammates and the world alive.
+    if (this.isLocalBattle && this.localPlayers[0] && !this.localPlayers[0].isAlive) {
+      for (let i = 1; i < this.localPlayers.length; i++) this.stepLocalPlayer(this.localPlayers[i], i);
+      this.particles.update(1);
+      this.texts.update();
+      const camAlive = this.multiCamTarget();
+      if (camAlive !== null) {
+        this.camX += (camAlive - this.camX) * 0.22;
+        if (this.camX < 0) this.camX = 0;
+      }
+      this.worldGen.generate(this.camX + VW * 2.2);
+      if (this.frame % 20 === 0) this.cull();
+      return;
+    }
+
     // death slow-mo
     if (this.phase === 'dead') {
       this.deathTimer++;
@@ -938,8 +957,6 @@ export class Game implements GenHost, RenderHost {
       }
       this.updateSpectatorCamera();
       this.updateEntities(false, false, 0, this.py + PLAYER_H);
-      this.particles.update(1);
-      this.texts.update();
       return;
     }
 
@@ -1008,8 +1025,12 @@ export class Game implements GenHost, RenderHost {
     }
 
     /* ---- gravity */
-    if (this.diveHeld && !this.onGround && !this.diving && this.vy > 0.5) {
+    // Capture contact velocity BEFORE gravity: a grounded runner would
+    // otherwise always read as "falling" and side-hits would classify as stomps.
+    const preGravVy = this.vy;
+    if ((this.diveHeld || this.diveBuf > 0) && !this.onGround && !this.diving && this.vy > 0.5) {
       this.diving = true;
+      this.diveBuf = 0;
       this.spin = 0;
       this.sx = 0.8;
       this.sy = 1.25;
@@ -1036,7 +1057,7 @@ export class Game implements GenHost, RenderHost {
     /* ---- integrate + collide */
     const wasAirborne = !this.onGround;
     const wasDiving = this.diving;
-    const preVy = this.vy;
+    const preVy = preGravVy;
     const prevBottom = this.py + PLAYER_H;
     this.prevFeet = prevBottom;
     this.px += this.vx;
@@ -1198,9 +1219,16 @@ export class Game implements GenHost, RenderHost {
    */
   private multiCamTarget(): number | null {
     if (!this.isLocalBattle) return null;
-    let minX = this.px;
-    let maxX = this.px;
-    let n = 1;
+    // A dead P1 must not seed the camera: spectating teammates should frame
+    // only the living runners.
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let n = 0;
+    if (!this.localPlayers[0] || this.localPlayers[0].isAlive) {
+      minX = this.px;
+      maxX = this.px;
+      n = 1;
+    }
     for (let i = 1; i < this.localPlayers.length; i++) {
       const p = this.localPlayers[i];
       if (!p.isAlive) continue;
@@ -1208,7 +1236,8 @@ export class Game implements GenHost, RenderHost {
       if (p.px > maxX) maxX = p.px;
       n++;
     }
-    if (n < 2) return null;
+    if (n === 0) return null;
+    if (n === 1) return maxX - anchorX();
     const spread = maxX - minX;
     if (spread >= VW) return maxX - anchorX();
     let t = (minX + maxX) * 0.5 - anchorX();
@@ -1229,6 +1258,9 @@ export class Game implements GenHost, RenderHost {
     if (targetX === null) return;
     const camTarget = Math.max(0, targetX - anchorX());
     this.camX += (camTarget - this.camX) * 0.18;
+    // Advance the run distance with the camera so the zone/palette math
+    // follows the player being watched instead of freezing at the death point.
+    this.distance = Math.max(this.distance, this.camX + anchorX() - this.startX);
     this.worldGen.generate(this.camX + VW * 2.2);
     if (this.frame % 20 === 0) this.cull();
   }
@@ -1278,12 +1310,14 @@ export class Game implements GenHost, RenderHost {
         this.py < p.y + bh
       ) {
         if (this.vx > 0) {
-          if (this.absorbShieldHit()) {
+          // Invulnerability protects first — a freshly collected shield must
+          // not be consumed while the invuln window is still active.
+          if (this.invuln > 0) {
             this.px = p.x - pw - 1;
             this.vx = 0;
             continue;
           }
-          if (this.invuln > 0) {
+          if (this.absorbShieldHit()) {
             this.px = p.x - pw - 1;
             this.vx = 0;
             continue;
@@ -1396,9 +1430,12 @@ export class Game implements GenHost, RenderHost {
     this.questEnemies++;
     this.addCombo(e.x + e.w / 2, e.y - 8, pts, label);
     this.particles.burst(e.x + e.w / 2, e.y + e.h / 2, 14, [this.zone.slimeBody, this.zone.accent, '#ffffff'], 2.6, 0.16);
-    sfx.play(e.kind === 'spiker' ? 'slam' : 'stomp');
-    if (e.kind === 'spiker') haptics.diveSlam();
-    else haptics.stomp();
+    // The attract demo must stay silent and still — no stomp SFX or phone buzz on the title screen.
+    if (this.phase !== 'ready') {
+      sfx.play(e.kind === 'spiker' ? 'slam' : 'stomp');
+      if (e.kind === 'spiker') haptics.diveSlam();
+      else haptics.stomp();
+    }
     this.freeze = Math.max(this.freeze, e.kind === 'spiker' ? 5 : 3);
     this.addShake(e.kind === 'spiker' ? 0.42 : 0.18 + (this.mult() - 1) * 0.06);
   }
@@ -1659,6 +1696,7 @@ export class Game implements GenHost, RenderHost {
 
       if (e.kind === 'spiker' && !this.seenSpiker && e.x <= this.camX + VW - 20) {
         this.seenSpiker = true;
+        this.texts.popText(e.x, e.y - 24, 'DIVE TO SMASH!', '#ffd166', 1.2);
       }
 
       // Generous downward sweep when diving so diving reliably crushes enemies without fatal clipping
@@ -1803,12 +1841,11 @@ export class Game implements GenHost, RenderHost {
       if (
         lx + pw - 2 > s.x + 1 &&
         lx + 2 < s.x + s.n * 8 - 1 &&
-        ly + ph > s.y + 3 &&
+        ly + ph > s.y + 5 &&
         ly < s.y + 10
       ) {
-        // 2px landing forgiveness — edge-clipping a spike top mid-fall
-        // reads as unfair, same grace the main player gets.
-        if (lp.vy >= 0 && ly + ph - (s.y + 3) < 2) continue;
+        // Same 5px/3px landing grace the main player gets.
+        if (lp.vy >= 0 && ly + ph - (s.y + 5) < 3) continue;
         this.killLocalPlayer(i, 'spike');
         break;
       }
@@ -2083,8 +2120,8 @@ export class Game implements GenHost, RenderHost {
     if (this.phase !== 'playing' && this.phase !== 'ready') return;
     if (this.phase === 'playing' && this.countdown > 0) return;
     if (this.phase === 'playing' && cause !== 'pit') {
-      if (this.shielded && this.absorbShieldHit()) return;
       if (this.invuln > 0) return;
+      if (this.shielded && this.absorbShieldHit()) return;
     }
     if (this.phase === 'ready') {
       // attract mode: just restart the demo
@@ -2108,7 +2145,8 @@ export class Game implements GenHost, RenderHost {
     this.flash = 0.95;
     this.flashCol = '#ffffff';
     this.breakCombo();
-    sfx.stopMusic();
+    // Online spectators keep hearing the match after their own death.
+    if (!this.isMultiplayer) sfx.stopMusic();
     sfx.play('death');
     haptics.death();
 

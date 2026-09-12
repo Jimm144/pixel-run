@@ -137,12 +137,18 @@ function atlas(color: string): HTMLCanvasElement {
   return a;
 }
 
+const metricsCache = new Map<number, { advance: number; width: number; height: number }>();
+
 function glyphMetrics(scale: number) {
-  return {
+  let m = metricsCache.get(scale);
+  if (m) return m;
+  m = {
     advance: Math.max(1, Math.round(CELL * scale)),
     width: Math.max(1, Math.round(FONT_W * scale)),
     height: Math.max(1, Math.round(FONT_H * scale)),
   };
+  metricsCache.set(scale, m);
+  return m;
 }
 
 export function textWidth(text: string, scale = 1): number {
@@ -194,7 +200,7 @@ export function drawText(
   shadow?: string,
   uppercase = true,
 ) {
-  const rendered = uppercase && text !== text.toUpperCase() ? text.toUpperCase() : text;
+  const rendered = uppercase && /[a-z]/.test(text) ? text.toUpperCase() : text;
   const px = Math.round(x);
   const py = Math.round(y);
   if (shadow) blit(ctx, rendered, px, py + Math.max(1, Math.round(scale)), scale, shadow);

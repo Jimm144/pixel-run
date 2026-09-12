@@ -550,7 +550,7 @@ export class Sfx {
           n.osc.frequency.setValueAtTime(150, t);
           n.osc.frequency.exponentialRampToValueAtTime(40, t + 0.1);
           n.gain.gain.cancelScheduledValues(t);
-          n.gain.gain.setValueAtTime(0.7, t);
+          n.gain.gain.setValueAtTime(0.45, t);
           n.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
           n.freeAt = t + 0.15;
           this.musicTonePool.push(n);
@@ -564,7 +564,7 @@ export class Sfx {
       filt.frequency.value = 1000;
       const gain = ctx.createGain();
       gain.gain.value = 0.0001;
-      gain.gain.setValueAtTime(0.5, t);
+      gain.gain.setValueAtTime(0.28, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
       src.connect(filt);
       filt.connect(gain);
@@ -577,7 +577,7 @@ export class Sfx {
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(200, t);
       osc.frequency.exponentialRampToValueAtTime(100, t + 0.05);
-      oscGain.gain.setValueAtTime(0.35, t);
+      oscGain.gain.setValueAtTime(0.2, t);
       oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
       osc.connect(oscGain);
       oscGain.connect(this.musicGain);
@@ -591,7 +591,7 @@ export class Sfx {
       filt.frequency.value = 5000;
       const gain = ctx.createGain();
       gain.gain.value = 0.0001;
-      gain.gain.setValueAtTime(0.22, t);
+      gain.gain.setValueAtTime(0.12, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
       src.connect(filt);
       filt.connect(gain);
@@ -611,7 +611,7 @@ export class Sfx {
     if (!pattern) return;
     const base = pattern.base;
     const interval = pattern.baseInterval / this.musicSpeed;
-    const noteVol = 0.07 + this.musicIntensity * 0.02;
+    const noteVol = 0.13 + this.musicIntensity * 0.02;
     const len = pattern.melody.length;
     while (this.musicNextTime < now + 0.24) {
       const step = this.musicStep++ % len;

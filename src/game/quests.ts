@@ -121,7 +121,7 @@ function dateKey(date = new Date()) {
   return `${y}-${m}-${d}`;
 }
 
-function shiftDate(date: string, days: number) {
+export function shiftDate(date: string, days: number) {
   const [y, m, d] = date.split('-').map(Number);
   return dateKey(new Date(y, m - 1, d + days));
 }
@@ -156,12 +156,12 @@ function questKey(quest: QuestDefinition) {
 
 function specialCandidate(date: string, slot: number, kind: QuestKind, scope: QuestScope): QuestDefinition {
   const id = `${date}-q${slot}`;
-  if (kind === 'cleanMeters') return { id, difficulty: 'special', scope, kind, target: 2000, reward: REWARDS.special };
-  if (kind === 'cleanScore') return { id, difficulty: 'special', scope, kind, target: 12000, reward: REWARDS.special };
+  if (kind === 'cleanMeters') return { id, difficulty: 'special', scope, kind, target: 900, reward: REWARDS.special };
+  if (kind === 'cleanScore') return { id, difficulty: 'special', scope, kind, target: 5000, reward: REWARDS.special };
   if (kind === 'jumps') return { id, difficulty: 'special', scope, kind, target: scope === 'day' ? 150 : 50, reward: REWARDS.special };
   if (kind === 'biomeEffects') return { id, difficulty: 'special', scope, kind, target: 4, reward: REWARDS.special };
   if (kind === 'twoPowerups') return { id, difficulty: 'special', scope, kind, target: 1, reward: REWARDS.special };
-  if (kind === 'moonPhase') return { id, difficulty: 'impossible', scope: 'run', kind, target: 4, reward: REWARDS.impossible };
+  if (kind === 'moonPhase') return { id, difficulty: 'impossible', scope: 'run', kind, target: 2, reward: REWARDS.impossible };
   return { id, difficulty: 'special', scope, kind: 'combo', target: 10, reward: REWARDS.special };
 }
 
@@ -421,11 +421,12 @@ export function markQuestCompletions(record: QuestRecord, quests: QuestDefinitio
     next.completedByDifficulty[quest.difficulty]++;
     next.totalReward += quest.reward;
     newlyEarnedGems += quest.reward;
-    noteCompletionDay(next);
   }
   const wasChestOpen = next.chestOpen;
   openChestIfComplete(next, quests);
   if (!wasChestOpen && next.chestOpen) {
+    // A "completion day" is a full set, not a single cleared quest.
+    noteCompletionDay(next);
     newlyEarnedGems += CHEST_BONUS_GEMS;
   }
   if (newlyEarnedGems > 0) {
@@ -439,10 +440,10 @@ export function getQuestLabel(quest: QuestDefinition) {
   if (quest.kind === 'cleanMeters') return `Run ${quest.target} meters without collecting or killing`;
   if (quest.kind === 'cleanScore') return `Score ${quest.target} points without collecting or killing`;
   if (quest.kind === 'jumps') return `Jump ${quest.target} times ${scope}`;
-  if (quest.kind === 'biomeEffects') return 'Trigger every biome effect in one run';
+  if (quest.kind === 'biomeEffects') return `Trigger ${quest.target} different biome effects in one run`;
   if (quest.kind === 'twoPowerups') return 'Activate two power-ups at once';
   if (quest.kind === 'combo') return `Reach a x${quest.target} combo in one run`;
-  if (quest.kind === 'moonPhase') return 'Reach the final moon phase in one run';
+  if (quest.kind === 'moonPhase') return 'Reach a later moon phase in one run';
   const labels: Record<QuestMetric, string> = {
     coins: 'coins',
     meters: 'meters',
@@ -510,12 +511,13 @@ export function applyQuestRun(record: QuestRecord, quests: QuestDefinition[], ru
       next.completedByDifficulty[quest.difficulty]++;
       next.totalReward += quest.reward;
       newlyEarnedGems += quest.reward;
-      noteCompletionDay(next);
     }
   }
   const wasChestOpen = next.chestOpen;
   openChestIfComplete(next, quests);
   if (!wasChestOpen && next.chestOpen) {
+    // A "completion day" is a full set, not a single cleared quest.
+    noteCompletionDay(next);
     newlyEarnedGems += CHEST_BONUS_GEMS;
   }
   if (newlyEarnedGems > 0) {

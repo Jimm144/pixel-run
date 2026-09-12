@@ -525,15 +525,22 @@ export class WorldGen {
       else if (pattern === PAT.SPIKES) w = this.rnd(120, 200);
       else if (pattern === PAT.REST) w = this.rnd(80, 130);
       else w = this.rnd(100, 190 - 40 * d);
-      if (launchLandingWidth > 0) w = Math.max(w, clamp(launchLandingWidth, 96, 148));
+      if (launchLandingWidth > 0) w = Math.max(w, clamp(launchLandingWidth, 96, 240));
       const p: Platform = { x, y, w, float: false, seed: this.rand() * 999 };
       this.h.platforms.push(p);
 
       if (!intro && (pattern === PAT.LAUNCH || pattern === PAT.MEGA)) {
         const mega = pattern === PAT.MEGA;
-        const sx = prevEnd - (mega ? 30 : 28);
+        const springOffset = mega ? 30 : 28;
+        const sx = prevEnd - springOffset;
         const v = mega ? MEGA_PAD_V : PAD_V;
-        const launchVx = this.plannedRunSpeed(prevEnd);
+        // Cap the launch speed to the arc that actually lands on this
+        // platform. Without this, late-game run speed outgrows the gap and
+        // landing platform entirely and the pad throws the runner into the pit.
+        let launchVx = this.plannedRunSpeed(prevEnd);
+        const reach = this.padReach(prevY, y, v, launchVx);
+        const allowedReach = gap + springOffset + w - 8;
+        if (reach > allowedReach) launchVx *= allowedReach / Math.max(1, reach);
 
         const clearFrom = prevEnd - 118;
         for (let i = this.h.pickups.length - 1; i >= 0; i--) {

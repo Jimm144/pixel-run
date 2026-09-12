@@ -67,9 +67,11 @@ body.keyboard-active *:focus-visible,
 body.gamepad-active *:focus-visible,
 body.keyboard-active .nav-focus,
 body.gamepad-active .nav-focus {
+  /* Draw the focus ring ON the element border so focused cards/tabs show one
+     ring, not a border plus an offset outline (the "double outline"). */
   outline: 2px solid var(--ui-accent) !important;
-  outline-offset: 2px !important;
-  box-shadow: 0 0 0 2px #08040f !important;
+  outline-offset: -2px !important;
+  box-shadow: none !important;
   z-index: 20 !important;
 }
 

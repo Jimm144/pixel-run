@@ -107,18 +107,22 @@ export function BattleModal({
     const fallback = `RUNNER ${100 + Math.floor(Math.random() * 900)}`;
     try {
       const saved = localStorage.getItem(ONLINE_NAME_KEY);
-      if (saved && saved.trim().toUpperCase() !== 'RUNNER') return saved;
+      if (saved && saved.trim().toUpperCase() !== 'RUNNER') {
+        const cleaned = saved.replace(/[^\x20-\x7E]/g, '');
+        if (cleaned) return cleaned;
+      }
       localStorage.setItem(ONLINE_NAME_KEY, fallback);
     } catch {}
     return fallback || localName;
   });
 
   const updateOnlineName = (v: string) => {
-    setOnlineName(v);
+    const cleaned = v.replace(/[^\x20-\x7E]/g, '');
+    setOnlineName(cleaned);
     try {
-      localStorage.setItem(ONLINE_NAME_KEY, v);
+      localStorage.setItem(ONLINE_NAME_KEY, cleaned);
     } catch {}
-    party.rename(v);
+    party.rename(cleaned);
   };
 
   // Local Battle 2-4 Players — persisted across matches and sessions
@@ -242,7 +246,9 @@ export function BattleModal({
           window.clearInterval(countdownIntervalRef.current);
           window.clearTimeout(countdownTimerRef.current);
           setCountdown(null);
-          onStartOnlineBattle(seed);
+          // The host may have left during the countdown — never drop into a
+          // seeded solo run from a dead room.
+          if (party.state === 'in_game' && party.roomId) onStartOnlineBattle(seed);
         };
         if (delay <= 250) {
           begin();
@@ -614,6 +620,7 @@ export function BattleModal({
               <button
                 type="button"
                 onClick={() => {
+                  if (hostInitInFlightRef.current) return;
                   joinAttemptRef.current++;
                   setTab('host');
                   setJoined(false);
@@ -801,7 +808,7 @@ export function BattleModal({
                           value={playerNames[idx]}
                           onChange={(e) => {
                             const next = [...playerNames];
-                            next[idx] = e.target.value.toUpperCase();
+                            next[idx] = e.target.value.replace(/[^\x20-\x7E]/g, '').toUpperCase();
                             setPlayerNames(next);
                           }}
                           maxLength={10}

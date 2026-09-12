@@ -9,6 +9,7 @@ export class FloatTexts {
   private pool: HTMLCanvasElement[] = [];
 
   reset() {
+    for (const t of this.texts) this.pool.push(t.sprite);
     this.texts.length = 0;
   }
 
@@ -36,8 +37,14 @@ export class FloatTexts {
     const h = FONT_H * scale;
     const w = tw + 4;
     const hh = h + 4;
-    let cv = this.pool.pop();
-    if (!cv || cv.width !== w || cv.height !== hh) {
+    let cv: HTMLCanvasElement | undefined;
+    for (let i = this.pool.length - 1; i >= 0; i--) {
+      if (this.pool[i].width === w && this.pool[i].height === hh) {
+        cv = this.pool.splice(i, 1)[0];
+        break;
+      }
+    }
+    if (!cv) {
       cv = document.createElement('canvas');
       cv.width = w;
       cv.height = hh;

@@ -95,6 +95,8 @@ export class Renderer {
   private hudMText = '';
   private hudGems = -1;
   private hudGemsText = '';
+  private hudCoins = -1;
+  private hudCoinsText = '';
   private hudComboKey = '';
   private hudComboStr = '';
   /** Day/night math computed once per render() and reused by the ambient
@@ -1671,7 +1673,8 @@ export class Renderer {
         c.fillRect(x + 2 + Math.floor(hs(150 + i) * (w - 6)), y + h - 10 - Math.floor(hs(180 + i) * 8), 2, 1);
       }
     } else if (bg === 'ocean') {
-      // SEABED - sand, silt drifts, coral, shells
+      // SEABED - wash first, then the sand shelf and its details on top
+      wash('#1d3557', '#182c45', '#12233a', 24 + Math.floor(hs(1) * 8), 52 + Math.floor(hs(2) * 10));
       c.fillStyle = '#d4a373';
       c.fillRect(x, y + 4, w, 6);
       // sand ripples
@@ -1680,7 +1683,6 @@ export class Renderer {
         c.fillStyle = rr > 1.2 ? '#e0b78a' : '#c2915f';
         c.fillRect(x + sx, y + 5 + Math.floor(rr), 3, 1);
       }
-      wash('#1d3557', '#182c45', '#12233a', 24 + Math.floor(hs(1) * 8), 52 + Math.floor(hs(2) * 10));
       // silt mounds
       for (let i = 0; i < Math.max(2, w / 14); i++) {
         const mx = x + Math.floor(hs(3 + i) * (w - 8));
@@ -2664,6 +2666,13 @@ export class Renderer {
   private drawPlayer() {
     const c = this.ctx;
     const cam = Math.round(this.g.camX);
+    // Local battle spectating: P1 is out — skip the dead body entirely and
+    // only render the remaining runners + online opponents.
+    if (this.g.mode === 'local' && this.g.localPlayers?.[0] && !this.g.localPlayers[0].isAlive) {
+      this.drawLocalPlayers();
+      this.drawOnlineOpponents();
+      return;
+    }
 
     /* landing shadow — helps judge jumps */
     const foot = this.g.py + PLAYER_H;
@@ -2760,46 +2769,52 @@ export class Renderer {
       c.fillRect(ix - 1, 0, 3, 2);
     }
 
-    /* Local Battle Players (P1 - P4) */
-    if (this.g.mode === 'local' && this.g.localPlayers) {
-      this.g.localPlayers.forEach((p, idx) => {
-        if (!p.isAlive) return;
-        const pCx = Math.round(p.px - cam + PLAYER_W / 2);
-        const pCy = Math.round(p.py + PLAYER_H / 2);
-        const badgeLabel = p.name ? p.name.substring(0, 8) : `P${idx + 1}`;
-
-        if (idx === 0) {
-          // P1 Badge above player 1
-          drawTextCentered(c, badgeLabel, cx, cy - PLAYER_H / 2 - 8, 1, p.color || '#3ef2c8', '#150a24');
-        } else {
-          c.save();
-          c.translate(pCx, pCy);
-          if (p.spin > 0) c.rotate(p.spin * Math.PI * 2);
-          // sx/sy lerp asymptotically toward 1 in the engine, so compare with
-          // an epsilon — otherwise a perpetual near-1 scale keeps the sprite
-          // on subpixel offsets and it shimmers every frame.
-          const psx = Math.abs(p.sx - 1) < 0.05 ? 1 : p.sx;
-          const psy = Math.abs(p.sy - 1) < 0.05 ? 1 : p.sy;
-          if (psx !== 1 || psy !== 1) c.scale(psx, psy);
-
-          drawPlayerSprite(c, 0, 0, {
-            skinId: p.skinId || 'rob',
-            frame: this.g.frame,
-            run: p.onGround ? Math.floor(p.animT) % 4 : -1,
-            onGround: p.onGround,
-            diving: p.diving,
-            vx: p.vx,
-          });
-
-          c.restore();
-
-          // P2 / P3 / P4 Badge
-          drawTextCentered(c, badgeLabel, pCx, pCy - PLAYER_H / 2 - 8, 1, p.color || '#ffd166', '#150a24');
-        }
-      });
-    }
+    this.drawLocalPlayers();
 
     this.drawOnlineOpponents();
+  }
+
+  private drawLocalPlayers() {
+    if (this.g.mode !== 'local' || !this.g.localPlayers) return;
+    const c = this.ctx;
+    const cam = Math.round(this.g.camX);
+    this.g.localPlayers.forEach((p, idx) => {
+      if (!p.isAlive) return;
+      const pCx = Math.round(p.px - cam + PLAYER_W / 2);
+      const pCy = Math.round(p.py + PLAYER_H / 2);
+      const badgeLabel = p.name ? p.name.substring(0, 8) : `P${idx + 1}`;
+
+      if (idx === 0) {
+        // P1 Badge above player 1
+        const cx = Math.round(this.g.px - cam + PLAYER_W / 2);
+        const cy = Math.round(this.g.py + PLAYER_H / 2);
+        drawTextCentered(c, badgeLabel, cx, cy - PLAYER_H / 2 - 8, 1, p.color || '#3ef2c8', '#150a24');
+      } else {
+        c.save();
+        c.translate(pCx, pCy);
+        if (p.spin > 0) c.rotate(p.spin * Math.PI * 2);
+        // sx/sy lerp asymptotically toward 1 in the engine, so compare with
+        // an epsilon — otherwise a perpetual near-1 scale keeps the sprite
+        // on subpixel offsets and it shimmers every frame.
+        const psx = Math.abs(p.sx - 1) < 0.05 ? 1 : p.sx;
+        const psy = Math.abs(p.sy - 1) < 0.05 ? 1 : p.sy;
+        if (psx !== 1 || psy !== 1) c.scale(psx, psy);
+
+        drawPlayerSprite(c, 0, 0, {
+          skinId: p.skinId || 'rob',
+          frame: this.g.frame,
+          run: p.onGround ? Math.floor(p.animT) % 4 : -1,
+          onGround: p.onGround,
+          diving: p.diving,
+          vx: p.vx,
+        });
+
+        c.restore();
+
+        // P2 / P3 / P4 Badge
+        drawTextCentered(c, badgeLabel, pCx, pCy - PLAYER_H / 2 - 8, 1, p.color || '#ffd166', '#150a24');
+      }
+    });
   }
 
   private drawOnlineOpponents() {
@@ -2809,6 +2824,7 @@ export class Renderer {
     if (this.oppSmooth.size > this.g.opponentStates.size + 4) {
       for (const k of this.oppSmooth.keys()) if (!this.g.opponentStates.has(k)) this.oppSmooth.delete(k);
     }
+    const now = Date.now();
     for (const opp of this.g.opponentStates.values()) {
       if (!opp.isAlive || opp.px === undefined || opp.py === undefined) continue;
       let s = this.oppSmooth.get(opp.peerId);
@@ -2823,7 +2839,6 @@ export class Renderer {
         let ty = opp.py;
         const hist = opp.hist;
         if (hist && hist.length >= 2) {
-          const now = Date.now();
           const rt = now - 120;
           let i = hist.length - 1;
           while (i > 0 && hist[i].t > rt) i--;
@@ -2843,7 +2858,10 @@ export class Renderer {
         const dy = ty - s.y;
         const adx = Math.abs(dx);
         const ady = Math.abs(dy);
-        if (adx > 160 || ady > 220) {
+        if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
+          s.x = tx;
+          s.y = ty;
+        } else if (adx > 160 || ady > 220) {
           s.x = tx;
           s.y = ty;
         } else {
@@ -2853,6 +2871,7 @@ export class Renderer {
         }
       }
       const oppCx = Math.round(s.x - cam + PLAYER_W / 2);
+      if (oppCx < -40 || oppCx > VW + 40) continue;
       const oppCy = Math.round(s.y + PLAYER_H / 2);
       c.save();
       c.translate(oppCx, oppCy);
@@ -3135,6 +3154,22 @@ export class Renderer {
     c.fillRect(gx0 + 1, gy + 2, 1, 1);
 
     drawText(c, gtxt, gx0 + 9, gy, 1, '#3ef2c8', '#150a24');
+
+    // Coins counter (same row, left of the gem chip)
+    if (this.hudCoins !== this.g.coins) {
+      this.hudCoins = this.g.coins;
+      this.hudCoinsText = 'X' + pad(this.g.coins, 2);
+    }
+    const ctxt = this.hudCoinsText;
+    const cw = textWidth(ctxt, 1) + 12;
+    const cx0 = gx0 - cw - 6;
+    c.fillStyle = '#241a05';
+    c.fillRect(cx0 + 2, gy, 6, 8);
+    c.fillStyle = '#ffd166';
+    c.fillRect(cx0 + 3, gy + 1, 4, 6);
+    c.fillStyle = '#fff3c4';
+    c.fillRect(cx0 + 4, gy + 2, 2, 2);
+    drawText(c, ctxt, cx0 + 9, gy, 1, '#ffd166', '#150a24');
 
     // 4. ONLINE PING BADGE — the string is only rebuilt when the ping value
     // itself changes (it updates per network tick, not per frame).

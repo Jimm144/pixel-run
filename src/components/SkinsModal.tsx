@@ -476,6 +476,7 @@ export function SkinsModal({
 
   return (
     <div
+      data-own-nav
       className={
         touch
           ? 'fixed inset-0 z-50 flex flex-col overflow-hidden bg-[var(--ui-panel3)] p-3 text-white pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] tablet:items-center tablet:justify-center tablet:bg-[var(--ui-bg)]/80 tablet:p-4'

@@ -9,6 +9,7 @@ export type UI = 'start' | 'playing' | 'paused' | 'over' | 'results' | 'victory'
 // Modals sit at different z-layers: Save/Load and skin unlock at z-[100],
 // CampaignVictoryModal at z-[60], Battle/Skins/Updates at z-50, feedback at z-40. Search highest-first.
 const MODAL_ROOT_SELECTOR = '.fixed.z-\\[100\\], .fixed.z-\\[60\\], .fixed.z-50, .fixed.z-40';
+const OWNS_NAV_SELECTOR = '[data-own-nav]';
 const CLOSE_BUTTON_SELECTOR =
   '.fixed.z-50 button[aria-label="Close"], .fixed.z-50 button[title="Close"], ' +
   '.fixed.z-\\[60\\] button[aria-label="Close"], .fixed.z-\\[60\\] button[title="Close"], ' +
@@ -199,6 +200,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
     const isTextInput =
       target &&
       (target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' ||
         (target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'text') ||
         target.isContentEditable);
 
@@ -307,6 +309,10 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
 
     // 2. MENU & MODAL NAVIGATION (ui !== 'playing' OR modal is open)
     if (e.repeat) return;
+
+    // The Locker drives its own virtual-focus highlight; moving native focus
+    // as well would show two focus rings at once.
+    if (document.querySelector(OWNS_NAV_SELECTOR)) return;
 
     if (code === 'ArrowDown' || code === 'KeyS') {
       e.preventDefault();
@@ -621,6 +627,8 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
         }
         if (state.pausePressed) cbRef.current.onPause();
       } else {
+        // The Locker handles its own gamepad navigation and confirm/back.
+        if (document.querySelector(OWNS_NAV_SELECTOR)) return;
         if (state.pausePressed) {
           document.body.classList.add('gamepad-active');
           if (isModalOpen) {
@@ -666,6 +674,8 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
       document.body.classList.add('gamepad-active');
       const u = uiRef.current;
       const isModalOpen = modalOpenRef.current;
+      // The Locker handles its own gamepad navigation and confirm/back.
+      if (document.querySelector(OWNS_NAV_SELECTOR)) return;
       if (isModalOpen || u !== 'playing') {
         if (action === 'down') navigate2D('down');
         else if (action === 'up') navigate2D('up');

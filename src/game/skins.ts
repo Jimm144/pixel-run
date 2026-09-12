@@ -402,7 +402,7 @@ export const SKINS: Record<SkinId, SkinDef> = {
     boot: '#1a0505',
     scarf: '#ff7a45',
     ghostTrail: '#ff2e63',
-    unlock: { type: 'moon', desc: 'REACH THE BLOOD MOON' },
+    unlock: { type: 'moon', desc: 'REACH MOON PHASE 3' },
   },
   santa: {
     id: 'santa',
@@ -489,6 +489,8 @@ export interface LifetimeStats {
   dailySetsDone?: boolean;
   totalDistDone?: boolean;
   bloodMoonDone?: boolean;
+  /** Date key of the last fully-completed daily set (streak tracking). */
+  lastSetDate?: string;
 }
 
 const STATS_KEY = 'pixeldash.lifetime_stats';
@@ -513,6 +515,7 @@ export function loadLifetimeStats(): LifetimeStats {
       dailySetsDone: parsed.dailySetsDone,
       totalDistDone: parsed.totalDistDone,
       bloodMoonDone: parsed.bloodMoonDone,
+      lastSetDate: typeof parsed.lastSetDate === 'string' ? parsed.lastSetDate : undefined,
     };
   } catch {
     return { score: 0, coins: 0, dailySets: 0, dailyStreak: 0, gems: 0, totalDistance: 0, maxDistance: 0 };
@@ -686,7 +689,7 @@ export function evaluateSkinUnlocks(
     if (currentRun.meters > nextStats.maxDistance) {
       nextStats.maxDistance = currentRun.meters;
     }
-    if (currentRun.moonPhase && currentRun.moonPhase >= 4) {
+    if (currentRun.moonPhase && currentRun.moonPhase >= 3) {
       nextStats.bloodMoonDone = true;
     }
   }
