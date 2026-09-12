@@ -1,5 +1,6 @@
 import { ZONES, type BgKind } from './palette';
 import {
+  BASE_VH,
   clamp,
   GRAV,
   GRAV_FALL,
@@ -9,7 +10,6 @@ import {
   PAD_V,
   PAT,
   PLAYER_H,
-  VH,
   coinId,
   type BiomeEventTrigger,
   type EnemyKind,
@@ -85,6 +85,17 @@ export class WorldGen {
 
   private rand(): number {
     return this.h.rng ? this.h.rng.next() : Math.random();
+  }
+
+  // Generation must depend on segment position, not the moment each client
+  // happens to extend its viewport. Otherwise different viewports consume
+  // different live engine speeds and build different launch gaps.
+  private plannedRunSpeed(x: number) {
+    const distance = Math.max(0, x - this.h.startX);
+    const base = 2.1 + 1.4 * Math.min(1, distance / 15000);
+    const late = clamp((distance - 10500) / 15000, 0, 0.8);
+    const ultra = distance > 25000 ? Math.min(0.9, Math.log10(1 + (distance - 25000) / 40000) * 1.5) : 0;
+    return base + late + ultra;
   }
 
   // Follows the true jump/fall arc so coins always sit exactly where you travel.
@@ -284,7 +295,7 @@ export class WorldGen {
       if (this.genCount === 3) {
         // teach the launch pad: pad + a clean bounce arc landing on this platform
         const sx = p.x + 40;
-        const launchVx = this.h.runSpeed();
+        const launchVx = this.plannedRunSpeed(p.x);
         this.h.springs.push({ x: sx, y: p.y - 9, press: 0, mega: false, launchVx });
         this.addPadArc(sx, p.y, p.y, PAD_V, launchVx, 4);
       }
@@ -346,7 +357,7 @@ export class WorldGen {
         const fy = clamp(
           p.y - this.ri(40, 52),
           Math.max(72, p.y - 55),
-          Math.max(VH - 66, p.y - 40),
+          Math.max(BASE_VH - 66, p.y - 40),
         );
         this.h.platforms.push({ x: fx, y: fy, w: fw, float: true, seed: this.rand() * 999 });
         this.addCoinLine(fx + 8, fx + fw - 8, fy - 14, 3);
@@ -357,7 +368,7 @@ export class WorldGen {
 
       case PAT.FLYER:
       default: {
-        const droneY = clamp(Math.min(prevY, p.y) - this.ri(30, 46), 66, VH - 54);
+        const droneY = clamp(Math.min(prevY, p.y) - this.ri(30, 46), 66, BASE_VH - 54);
         this.addFlyer(center, droneY, this.ri(28, 40));
         if (this.rand() < 0.4) this.addCoinLine(center - 22, center + 22, p.y - 16, 3);
         break;
@@ -487,12 +498,12 @@ export class WorldGen {
       if (this.genCount === 0) gap = 0;
       else if (intro) gap = 30 + this.genCount * 8;
       else if (pattern === PAT.LAUNCH) {
-        const vx = this.h.runSpeed();
+        const vx = this.plannedRunSpeed(this.genX);
         const reach = this.padReach(prevY, y, PAD_V, vx);
         gap = clamp(reach * this.rnd(0.72, 0.8) - 23, 44, 70);
         launchLandingWidth = reach - gap + 12;
       } else if (pattern === PAT.MEGA) {
-        const vx = this.h.runSpeed();
+        const vx = this.plannedRunSpeed(this.genX);
         const reach = this.padReach(prevY, y, MEGA_PAD_V, vx);
         gap = clamp(reach * this.rnd(0.74, 0.82) - 23, 74, 108);
         launchLandingWidth = reach - gap + 14;
@@ -522,7 +533,7 @@ export class WorldGen {
         const mega = pattern === PAT.MEGA;
         const sx = prevEnd - (mega ? 30 : 28);
         const v = mega ? MEGA_PAD_V : PAD_V;
-        const launchVx = this.h.runSpeed();
+        const launchVx = this.plannedRunSpeed(prevEnd);
 
         const clearFrom = prevEnd - 118;
         for (let i = this.h.pickups.length - 1; i >= 0; i--) {

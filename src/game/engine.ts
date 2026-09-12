@@ -7,6 +7,7 @@ import { Renderer } from './renderer';
 import { FloatTexts } from './texts';
 import {
   anchorX,
+  BASE_VW,
   BUFFER,
   clamp,
   COIN_PTS,
@@ -475,7 +476,10 @@ export class Game implements GenHost, RenderHost {
     this.zone = ZONES[this.zoneOrder[0]];
     this.eventKind = this.zone.bg;
     this.renderer.refreshZoneColors(this.zone);
-    this.px = anchorX();
+    // Online rooms use one fixed world origin across viewport sizes. Keeping
+    // startX resolution-independent makes remote positions and generated
+    // gaps line up on phone and desktop clients.
+    this.px = party.isMultiplayer ? BASE_VW * 0.28 : anchorX();
     this.py = 170 - PLAYER_H;
     this.startX = this.px;
     this.worldGen.generate(this.camX + VW * 2.2);
