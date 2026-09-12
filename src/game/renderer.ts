@@ -511,6 +511,7 @@ export class Renderer {
     this.drawWorld();
     this.particles.draw(c, this.g.camX);
     if (this.g.phase !== 'dead') this.drawPlayer();
+    else this.drawOnlineOpponents();
     this.drawDeathShockwave();
     this.texts.draw(c, this.g.camX);
 
@@ -2798,80 +2799,75 @@ export class Renderer {
       });
     }
 
-    /* Online Multiplayer Opponent Ghosts */
-    if (this.g.mode === 'online' && this.g.opponentStates) {
-      if (this.oppSmooth.size > this.g.opponentStates.size + 4) {
-        for (const k of this.oppSmooth.keys()) if (!this.g.opponentStates.has(k)) this.oppSmooth.delete(k);
-      }
-      for (const opp of this.g.opponentStates.values()) {
-        if (!opp.isAlive || opp.px === undefined || opp.py === undefined) continue;
-        // Ghost smoothing: render ~120ms behind the latest tick by
-        // interpolating between timestamped snapshots. Packet loss and
-        // broker jitter then show as smooth motion instead of teleports.
-        // Only true teleports (respawn/rematch catch-up, frozen end screen)
-        // snap. On stale data, extrapolate briefly on velocity, then hold.
-        let s = this.oppSmooth.get(opp.peerId);
-        if (!s) {
-          s = { x: opp.px, y: opp.py };
-          this.oppSmooth.set(opp.peerId, s);
-        } else if (this.g.phase === 'over') {
-          s.x = opp.px;
-          s.y = opp.py;
-        } else {
-          let tx = opp.px;
-          let ty = opp.py;
-          const hist = opp.hist;
-          if (hist && hist.length >= 2) {
-            const now = Date.now();
-            const rt = now - 120;
-            let i = hist.length - 1;
-            while (i > 0 && hist[i].t > rt) i--;
-            const a = hist[i];
-            const b = hist[Math.min(i + 1, hist.length - 1)];
-            if (b.t > a.t && rt >= a.t) {
-              const f = Math.min(1, (rt - a.t) / (b.t - a.t));
-              tx = a.px + (b.px - a.px) * f;
-              ty = a.py + (b.py - a.py) * f;
-            } else if (rt >= b.t) {
-              const dtF = Math.min(15, (now - b.t) / 16.667);
-              tx = b.px + (opp.vx ?? 0) * dtF;
-              ty = b.py + (opp.vy ?? 0) * dtF;
-            }
-          }
-          const dx = tx - s.x;
-          const dy = ty - s.y;
-          const adx = Math.abs(dx);
-          const ady = Math.abs(dy);
-          if (adx > 160 || ady > 220) {
-            s.x = tx;
-            s.y = ty;
-          } else {
-            const k = adx > 40 || ady > 60 ? 0.5 : 0.18;
-            s.x += dx * k;
-            s.y += dy * k;
+    this.drawOnlineOpponents();
+  }
+
+  private drawOnlineOpponents() {
+    if (this.g.mode !== 'online' || !this.g.opponentStates) return;
+    const c = this.ctx;
+    const cam = Math.round(this.g.camX);
+    if (this.oppSmooth.size > this.g.opponentStates.size + 4) {
+      for (const k of this.oppSmooth.keys()) if (!this.g.opponentStates.has(k)) this.oppSmooth.delete(k);
+    }
+    for (const opp of this.g.opponentStates.values()) {
+      if (!opp.isAlive || opp.px === undefined || opp.py === undefined) continue;
+      let s = this.oppSmooth.get(opp.peerId);
+      if (!s) {
+        s = { x: opp.px, y: opp.py };
+        this.oppSmooth.set(opp.peerId, s);
+      } else if (this.g.phase === 'over') {
+        s.x = opp.px;
+        s.y = opp.py;
+      } else {
+        let tx = opp.px;
+        let ty = opp.py;
+        const hist = opp.hist;
+        if (hist && hist.length >= 2) {
+          const now = Date.now();
+          const rt = now - 120;
+          let i = hist.length - 1;
+          while (i > 0 && hist[i].t > rt) i--;
+          const a = hist[i];
+          const b = hist[Math.min(i + 1, hist.length - 1)];
+          if (b.t > a.t && rt >= a.t) {
+            const f = Math.min(1, (rt - a.t) / (b.t - a.t));
+            tx = a.px + (b.px - a.px) * f;
+            ty = a.py + (b.py - a.py) * f;
+          } else if (rt >= b.t) {
+            const dtF = Math.min(15, (now - b.t) / 16.667);
+            tx = b.px + (opp.vx ?? 0) * dtF;
+            ty = b.py + (opp.vy ?? 0) * dtF;
           }
         }
-        const oppCx = Math.round(s.x - cam + PLAYER_W / 2);
-        const oppCy = Math.round(s.y + PLAYER_H / 2);
-
-        c.save();
-        c.translate(oppCx, oppCy);
-        c.globalAlpha = 0.75;
-
-        drawPlayerSprite(c, 0, 0, {
-          skinId: opp.skinId || 'bob',
-          frame: opp.frame ?? this.g.frame,
-          run: opp.run ?? -1,
-          onGround: opp.run !== -1,
-          diving: Boolean(opp.diving),
-          vx: opp.vx ?? 0,
-        });
-
-        c.globalAlpha = 0.9;
-        drawTextCentered(c, opp.name, 0, -PLAYER_H / 2 - 8, 1, '#ffd166', '#150a24');
-
-        c.restore();
+        const dx = tx - s.x;
+        const dy = ty - s.y;
+        const adx = Math.abs(dx);
+        const ady = Math.abs(dy);
+        if (adx > 160 || ady > 220) {
+          s.x = tx;
+          s.y = ty;
+        } else {
+          const k = adx > 40 || ady > 60 ? 0.5 : 0.18;
+          s.x += dx * k;
+          s.y += dy * k;
+        }
       }
+      const oppCx = Math.round(s.x - cam + PLAYER_W / 2);
+      const oppCy = Math.round(s.y + PLAYER_H / 2);
+      c.save();
+      c.translate(oppCx, oppCy);
+      c.globalAlpha = 0.75;
+      drawPlayerSprite(c, 0, 0, {
+        skinId: opp.skinId || 'bob',
+        frame: opp.frame ?? this.g.frame,
+        run: opp.run ?? -1,
+        onGround: opp.run !== -1,
+        diving: Boolean(opp.diving),
+        vx: opp.vx ?? 0,
+      });
+      c.globalAlpha = 0.9;
+      drawTextCentered(c, opp.name, 0, -PLAYER_H / 2 - 8, 1, '#ffd166', '#150a24');
+      c.restore();
     }
   }
 

@@ -908,19 +908,13 @@ export class PartyManager {
             }
           }
         } else if (this.state === 'in_game') {
-          // Mid-match watchdog: tolerate relay stalls before declaring a
-          // player dead. Explicit bc_death is authoritative; silence is only
-          // a long-crash backstop.
+          // Missing telemetry is not death. Explicit bc_death is authoritative;
+          // the match deadline handles a genuinely disconnected player.
           const now = Date.now();
-          let deadTriggered = false;
           for (const opp of this.opponents.values()) {
             if (opp.isAlive && now - (opp.ts || now) > 45000) {
-              opp.isAlive = false;
-              deadTriggered = true;
+              // Keep the runner visible while the relay recovers.
             }
-          }
-          if (deadTriggered) {
-            this.checkBcMatchEnd();
           }
         }
       }
@@ -1481,7 +1475,7 @@ export class PartyManager {
       const now = Date.now();
       const silent = now - this.lastHostTrafficAt > 15000;
       const deadlinePassed = this.matchDeadlineAt !== null && now >= this.matchDeadlineAt;
-      if (silent && (!this.localAlive || deadlinePassed || now - this.lastHostTrafficAt > 60000)) {
+      if (silent && (!this.localAlive || deadlinePassed)) {
         this.finishBcMatch();
         this.onStatusMsg?.('HOST CONNECTION LOST - MATCH ENDED');
       }
