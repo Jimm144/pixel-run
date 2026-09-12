@@ -937,6 +937,9 @@ export class Game implements GenHost, RenderHost {
         }
       }
       this.updateSpectatorCamera();
+      this.updateEntities(false, false, 0, this.py + PLAYER_H);
+      this.particles.update(1);
+      this.texts.update();
       return;
     }
 
@@ -1634,6 +1637,10 @@ export class Game implements GenHost, RenderHost {
         b.vx = dir * bv;
       }
     }
+
+    // Spectators animate the deterministic world without colliding with the
+    // dead local runner or mutating pickups/enemies through player contact.
+    if (this.phase === 'dead') return true;
 
     /* enemies: player collision */
     let stompedThisFrame = false;
