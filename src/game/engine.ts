@@ -936,7 +936,6 @@ export class Game implements GenHost, RenderHost {
           this.onDeath?.(this.stats);
         }
       }
-      this.updateSpectatorCamera();
       return;
     }
 
@@ -1214,20 +1213,6 @@ export class Game implements GenHost, RenderHost {
     if (t < lo) return lo;
     if (t > hi) return hi;
     return t;
-  }
-
-  private updateSpectatorCamera() {
-    if (this.mode !== 'online' || this.phase !== 'dead') return;
-    let targetX: number | null = null;
-    for (const opp of this.opponentStates.values()) {
-      if (!opp.isAlive || opp.px === undefined || !Number.isFinite(opp.px)) continue;
-      if (targetX === null || opp.px > targetX) targetX = opp.px;
-    }
-    if (targetX === null) return;
-    const camTarget = Math.max(0, targetX - anchorX());
-    this.camX += (camTarget - this.camX) * 0.18;
-    this.worldGen.generate(this.camX + VW * 2.2);
-    if (this.frame % 20 === 0) this.cull();
   }
 
   private doJump(dbl: boolean) {

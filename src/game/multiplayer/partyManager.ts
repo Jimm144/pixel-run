@@ -1162,7 +1162,6 @@ export class PartyManager {
       if (this.state === 'in_room' || this.state === 'ended') {
         if (hostId) this.hostPeerId = hostId;
         this.activeMatchId = matchId;
-        const clientStartAt = this.role === 'joiner' ? Date.now() + 3000 : startAt;
         if (this.rematchRetryTimer !== null) {
           window.clearInterval(this.rematchRetryTimer);
           this.rematchRetryTimer = null;
@@ -1186,8 +1185,8 @@ export class PartyManager {
         this.matchDeadlineAt = Date.now() + PartyManager.MATCH_TIME_LIMIT_MS;
         this.lastHostTrafficAt = Date.now();
         this.startJoinerWatchdog();
-        if (this.onMatchStart) this.onMatchStart(seed, clientStartAt);
-        else this.pendingMatchStart = { seed, startAt: clientStartAt, matchId };
+        if (this.onMatchStart) this.onMatchStart(seed, startAt);
+        else this.pendingMatchStart = { seed, startAt, matchId };
       }
     } else if (type === 'bc_tick' && this.state === 'in_game' && this.isCurrentMatchPacket(data)) {
       const senderId = data.peerId as string;
