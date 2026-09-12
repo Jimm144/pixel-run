@@ -185,6 +185,9 @@ export class MqttRelay {
     } catch {
       this.connected = false;
       this.onDisconnect?.();
+      window.setTimeout(() => {
+        if (!this.closed && !this.client) void this.openClient();
+      }, 3000);
       return;
     }
     if (this.closed) return;
