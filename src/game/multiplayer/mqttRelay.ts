@@ -6,7 +6,9 @@ import type { MqttClient } from 'mqtt';
 // every client publishes to the room topic and receives everyone else's
 // messages (self-messages never echo back, which the message handlers
 // already guard against with peerId checks).
-const BROKERS = ['wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt', 'wss://test.mosquitto.org:8081'];
+// Keep the currently healthy WebSocket broker first. Every room derives its
+// broker index from the code, so both clients still choose the same fallback.
+const BROKERS = ['wss://test.mosquitto.org:8081/mqtt', 'wss://broker.emqx.io:8084/mqtt', 'wss://broker.hivemq.com:8884/mqtt'];
 
 // Stable per page load (not per connection attempt): mqtt.js reconnects
 // with the same options, and with clean:false the broker keeps the session

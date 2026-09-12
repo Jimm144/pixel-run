@@ -480,11 +480,6 @@ export class PartyManager {
   private async initSyncChannels(roomId: string, role: 'host' | 'joiner', session: number): Promise<boolean> {
     if (!this.isSessionActive(session, roomId, role)) return false;
     const channelName = `pixelrun_room_${roomId.toLowerCase()}`;
-    // Deterministic broker choice: the same room code always maps to the same
-    // broker, so host and joiners never fail over to different public brokers.
-    let codeHash = 0;
-    for (let i = 0; i < roomId.length; i++) codeHash = (codeHash * 31 + roomId.charCodeAt(i)) >>> 0;
-
     // 1. BroadcastChannel (0ms local tabs)
     if (typeof BroadcastChannel !== 'undefined') {
       // A previous room's channel must be closed first — rapid host/join
@@ -714,7 +709,10 @@ export class PartyManager {
           }
         };
       }
-      this.mqtt.setPreferredBroker(codeHash);
+      // The room hash is retained for compatibility, but the first broker
+      // is the only currently verified cross-device path. All clients must
+      // start there or they can split across dead public brokers.
+      this.mqtt.setPreferredBroker(0);
       this.mqtt.ensureStarted();
       this.mqtt.setTopics([`${ROOM_TOPIC_PREFIX}${roomId.toLowerCase()}`, LOBBY_TOPIC_WILDCARD]);
     }

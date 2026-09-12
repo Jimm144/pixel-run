@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pixel-run-1789206850940';
+const CACHE_NAME = 'pixel-run-1789207572244';
 
 // Install: precache the root page, font, and assets
 self.addEventListener('install', (event) => {
