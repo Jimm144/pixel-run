@@ -20,6 +20,7 @@ import { drawPlayerSprite } from '../game/playerSprite';
 import { inputManager, type GamepadAction } from '../game/input';
 import { sfx } from '../game/audio';
 import { PixelCloseIcon, PixelArrow } from './ui';
+import { type SupportedLanguage, getTranslations, getTierName } from '../game/i18n';
 
 interface SkinsModalProps {
   equippedSkin: SkinId;
@@ -29,6 +30,7 @@ interface SkinsModalProps {
   onUpdateUnlocked: (unlocked: SkinId[], updatedStats: LifetimeStats) => void;
   onClose: () => void;
   touch?: boolean;
+  lang?: SupportedLanguage;
 }
 
 function GemIcon({ className = 'h-3.5 w-3.5' }: { className?: string }) {
@@ -56,7 +58,9 @@ export function SkinsModal({
   onUpdateUnlocked,
   onClose,
   touch = false,
+  lang = 'en',
 }: SkinsModalProps) {
+  const t = getTranslations(lang);
   const [selectedTierIndex, setSelectedTierIndex] = useState(0);
   const [focusSection, setFocusSection] = useState<'tabs' | 'grid'>('grid');
   const [selectedSkinId, setSelectedSkinId] = useState<SkinId>(equippedSkin);
@@ -467,7 +471,7 @@ export function SkinsModal({
             ? 'border-[var(--ui-accent)]/60 bg-[var(--ui-accent-dim)] text-[var(--ui-accent)]'
             : 'border-[#5865f2]/60 bg-[var(--ui-panel2)] text-[#9da9ff]'
         }`}>
-          {discordClaimed ? 'REWARD CLAIMED' : 'JOIN THE DISCORD'}
+          {discordClaimed ? t.rewardClaimed : t.joinDiscord}
         </div>
       );
     }
@@ -494,15 +498,15 @@ export function SkinsModal({
         <div className="flex items-start justify-between gap-2 border-b-2 border-[var(--ui-border)] pb-2 sm:pb-2.5">
           <div className="flex min-w-0 flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-3">
             <h2 className="font-pixel text-[12px] text-[var(--ui-accent)] whitespace-nowrap md:text-[16px]">
-              CHARACTER LOCKER
+              {t.characterLocker}
             </h2>
             <div className="flex items-center gap-1.5 sm:gap-2">
               <div className="flex shrink-0 items-center gap-1.5 border-2 border-[var(--ui-accent)]/60 bg-[var(--ui-accent-dim)] px-2 py-0.5 font-pixel text-[8px] text-[var(--ui-accent)] shadow-[2px_2px_0_var(--ui-bg)] whitespace-nowrap md:text-[10px]">
                 <GemIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                <span>GEMS: {stats.gems}</span>
+                <span>{t.gems}: {stats.gems}</span>
               </div>
               <div className="flex shrink-0 items-center gap-1.5 border-2 border-[var(--ui-gold)]/60 bg-[var(--ui-gold-dim)] px-2 py-0.5 font-pixel text-[8px] text-[var(--ui-gold)] shadow-[2px_2px_0_var(--ui-bg)] whitespace-nowrap md:text-[10px]">
-                <span>UNLOCKED: {unlockedSkins.length}/{SKIN_LIST.length}</span>
+                <span>{t.unlocked}: {unlockedSkins.length}/{SKIN_LIST.length}</span>
               </div>
             </div>
           </div>
@@ -544,7 +548,7 @@ export function SkinsModal({
                   isTabFocused ? 'nav-focus' : ''
                 }`}
               >
-                {tier}
+                {getTierName(tier, lang)}
               </button>
             );
           })}
@@ -575,7 +579,7 @@ export function SkinsModal({
                     backgroundColor: TIER_COLORS[selectedSkin.tier].bg,
                   }}
                 >
-                  {selectedSkin.tier}
+                  {getTierName(selectedSkin.tier, lang)}
                 </span>
               </div>
             </div>
@@ -584,7 +588,7 @@ export function SkinsModal({
             <div className="w-36 md:mt-3 md:w-full">
               {isEquipped ? (
                 <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[var(--ui-accent)] bg-[var(--ui-accent)]/20 px-2 font-pixel text-[10px] text-[var(--ui-accent)] shadow-[2px_2px_0_var(--ui-bg)]">
-                  EQUIPPED
+                  {t.equipped}
                 </div>
               ) : isUnlocked ? (
                 <button
@@ -592,11 +596,11 @@ export function SkinsModal({
                   onClick={() => handleEquip(selectedSkinId)}
                   className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[var(--ui-bg)] bg-[var(--ui-accent)] px-2 font-pixel text-[10px] text-[#0b0616] shadow-[3px_3px_0_var(--ui-bg)] transition-all hover:bg-[var(--ui-accent-hi)] active:translate-x-[2px] active:translate-y-[2px]"
                 >
-                  EQUIP
+                  {t.equip}
                 </button>
               ) : selectedSkin.id === 'question' ? (
                 <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[var(--ui-border3)] bg-[var(--ui-panel2)] px-2 font-pixel text-[8px] text-[var(--ui-muted)] shadow-[2px_2px_0_var(--ui-bg)]">
-                  ENTER SECRET CODE
+                  {t.enterSecretCode}
                 </div>
               ) : selectedSkin.unlock.type === 'holiday' ? (
                 <div
@@ -620,7 +624,7 @@ export function SkinsModal({
                       : 'border-[var(--ui-bg)] bg-[#5865f2] text-white hover:bg-[#7289da]'
                   }`}
                 >
-                  {discordClaimed ? 'REWARD CLAIMED' : 'JOIN THE DISCORD'}
+                  {discordClaimed ? t.rewardClaimed : t.joinDiscord}
                 </button>
               ) : selectedSkin.unlock.type === 'gems' ? (
                 <button
@@ -633,7 +637,7 @@ export function SkinsModal({
                       : 'cursor-not-allowed border-[var(--ui-border3)] bg-[var(--ui-purple-dim)] text-[var(--ui-muted)]'
                   }`}
                 >
-                  BUY ({selectedSkin.unlock.cost} GEMS)
+                  {t.buyGems} ({selectedSkin.unlock.cost} {t.gems})
                 </button>
               ) : (
                 <div className="flex h-[32px] md:h-[36px] w-full items-center justify-center border-2 border-[var(--ui-border3)] bg-[var(--ui-panel2)] px-2 text-center font-pixel text-[8px] text-[var(--ui-muted)] shadow-[2px_2px_0_var(--ui-bg)]">
@@ -686,7 +690,7 @@ export function SkinsModal({
                           backgroundColor: tierTheme.bg,
                         }}
                       >
-                        <span className="relative top-px">{skin.tier}</span>
+                        <span className="relative top-px">{getTierName(skin.tier, lang)}</span>
                       </span>
                     </div>
 
@@ -701,11 +705,11 @@ export function SkinsModal({
                   {/* Status / Progress slot with uniform height */}
                   <div className="mt-auto flex h-[26px] w-full flex-col justify-end">
                     {equipped ? (
-                      <span className="font-pixel text-[8px] text-[var(--ui-accent)]">EQUIPPED</span>
+                      <span className="font-pixel text-[8px] text-[var(--ui-accent)]">{t.equipped}</span>
                     ) : unlocked ? (
-                      <span className="font-pixel text-[8px] text-[var(--ui-muted)]">UNLOCKED</span>
+                      <span className="font-pixel text-[8px] text-[var(--ui-muted)]">{t.unlocked}</span>
                     ) : skin.unlock.type === 'gems' ? (
-                      <span className="font-pixel text-[8px] text-[var(--ui-gold)]">{skin.unlock.cost} GEMS</span>
+                      <span className="font-pixel text-[8px] text-[var(--ui-gold)]">{skin.unlock.cost} {t.gems}</span>
                     ) : (
                       renderCardProgressBar(skin)
                     )}
@@ -719,7 +723,7 @@ export function SkinsModal({
         {/* Footer with Controls */}
         <div className="mt-2 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-t-2 border-[var(--ui-border)] pt-1.5 text-center font-pixel text-[8px] text-[var(--ui-muted)]">
           {touch ? (
-            <span>TAP CARD: SELECT / PREVIEW · CLICK AGAIN: EQUIP</span>
+            <span>{t.tapCardSelect}</span>
           ) : (
             <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
               <span className="inline-flex items-center gap-1">
@@ -733,9 +737,9 @@ export function SkinsModal({
                 <span>/ D-PAD: SELECT</span>
               </span>
               <span>·</span>
-              <span>ENTER / CLICK AGAIN: EQUIP</span>
+              <span>ENTER / CLICK AGAIN: {t.equip}</span>
               <span>·</span>
-              <span>ESC: CLOSE</span>
+              <span>ESC: {t.close}</span>
               <span>·</span>
               <span className="inline-flex items-center gap-1">
                 <span>KONAMI:</span>

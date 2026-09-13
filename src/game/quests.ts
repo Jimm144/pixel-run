@@ -1,5 +1,6 @@
 import type { BgKind } from './palette';
 import { loadLifetimeStats, saveLifetimeStats } from './skins';
+import { type SupportedLanguage, getTranslations } from './i18n';
 
 export function grantQuestGems(gems: number) {
   if (gems <= 0) return;
@@ -435,31 +436,49 @@ export function markQuestCompletions(record: QuestRecord, quests: QuestDefinitio
   return next;
 }
 
-export function getQuestLabel(quest: QuestDefinition) {
-  const scope = quest.scope === 'day' ? 'today' : 'in one run';
-  if (quest.kind === 'cleanMeters') return `Run ${quest.target} meters without collecting or killing`;
-  if (quest.kind === 'cleanScore') return `Score ${quest.target} points without collecting or killing`;
-  if (quest.kind === 'jumps') return `Jump ${quest.target} times ${scope}`;
-  if (quest.kind === 'biomeEffects') return `Trigger ${quest.target} different biome effects in one run`;
-  if (quest.kind === 'twoPowerups') return 'Activate two power-ups at once';
-  if (quest.kind === 'combo') return `Reach a x${quest.target} combo in one run`;
-  if (quest.kind === 'moonPhase') return 'Reach a later moon phase in one run';
-  const labels: Record<QuestMetric, string> = {
-    coins: 'coins',
-    meters: 'meters',
-    score: 'score',
-    enemies: 'enemies',
-    powerups: 'power-ups',
-  };
-  const verbs: Record<QuestMetric, string> = {
-    coins: 'Collect',
-    meters: 'Run',
-    score: 'Score',
-    enemies: 'Defeat',
-    powerups: 'Collect',
-  };
-  const unit = quest.metric === 'score' ? 'points' : labels[quest.metric!];
-  return `${verbs[quest.metric!]} ${quest.target} ${unit} ${scope}`;
+export function getQuestLabel(quest: QuestDefinition, lang: SupportedLanguage = 'en') {
+  const t = getTranslations(lang);
+  const scope = quest.scope === 'day' ? t.todayScope : t.inOneRun;
+
+  if (quest.kind === 'cleanMeters') {
+    return t.questCleanMeters.replace('{target}', String(quest.target));
+  }
+  if (quest.kind === 'cleanScore') {
+    return t.questCleanScore.replace('{target}', String(quest.target));
+  }
+  if (quest.kind === 'jumps') {
+    return t.questJumps.replace('{target}', String(quest.target)).replace('{scope}', scope);
+  }
+  if (quest.kind === 'biomeEffects') {
+    return t.questBiomeEffects.replace('{target}', String(quest.target));
+  }
+  if (quest.kind === 'twoPowerups') {
+    return t.questTwoPowerups;
+  }
+  if (quest.kind === 'combo') {
+    return t.questCombo.replace('{target}', String(quest.target));
+  }
+  if (quest.kind === 'moonPhase') {
+    return t.questMoonPhase;
+  }
+
+  if (quest.metric === 'coins') {
+    return t.questCoins.replace('{target}', String(quest.target)).replace('{scope}', scope);
+  }
+  if (quest.metric === 'meters') {
+    return t.questMeters.replace('{target}', String(quest.target)).replace('{scope}', scope);
+  }
+  if (quest.metric === 'score') {
+    return t.questScore.replace('{target}', String(quest.target)).replace('{scope}', scope);
+  }
+  if (quest.metric === 'enemies') {
+    return t.questEnemies.replace('{target}', String(quest.target)).replace('{scope}', scope);
+  }
+  if (quest.metric === 'powerups') {
+    return t.questPowerups.replace('{target}', String(quest.target)).replace('{scope}', scope);
+  }
+
+  return `${quest.target} ${scope}`;
 }
 
 function valueFor(quest: QuestDefinition, record: QuestRecord, run: QuestRunStats) {

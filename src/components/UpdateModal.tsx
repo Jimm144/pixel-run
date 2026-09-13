@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { PixelCloseIcon, PixelReloadIcon } from './ui';
 import { sfx } from '../game/audio';
 import { inputManager, type GamepadAction } from '../game/input';
+import { type SupportedLanguage, getTranslations } from '../game/i18n';
 
 export interface UpdateModalProps {
   onClose: () => void;
@@ -9,6 +10,7 @@ export interface UpdateModalProps {
   onApplyUpdate?: () => void;
   onCheckUpdate?: () => Promise<void>;
   touch?: boolean;
+  lang?: SupportedLanguage;
 }
 
 const CURRENT_VERSION = 'v1.2.0';
@@ -19,7 +21,9 @@ export function UpdateModal({
   swUpdate,
   onApplyUpdate,
   onCheckUpdate,
+  lang = 'en',
 }: UpdateModalProps) {
+  const t = getTranslations(lang);
   const [checking, setChecking] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(
     swUpdate ? 'UPDATE READY TO INSTALL!' : null,
@@ -112,13 +116,13 @@ export function UpdateModal({
               <PixelReloadIcon className="h-3 w-3" />
             </span>
             <h2 className="font-pixel text-[12px] sm:text-[14px] uppercase tracking-wider text-[var(--ui-accent)]">
-              GAME UPDATES
+              {t.gameUpdates}
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t.close}
             className="flex h-7 w-7 items-center justify-center border-2 border-[var(--ui-danger)] bg-[var(--ui-danger)]/20 text-[var(--ui-danger)] shadow-[2px_2px_0_var(--ui-bg)] hover:bg-[var(--ui-danger)]/40 active:translate-x-[1px] active:translate-y-[1px]"
           >
             <PixelCloseIcon className="h-3.5 w-3.5" />
@@ -152,7 +156,7 @@ export function UpdateModal({
                 className="flex flex-1 items-center justify-center gap-2 border-2 border-[var(--ui-bg)] bg-[var(--ui-gold)] py-2 text-[10px] sm:text-[11px] font-bold text-[#08040f] shadow-[3px_3px_0_var(--ui-bg)] hover:bg-[var(--ui-gold-hi)] active:translate-x-[1px] active:translate-y-[1px]"
               >
                 <PixelReloadIcon className="h-3.5 w-3.5 animate-spin" />
-                <span>RELOAD & APPLY UPDATE</span>
+                <span>{t.reloadApplyUpdate}</span>
               </button>
             ) : (
               <button
@@ -166,7 +170,7 @@ export function UpdateModal({
                 }`}
               >
                 <PixelReloadIcon className={`h-3.5 w-3.5 ${checking ? 'animate-spin' : ''}`} />
-                <span>{checking ? 'CHECKING...' : 'CHECK FOR UPDATES'}</span>
+                <span>{checking ? 'CHECKING...' : t.checkForUpdates}</span>
               </button>
             )}
           </div>
@@ -187,7 +191,7 @@ export function UpdateModal({
             onClick={onClose}
             className="border-2 border-[var(--ui-border)] bg-[var(--ui-panel2)] px-4 py-1.5 text-[9px] sm:text-[10px] text-[#ffffff] shadow-[2px_2px_0_var(--ui-bg)] hover:bg-[var(--ui-panel)] active:translate-x-[1px] active:translate-y-[1px]"
           >
-            CLOSE
+            {t.close}
           </button>
         </div>
       </div>

@@ -1,9 +1,15 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Stats } from '../game/engine';
 import { DailyQuestPanel } from './QuestPanels';
 import { PauseIcon, PixelButton, Panel, Stat } from './ui';
 import type { QuestDefinition, QuestRecord, QuestRunStats } from '../game/quests';
 import { sfx } from '../game/audio';
+import {
+  type SupportedLanguage,
+  SUPPORTED_LANGUAGES,
+  getTranslations,
+} from '../game/i18n';
+import { UI_THEMES, type UiTheme } from '../game/uiThemes';
 
 const pad = (n: number, l: number) => Math.max(0, Math.floor(n)).toString().padStart(l, '0');
 
@@ -346,6 +352,34 @@ function PixelSwatchIcon({ className = 'h-2.5 w-2.5 tablet:h-3 tablet:w-3' }: { 
   );
 }
 
+function PixelGlobeIcon({ className = 'h-2.5 w-2.5 tablet:h-3 tablet:w-3' }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 10 10"
+      className={`inline-block shrink-0 align-middle ${className}`}
+      fill="currentColor"
+      shapeRendering="crispEdges"
+    >
+      <rect x="3" y="0" width="4" height="1" />
+      <rect x="1" y="1" width="2" height="1" />
+      <rect x="7" y="1" width="2" height="1" />
+      <rect x="0" y="2" width="1" height="2" />
+      <rect x="9" y="2" width="1" height="2" />
+      <rect x="0" y="4" width="1" height="2" />
+      <rect x="9" y="4" width="1" height="2" />
+      <rect x="0" y="6" width="1" height="2" />
+      <rect x="9" y="6" width="1" height="2" />
+      <rect x="1" y="8" width="2" height="1" />
+      <rect x="7" y="8" width="2" height="1" />
+      <rect x="3" y="9" width="4" height="1" />
+      <rect x="1" y="4" width="8" height="1" />
+      <rect x="4" y="1" width="2" height="8" />
+    </svg>
+  );
+}
+
+
 /* -------------------------------------------------------------------- start */
 export function StartScreen({
   best,
@@ -367,7 +401,10 @@ export function StartScreen({
   onImportSave,
   onCheckUpdate,
   onCycleTheme,
+  onSelectTheme,
   themeName,
+  lang = 'en',
+  onSelectLanguage,
 }: {
   best: number;
   lastRun: number;
@@ -388,8 +425,44 @@ export function StartScreen({
   onImportSave?: () => void;
   onCheckUpdate?: () => void;
   onCycleTheme?: () => void;
+  onSelectTheme?: (theme: UiTheme) => void;
   themeName?: string;
+  lang?: SupportedLanguage;
+  onSelectLanguage?: (lang: SupportedLanguage) => void;
 }) {
+  const [themeOpen, setThemeOpen] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
+  const themeDropupRef = useRef<HTMLDivElement>(null);
+  const langDropupRef = useRef<HTMLDivElement>(null);
+
+  const t = getTranslations(lang);
+  const currentLangOption = SUPPORTED_LANGUAGES.find((item) => item.code === lang) ?? SUPPORTED_LANGUAGES[0];
+
+  useEffect(() => {
+    if (!themeOpen && !langOpen) return;
+    const handlePointerDown = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (themeDropupRef.current && !themeDropupRef.current.contains(target)) {
+        setThemeOpen(false);
+      }
+      if (langDropupRef.current && !langDropupRef.current.contains(target)) {
+        setLangOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setThemeOpen(false);
+        setLangOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [themeOpen, langOpen]);
+
   return (
     <div
       className="absolute inset-0 z-10 flex cursor-default items-start justify-center overflow-y-auto bg-[var(--ui-bg)]/80 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))]"
@@ -401,7 +474,7 @@ export function StartScreen({
             <span className="animate-title-2 block text-[var(--ui-danger)]">RUN</span>
           </h1>
           <p className="mt-2 font-pixel text-[8px] tracking-[0.25em] text-[var(--ui-muted)] tablet:text-[10px]">
-            RUN &middot; STOMP &middot; SURVIVE
+            {t.tagline}
           </p>
         </div>
 
@@ -410,30 +483,30 @@ export function StartScreen({
             <div className="grid w-full grid-cols-2 gap-x-3 gap-y-2 tablet:grid-cols-3">
               {touch ? (
                 <>
-                  <ControlHint kind="tap" keys="TAP TO JUMP" />
-                  <ControlHint kind="hold" keys="HOLD TO FLOAT" />
-                  <ControlHint kind="double" keys="2X TAP AIR JUMP" />
-                  <ControlHint kind="dive" keys="SWIPE DOWN DIVE" />
+                  <ControlHint kind="tap" keys={t.tapToJump} />
+                  <ControlHint kind="hold" keys={t.holdToFloat} />
+                  <ControlHint kind="double" keys={t.doubleTapAirJump} />
+                  <ControlHint kind="dive" keys={t.swipeDownDive} />
                 </>
               ) : (
                 <>
-                  <ControlHint kind="jump" keys="SPACE / W: JUMP" />
-                  <ControlHint kind="hold" keys="HOLD: FLOAT" />
-                  <ControlHint kind="double" keys="2X JUMP: AIR" />
-                  <ControlHint kind="dive" keys="S / DOWN: DIVE" />
-                  <ControlHint kind="boost" keys="D: BOOST" />
-                  <ControlHint kind="pause" keys="P / ESC: PAUSE" />
+                  <ControlHint kind="jump" keys={t.spaceWJump} />
+                  <ControlHint kind="hold" keys={t.holdFloat} />
+                  <ControlHint kind="double" keys={t.doubleJumpAir} />
+                  <ControlHint kind="dive" keys={t.sDownDive} />
+                  <ControlHint kind="boost" keys={t.dBoost} />
+                  <ControlHint kind="pause" keys={t.pEscPause} />
                 </>
               )}
             </div>
             <div className="mt-1 flex w-full items-center justify-center gap-4 border-t-2 border-[var(--ui-border)] pt-3 font-pixel text-[8px] text-[var(--ui-muted)] tablet:text-[10px]">
-              <span>LAST RUN <span className="text-[var(--ui-muted)]">{pad(lastRun, 6)}</span></span>
-              <span>BEST <span className="text-[var(--ui-gold)]">{pad(best, 6)}</span></span>
+              <span>{t.lastRun} <span className="text-[var(--ui-muted)]">{pad(lastRun, 6)}</span></span>
+              <span>{t.best} <span className="text-[var(--ui-gold)]">{pad(best, 6)}</span></span>
             </div>
           </div>
         </Panel>
 
-        <DailyQuestPanel quests={quests} record={questRecord} run={questRun} compact decorated={false} onDayRollover={questOnDayRollover} onShare={questOnShare} />
+        <DailyQuestPanel quests={quests} record={questRecord} run={questRun} compact decorated={false} onDayRollover={questOnDayRollover} onShare={questOnShare} lang={lang} />
 
         <div className="flex w-full max-w-[420px] gap-2 tablet:max-w-[500px]">
           <button
@@ -446,7 +519,7 @@ export function StartScreen({
             }`}
           >
             <PixelSpeakerIcon active={musicOn} />
-            <span>{musicOn ? 'MUSIC ON' : 'MUSIC OFF'}</span>
+            <span>{musicOn ? t.musicOn : t.musicOff}</span>
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onToggleSfx(); }}
@@ -458,7 +531,7 @@ export function StartScreen({
             }`}
           >
             <PixelSpeakerIcon active={sfxOn} />
-            <span>{sfxOn ? 'SFX ON' : 'SFX OFF'}</span>
+            <span>{sfxOn ? t.sfxOn : t.sfxOff}</span>
           </button>
         </div>
 
@@ -467,8 +540,8 @@ export function StartScreen({
             <button
               type="button"
               onClick={onOpenBattle}
-              aria-label="Multiplayer Battle"
-              title="Multiplayer Battle"
+              aria-label={t.multiplayerBattle}
+              title={t.multiplayerBattle}
               className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[var(--ui-danger)]/70 bg-[var(--ui-danger-dim)] text-[var(--ui-danger)] shadow-[3px_3px_0_var(--ui-bg)] transition-[transform,box-shadow,background-color] duration-75 hover:bg-[var(--ui-danger)]/20 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)]"
             >
               <PixelSwordsIcon className="h-5 w-5" />
@@ -480,14 +553,14 @@ export function StartScreen({
             className="flex flex-1 items-center justify-center gap-2 border-2 border-[var(--ui-bg)] bg-[var(--ui-accent)] py-3 sm:py-3.5 font-pixel text-[10px] sm:text-[11px] uppercase leading-none tracking-wide text-[#08040f] shadow-[3px_3px_0_var(--ui-bg)] transition-[transform,box-shadow,background-color] duration-75 hover:bg-[var(--ui-accent-hi)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)] tablet:text-[12px]"
           >
             <PixelPlayIcon className="h-4 w-4" />
-            <span>START RUN</span>
+            <span>{t.startRun}</span>
           </button>
           {onOpenSkins && (
             <button
               type="button"
               onClick={onOpenSkins}
-              aria-label="Character Locker"
-              title="Character Locker"
+              aria-label={t.characterLocker}
+              title={t.characterLocker}
               className="flex h-[46px] w-[46px] sm:h-[50px] sm:w-[50px] shrink-0 items-center justify-center border-2 border-[var(--ui-gold)]/70 bg-[var(--ui-gold-dim)] text-[var(--ui-gold)] shadow-[3px_3px_0_var(--ui-bg)] transition-[transform,box-shadow,background-color] duration-75 hover:bg-[var(--ui-gold)]/20 active:translate-x-[2px] active:translate-y-[2px] active:shadow-[1px_1px_0_var(--ui-bg)]"
             >
               <PixelShirtIcon className="h-5 w-5" />
@@ -495,7 +568,7 @@ export function StartScreen({
           )}
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 font-pixel text-[8px] tablet:text-[10px]">
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 font-pixel text-[8px] tablet:text-[10px]">
           <a
             href="https://github.com/Jimm144/pixel-run"
             target="_blank"
@@ -504,7 +577,7 @@ export function StartScreen({
             className="inline-flex items-center gap-1 text-[#ffffff]/80 transition-colors hover:text-[#ffffff]"
           >
             <PixelGithubIcon />
-            <span>GITHUB</span>
+            <span>{t.github}</span>
           </a>
           {onExportSave && (
             <button
@@ -516,7 +589,7 @@ export function StartScreen({
               className="inline-flex items-center gap-1 cursor-pointer text-[var(--ui-gold)]/80 transition-colors hover:text-[var(--ui-gold)]"
             >
               <PixelArrow dir="down" className="h-2 w-2" />
-              <span>SAVE</span>
+              <span>{t.save}</span>
             </button>
           )}
           {onImportSave && (
@@ -529,7 +602,7 @@ export function StartScreen({
               className="inline-flex items-center gap-1 cursor-pointer text-[var(--ui-purple)]/80 transition-colors hover:text-[var(--ui-purple)]"
             >
               <PixelArrow dir="up" className="h-2 w-2" />
-              <span>LOAD</span>
+              <span>{t.load}</span>
             </button>
           )}
           {onCheckUpdate && (
@@ -542,24 +615,144 @@ export function StartScreen({
               className="inline-flex items-center gap-1 cursor-pointer text-[var(--ui-accent)]/80 transition-colors hover:text-[var(--ui-accent)]"
             >
               <PixelReloadIcon />
-              <span>UPDATE</span>
+              <span>{t.update}</span>
             </button>
           )}
-          {onCycleTheme && themeName && (
+
+          {/* Theme Dropup */}
+          {(onSelectTheme || onCycleTheme) && (
+            <div className="relative inline-block" ref={themeDropupRef}>
+              <button
+                type="button"
+                aria-label={t.selectTheme}
+                aria-haspopup="listbox"
+                aria-expanded={themeOpen}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setThemeOpen((v) => !v);
+                  setLangOpen(false);
+                }}
+                className="inline-flex items-center gap-1 cursor-pointer text-[var(--ui-purple)]/80 transition-colors hover:text-[var(--ui-purple)]"
+              >
+                <PixelSwatchIcon />
+                <span>{themeName || t.theme}</span>
+                <PixelArrow dir={themeOpen ? 'down' : 'up'} className="h-1.5 w-1.5 opacity-70" />
+              </button>
+              {themeOpen && (
+                <div
+                  role="listbox"
+                  aria-label={t.selectTheme}
+                  className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 border-2 border-[var(--ui-border2)] bg-[var(--ui-panel)] p-1.5 shadow-[4px_4px_0_var(--ui-bg)] z-30"
+                >
+                  <div className="mb-1 border-b border-[var(--ui-border)] px-1 pb-1 font-pixel text-[7px] text-[var(--ui-muted)] flex items-center justify-between">
+                    <span>{t.selectTheme}</span>
+                    <span className="text-[var(--ui-accent)]">{UI_THEMES.length}</span>
+                  </div>
+                  <div className="flex max-h-48 flex-col gap-0.5 overflow-y-auto pr-0.5">
+                    {UI_THEMES.map((th) => {
+                      const isSelected = th.name.toUpperCase() === (themeName || '').toUpperCase();
+                      return (
+                        <button
+                          key={th.id}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onSelectTheme) {
+                              onSelectTheme(th);
+                            } else if (onCycleTheme) {
+                              onCycleTheme();
+                            }
+                            setThemeOpen(false);
+                          }}
+                          className={`flex items-center justify-between gap-2 px-1.5 py-1 font-pixel text-[8px] text-left transition-colors border ${
+                            isSelected
+                              ? 'border-[var(--ui-accent)] bg-[var(--ui-accent)]/15 text-[var(--ui-accent)]'
+                              : 'border-transparent text-[var(--ui-text)] hover:border-[var(--ui-border3)] hover:bg-[var(--ui-panel3)]'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="inline-grid grid-cols-2 gap-0.5 border border-current/30 p-0.5 shrink-0 bg-[var(--ui-bg)]">
+                              <span className="block h-1.5 w-1.5" style={{ backgroundColor: th.accent }} />
+                              <span className="block h-1.5 w-1.5" style={{ backgroundColor: th.gold }} />
+                              <span className="block h-1.5 w-1.5" style={{ backgroundColor: th.danger }} />
+                              <span className="block h-1.5 w-1.5" style={{ backgroundColor: th.purple }} />
+                            </span>
+                            <span className="truncate">{th.name}</span>
+                          </div>
+                          {isSelected && <span className="text-[var(--ui-accent)] text-[7px]">▶</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Language Dropup */}
+          <div className="relative inline-block" ref={langDropupRef}>
             <button
               type="button"
-              aria-label="Change color theme"
-              title={`THEME: ${themeName}`}
+              aria-label={t.selectLanguage}
+              aria-haspopup="listbox"
+              aria-expanded={langOpen}
               onClick={(e) => {
                 e.stopPropagation();
-                onCycleTheme();
+                setLangOpen((v) => !v);
+                setThemeOpen(false);
               }}
-              className="inline-flex items-center gap-1 cursor-pointer text-[var(--ui-purple)]/80 transition-colors hover:text-[var(--ui-purple)]"
+              className="inline-flex items-center gap-1 cursor-pointer text-[var(--ui-accent)]/80 transition-colors hover:text-[var(--ui-accent)]"
             >
-              <PixelSwatchIcon />
-              <span>{themeName}</span>
+              <PixelGlobeIcon />
+              <span>{currentLangOption?.badge || 'EN'}</span>
+              <PixelArrow dir={langOpen ? 'down' : 'up'} className="h-1.5 w-1.5 opacity-70" />
             </button>
-          )}
+            {langOpen && (
+              <div
+                role="listbox"
+                aria-label={t.selectLanguage}
+                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-44 border-2 border-[var(--ui-border2)] bg-[var(--ui-panel)] p-1.5 shadow-[4px_4px_0_var(--ui-bg)] z-30"
+              >
+                <div className="mb-1 border-b border-[var(--ui-border)] px-1 pb-1 font-pixel text-[7px] text-[var(--ui-muted)] flex items-center justify-between">
+                  <span>{t.selectLanguage}</span>
+                  <span className="text-[var(--ui-accent)]">{SUPPORTED_LANGUAGES.length}</span>
+                </div>
+                <div className="flex max-h-48 flex-col gap-0.5 overflow-y-auto pr-0.5">
+                  {SUPPORTED_LANGUAGES.map((opt) => {
+                    const isSelected = opt.code === lang;
+                    return (
+                      <button
+                        key={opt.code}
+                        type="button"
+                        role="option"
+                        aria-selected={isSelected}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectLanguage?.(opt.code);
+                          setLangOpen(false);
+                        }}
+                        className={`flex items-center justify-between gap-2 px-1.5 py-1 font-pixel text-[8px] text-left transition-colors border ${
+                          isSelected
+                            ? 'border-[var(--ui-accent)] bg-[var(--ui-accent)]/15 text-[var(--ui-accent)]'
+                            : 'border-transparent text-[var(--ui-text)] hover:border-[var(--ui-border3)] hover:bg-[var(--ui-panel3)]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="inline-flex items-center justify-center px-1 py-0.5 border border-current/40 bg-[var(--ui-panel3)] text-[7px] font-pixel text-[var(--ui-accent)]">
+                            {opt.badge}
+                          </span>
+                          <span className="truncate">{opt.nativeName}</span>
+                        </div>
+                        {isSelected && <span className="text-[var(--ui-accent)] text-[7px]">▶</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -646,6 +839,7 @@ export function PauseScreen({
   onSfxVol,
   touch = false,
   hideRetry = false,
+  lang = 'en',
 }: {
   onResume: () => void;
   onRestart: () => void;
@@ -658,8 +852,10 @@ export function PauseScreen({
   onSfxVol: (v: number) => void;
   touch?: boolean;
   hideRetry?: boolean;
+  lang?: SupportedLanguage;
 }) {
   const handleMenu = onMenu ?? onQuit ?? (() => {});
+  const t = getTranslations(lang);
 
   return (
     <div
@@ -667,35 +863,35 @@ export function PauseScreen({
       onPointerDown={() => sfx.unlock()}
     >
       <Panel className="w-full max-w-[300px] p-4 tablet:max-w-[420px] tablet:p-6">
-        <h2 className="mb-3 text-center font-pixel text-[16px] text-[var(--ui-accent)] tablet:mb-4 tablet:text-[20px]">PAUSED</h2>
+        <h2 className="mb-3 text-center font-pixel text-[16px] text-[var(--ui-accent)] tablet:mb-4 tablet:text-[20px]">{t.paused}</h2>
         <div className="mb-3 grid grid-cols-2 gap-2 tablet:mb-4 tablet:gap-3">
-          <Stat label="SCORE" value={pad(stats.score, 6)} color="#ffffff" />
-          <Stat label="DIST" value={stats.meters + 'M'} color="var(--ui-accent)" />
+          <Stat label={t.score} value={pad(stats.score, 6)} color="#ffffff" />
+          <Stat label={t.dist} value={stats.meters + 'M'} color="var(--ui-accent)" />
         </div>
         <div className="mb-3 grid grid-cols-3 gap-2 tablet:mb-4 tablet:gap-3">
-          <Stat label="COINS" value={String(stats.coins)} color="var(--ui-gold)" />
-          <Stat label="KILLS" value={String(stats.kills)} color="var(--ui-danger)" />
-          <Stat label="COMBO" value={'X' + stats.combo} color="var(--ui-purple)" />
+          <Stat label={t.coins} value={String(stats.coins)} color="var(--ui-gold)" />
+          <Stat label={t.kills} value={String(stats.kills)} color="var(--ui-danger)" />
+          <Stat label={t.combo} value={'X' + stats.combo} color="var(--ui-purple)" />
         </div>
         <div className="mb-3 flex flex-col gap-2 tablet:mb-4">
-          <VolumeStepper label="MUSIC" value={musicVol} onChange={onMusicVol} />
-          <VolumeStepper label="SFX" value={sfxVol} onChange={onSfxVol} />
+          <VolumeStepper label={t.music} value={musicVol} onChange={onMusicVol} />
+          <VolumeStepper label={t.sfx} value={sfxVol} onChange={onSfxVol} />
         </div>
         <div className="flex flex-col gap-2">
           <PixelButton onClick={onResume} small className="py-2.5 tablet:py-3 tablet:text-[10px]">
-            RESUME
+            {t.resume}
           </PixelButton>
           {hideRetry ? (
             <PixelButton variant="ghost" onClick={handleMenu} small className="py-2.5 tablet:py-3 tablet:text-[10px] whitespace-nowrap">
-              {touch ? 'MENU' : 'MENU [ESC]'}
+              {touch ? t.menu : t.menuKey}
             </PixelButton>
           ) : (
             <div className="grid grid-cols-2 gap-2">
               <PixelButton variant="danger" onClick={onRestart} small className="px-2 py-2.5 tablet:py-3 tablet:text-[10px] whitespace-nowrap">
-                {touch ? 'RETRY' : 'RETRY [R]'}
+                {touch ? t.retry : t.retryKey}
               </PixelButton>
               <PixelButton variant="ghost" onClick={handleMenu} small className="px-2 py-2.5 tablet:py-3 tablet:text-[10px] whitespace-nowrap">
-                {touch ? 'MENU' : 'MENU [ESC]'}
+                {touch ? t.menu : t.menuKey}
               </PixelButton>
             </div>
           )}
@@ -723,14 +919,6 @@ function PixelShareIcon({ className = 'h-[14px] w-[14px]' }: { className?: strin
   );
 }
 
-const DEATH_CAUSE_LABELS: Record<string, string> = {
-  pit: 'FELL INTO THE ABYSS',
-  wall: 'CRUSHED BY A WALL',
-  spike: 'IMPALED ON SPIKES',
-  spiker: 'SPIKED (DIVE TO SMASH)',
-  hit: 'DEFEATED BY ENEMY',
-};
-
 /* ---------------------------------------------------------------- game over */
 export function GameOverScreen({
   stats,
@@ -741,6 +929,7 @@ export function GameOverScreen({
   onShare,
   touch,
   hideRetry = false,
+  lang = 'en',
 }: {
   stats: Stats;
   best: number;
@@ -750,8 +939,17 @@ export function GameOverScreen({
   onShare?: () => void;
   touch: boolean;
   hideRetry?: boolean;
+  lang?: SupportedLanguage;
 }) {
-  const causeLabel = (stats.cause && DEATH_CAUSE_LABELS[stats.cause]) || 'RUN TERMINATED';
+  const t = getTranslations(lang);
+  const causeMap: Record<string, string> = {
+    pit: t.deathPit,
+    wall: t.deathWall,
+    spike: t.deathSpike,
+    spiker: t.deathSpiker,
+    hit: t.deathHit,
+  };
+  const causeLabel = (stats.cause && causeMap[stats.cause]) || t.deathDefault;
 
   return (
     <div
@@ -761,7 +959,7 @@ export function GameOverScreen({
       <div className="my-auto flex w-full max-w-[380px] flex-col items-center gap-3 tablet:max-w-[460px]">
         <div className="text-center">
           <h2 className="animate-shake-in font-pixel text-[20px] text-[var(--ui-danger)] drop-shadow-[0_4px_0_var(--ui-bg)] tablet:text-[28px]">
-            WASTED
+            {t.wasted}
           </h2>
           <p className="mt-1 font-pixel text-[8px] tracking-wider text-[var(--ui-danger)]/80">
             {causeLabel}
@@ -770,34 +968,34 @@ export function GameOverScreen({
         <Panel className="w-full">
           <div className="mb-3 text-center">
             <p className="font-pixel text-[8px] text-[var(--ui-muted)]">
-              {newBest ? 'NEW PERSONAL BEST' : 'FINAL SCORE'}
+              {newBest ? t.newPersonalBest : t.finalScore}
             </p>
             <p className="font-pixel text-[20px] text-[var(--ui-gold)] drop-shadow-[0_3px_0_var(--ui-bg)] tablet:text-[28px]">
               {pad(stats.score, 6)}
             </p>
             {!newBest && (
               <p className="mt-2 font-pixel text-[8px] text-[var(--ui-muted)]">
-                BEST <span className="text-[var(--ui-accent)]">{pad(best, 6)}</span>
+                {t.best} <span className="text-[var(--ui-accent)]">{pad(best, 6)}</span>
               </p>
             )}
           </div>
           <div className="mb-3 grid grid-cols-5 gap-1 tablet:gap-2">
-            <Stat label="DIST" value={stats.meters + 'M'} color="var(--ui-accent)" />
-            <Stat label="COINS" value={String(stats.coins ?? 0)} color="var(--ui-gold)" />
-            <Stat label="GEMS" value={String(stats.gems ?? 0)} color="var(--ui-accent)" />
-            <Stat label="KILLS" value={String(stats.kills)} color="var(--ui-danger)" />
-            <Stat label="COMBO" value={'X' + stats.combo} color="var(--ui-purple)" />
+            <Stat label={t.dist} value={stats.meters + 'M'} color="var(--ui-accent)" />
+            <Stat label={t.coins} value={String(stats.coins ?? 0)} color="var(--ui-gold)" />
+            <Stat label={t.gems} value={String(stats.gems ?? 0)} color="var(--ui-accent)" />
+            <Stat label={t.kills} value={String(stats.kills)} color="var(--ui-danger)" />
+            <Stat label={t.combo} value={'X' + stats.combo} color="var(--ui-purple)" />
           </div>
         </Panel>
         <div className="flex w-full max-w-[380px] flex-col items-center gap-2 tablet:max-w-[460px]">
           <div className="flex w-full gap-2">
             {!hideRetry && (
               <PixelButton onClick={onRestart} className="flex flex-[1.4] items-center justify-center py-3 text-[10px] tablet:py-3.5 tablet:text-[12px] whitespace-nowrap">
-                <span>{touch ? 'RETRY' : 'RETRY [R]'}</span>
+                <span>{touch ? t.retry : t.retryKey}</span>
               </PixelButton>
             )}
             <PixelButton variant="ghost" onClick={onMenu} className="flex flex-1 items-center justify-center py-3 text-[10px] tablet:py-3.5 tablet:text-[12px] whitespace-nowrap">
-              <span>{touch ? 'MENU' : 'MENU [ESC]'}</span>
+              <span>{touch ? t.menu : t.menuKey}</span>
             </PixelButton>
           </div>
           {newBest && onShare && (
@@ -808,7 +1006,7 @@ export function GameOverScreen({
               className="w-full flex items-center justify-center py-2.5 border-[var(--ui-gold)]/70 bg-[var(--ui-gold)]/10 text-[var(--ui-gold)] hover:bg-[var(--ui-gold)]/20 hover:text-[var(--ui-gold-hi)] hover:border-[var(--ui-gold)] tablet:py-3"
             >
               <PixelShareIcon className="mr-1.5 inline-block h-[12px] w-[12px] align-[-2px] tablet:h-[15px] tablet:w-[15px]" />
-              SHARE SCORE
+              {t.shareScore}
             </PixelButton>
           )}
         </div>

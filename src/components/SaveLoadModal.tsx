@@ -7,15 +7,18 @@ import {
 } from '../game/saveManager';
 import { PixelButton, PixelCloseIcon } from './ui';
 import { sfx } from '../game/audio';
+import { type SupportedLanguage, getTranslations } from '../game/i18n';
 
 interface SaveLoadModalProps {
   mode: 'save' | 'load';
   onClose: () => void;
   onRestoreSuccess: () => void;
   touch?: boolean;
+  lang?: SupportedLanguage;
 }
 
-export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModalProps) {
+export function SaveLoadModal({ mode, onClose, onRestoreSuccess, lang = 'en' }: SaveLoadModalProps) {
+  const t = getTranslations(lang);
   const [saveCode, setSaveCode] = useState<string>('');
   const [inputCode, setInputCode] = useState<string>('');
   const [copied, setCopied] = useState(false);
@@ -151,12 +154,12 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
         {/* Header */}
         <div className="mb-3 flex w-full items-center justify-between border-b-2 border-[var(--ui-border)] pb-2">
           <h2 className="font-pixel text-[12px] uppercase tracking-wider text-[var(--ui-accent)]">
-            {mode === 'save' ? 'EXPORT SAVE DATA' : 'RESTORE SAVE DATA'}
+            {mode === 'save' ? t.exportSaveData : t.restoreSaveData}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t.close}
             className="flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center border-2 border-[var(--ui-danger)] bg-[var(--ui-danger)]/20 font-pixel text-[10px] text-[var(--ui-danger)] shadow-[1px_1px_0_var(--ui-bg)] hover:bg-[var(--ui-danger)]/40 active:translate-x-[1px] active:translate-y-[1px]"
           >
             <PixelCloseIcon className="h-3.5 w-3.5" />
@@ -190,7 +193,7 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
                 onClick={() => executeRestore(confirmPendingCode)}
                 className="w-full min-h-[44px] py-3 text-[10px]"
               >
-                {loading ? 'RESTORING...' : 'CONFIRM OVERWRITE'}
+                {loading ? 'RESTORING...' : t.confirmOverwrite}
               </PixelButton>
 
               <PixelButton
@@ -198,7 +201,7 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
                 onClick={() => setConfirmPendingCode(null)}
                 className="w-full min-h-[44px] py-2.5 text-[10px]"
               >
-                CANCEL
+                {t.cancel}
               </PixelButton>
             </div>
           </div>
@@ -213,7 +216,7 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
                 onClick={handleDownload}
                 className="w-full min-h-[44px] py-3 text-[10px]"
               >
-                {loading ? 'EXPORTING...' : 'DOWNLOAD SAVE FILE'}
+                {loading ? 'EXPORTING...' : t.downloadSaveFile}
               </PixelButton>
 
               <PixelButton
@@ -221,7 +224,7 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
                 onClick={handleCopy}
                 className="w-full min-h-[44px] py-2.5 text-[10px]"
               >
-                {copied ? 'COPIED TO CLIPBOARD!' : 'COPY SAVE CODE'}
+                {copied ? t.copiedToClipboard : t.copySaveCode}
               </PixelButton>
             </div>
 
@@ -262,7 +265,7 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
               htmlFor="save-file-input"
               className="flex min-h-[44px] w-full cursor-pointer items-center justify-center border-2 border-[var(--ui-accent)]/60 bg-[var(--ui-accent-dim)] py-2.5 font-pixel text-[10px] text-[var(--ui-accent)] shadow-[2px_2px_0_var(--ui-bg)] transition-colors hover:bg-[var(--ui-accent-dim2)] active:translate-x-[1px] active:translate-y-[1px]"
             >
-              {loading ? 'LOADING...' : 'SELECT .SAVE FILE'}
+              {loading ? 'LOADING...' : t.selectSaveFile}
             </label>
 
             <div className="flex flex-col text-left">
@@ -275,7 +278,7 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
                   onClick={handlePasteFromClipboard}
                   className="cursor-pointer border-2 border-[var(--ui-accent)]/40 bg-[var(--ui-accent-dim)] px-2 py-1 text-[8px] text-[var(--ui-accent)] hover:bg-[var(--ui-accent-dim2)]"
                 >
-                  PASTE FROM CLIPBOARD
+                  {t.pasteFromClipboard}
                 </button>
               </div>
               <textarea
@@ -290,7 +293,7 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess }: SaveLoadModal
               onClick={handleRestoreFromText}
               className="w-full min-h-[44px] py-3 text-[10px]"
             >
-              {loading ? 'RESTORING...' : 'RESTORE PROGRESS'}
+              {loading ? 'RESTORING...' : t.restoreProgress}
             </PixelButton>
           </div>
         )}

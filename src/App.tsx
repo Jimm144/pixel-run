@@ -40,6 +40,7 @@ import { SaveLoadModal } from './components/SaveLoadModal';
 import { UpdateModal } from './components/UpdateModal';
 import { backupProgressCookie, restoreCookieBackup } from './game/saveManager';
 import { type UiTheme, cycleUiTheme, loadUiTheme, saveUiTheme } from './game/uiThemes';
+import { type SupportedLanguage, loadLanguage, saveLanguage, getTranslations } from './game/i18n';
 import { BattleModal } from './components/BattleModal';
 import type { MatchResult } from './game/multiplayer/types';
 import {
@@ -364,8 +365,24 @@ export function App() {
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const swRegRef = useRef<ServiceWorkerRegistration | null>(null);
 
+  /* ---- Language */
+  const [lang, setLang] = useState<SupportedLanguage>(() => loadLanguage());
+  const t = getTranslations(lang);
+  const handleSelectLanguage = useCallback((nextLang: SupportedLanguage) => {
+    sfx.play('ui');
+    saveLanguage(nextLang);
+    setLang(nextLang);
+  }, []);
+
   /* ---- UI theme (loaded/applied synchronously at module init) */
   const [uiTheme, setUiTheme] = useState<UiTheme>(() => loadUiTheme());
+  const handleSelectTheme = useCallback((theme: UiTheme) => {
+    sfx.play('ui');
+    saveUiTheme(theme);
+    setUiTheme(theme);
+    triggerSkinToast(`THEME: ${theme.name}`);
+  }, [triggerSkinToast]);
+
   const handleCycleTheme = useCallback(() => {
     sfx.play('ui');
     const next = cycleUiTheme(uiTheme.id);
@@ -970,7 +987,10 @@ export function App() {
               setUpdateModalOpen(true);
             }}
             onCycleTheme={handleCycleTheme}
+            onSelectTheme={handleSelectTheme}
             themeName={uiTheme.name}
+            lang={lang}
+            onSelectLanguage={handleSelectLanguage}
           />
         )}
         {ui === 'paused' && (
@@ -991,6 +1011,7 @@ export function App() {
               setVolumes((prev) => ({ ...prev, sfx: v }));
             }}
             touch={touch}
+            lang={lang}
           />
         )}
         {ui === 'over' && (
@@ -1003,9 +1024,10 @@ export function App() {
             onShare={handleShareScore}
             hideRetry={gameRef.current?.mode === 'online'}
             touch={touch}
+            lang={lang}
           />
         )}
-        {questToast.length > 0 && <QuestCompletionToast quests={quests} completed={questToast} touch={touch} />}
+        {questToast.length > 0 && <QuestCompletionToast quests={quests} completed={questToast} touch={touch} lang={lang} />}
         {skinToast && (
           <div className="fixed top-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 border-2 border-[var(--ui-accent)] bg-[var(--ui-panel)]/95 px-4 py-2 font-pixel text-[var(--ui-accent)] shadow-[4px_4px_0_var(--ui-bg)]">
             <span className="text-[8px] tablet:text-[10px] uppercase">{skinToast}</span>
@@ -1020,6 +1042,7 @@ export function App() {
               gameRef.current?.setSkin(id);
             }}
             onClose={() => setUnlockedSkinPopup(null)}
+            lang={lang}
           />
         )}
         {skinsModalOpen && (
@@ -1038,6 +1061,7 @@ export function App() {
             }}
             onClose={() => setSkinsModalOpen(false)}
             touch={touch}
+            lang={lang}
           />
         )}
         {(battleModalOpen || matchResult) && (
@@ -1067,6 +1091,7 @@ export function App() {
             onClose={() => setSaveLoadModal(null)}
             onRestoreSuccess={handleRestoreComplete}
             touch={touch}
+            lang={lang}
           />
         )}
         {updateModalOpen && (
@@ -1076,6 +1101,7 @@ export function App() {
             onApplyUpdate={handleApplyUpdate}
             onCheckUpdate={handleCheckUpdate}
             touch={touch}
+            lang={lang}
           />
         )}
         {ui === 'playing' && gameRef.current?.mode === 'online' && (
@@ -1084,7 +1110,7 @@ export function App() {
             onClick={toMenu}
             className="fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] right-[max(0.75rem,env(safe-area-inset-right))] z-40 border-2 border-[var(--ui-danger)] bg-[var(--ui-panel)]/90 px-3 py-1.5 font-pixel text-[8px] text-[var(--ui-danger)] shadow-[3px_3px_0_var(--ui-bg)] transition-colors hover:bg-[var(--ui-danger)]/20 tablet:text-[10px]"
           >
-            LEAVE MATCH
+            {t.leaveMatch}
           </button>
         )}
         {swUpdate && ui === 'start' && !updateModalOpen && (
@@ -1092,7 +1118,7 @@ export function App() {
             className="fixed bottom-3 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2.5 border-2 border-[var(--ui-gold)] bg-[var(--ui-panel)]/95 px-3 py-1.5 font-pixel text-[var(--ui-gold)] shadow-[3px_3px_0_var(--ui-bg)] cursor-pointer"
             onClick={() => setUpdateModalOpen(true)}
           >
-            <span className="text-[8px] tablet:text-[10px]">UPDATE READY</span>
+            <span className="text-[8px] tablet:text-[10px]">{t.updateReady}</span>
             <button
               type="button"
               onClick={(e) => {
@@ -1101,7 +1127,7 @@ export function App() {
               }}
               className="border-2 border-[var(--ui-gold)] bg-[var(--ui-gold)]/20 px-2 py-0.5 text-[8px] text-[#ffffff] transition-colors hover:bg-[var(--ui-gold)]/40 tablet:text-[10px]"
             >
-              RELOAD
+              {t.reload}
             </button>
           </div>
         )}

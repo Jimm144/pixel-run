@@ -229,3 +229,8 @@ export function cycleUiTheme(currentId: string): UiTheme {
   const i = UI_THEMES.findIndex((t) => t.id === currentId);
   return UI_THEMES[(i + 1) % UI_THEMES.length];
 }
+
+export function getUiTheme(id: string): UiTheme {
+  return UI_THEMES.find((t) => t.id === id) ?? UI_THEMES[0];
+}
+

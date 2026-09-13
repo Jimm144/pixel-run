@@ -4,14 +4,17 @@ import { drawPlayerSprite } from '../game/playerSprite';
 import { PixelButton } from './ui';
 import { sfx } from '../game/audio';
 import { inputManager, type GamepadAction } from '../game/input';
+import { type SupportedLanguage, getTranslations, getTierName } from '../game/i18n';
 
 interface SkinUnlockModalProps {
   skinId: SkinId;
   onEquip: (id: SkinId) => void;
   onClose: () => void;
+  lang?: SupportedLanguage;
 }
 
-export function SkinUnlockModal({ skinId, onEquip, onClose }: SkinUnlockModalProps) {
+export function SkinUnlockModal({ skinId, onEquip, onClose, lang = 'en' }: SkinUnlockModalProps) {
+  const t = getTranslations(lang);
   const skin = SKINS[skinId] || SKINS.bob;
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animRef = useRef<number>(0);
@@ -109,7 +112,7 @@ export function SkinUnlockModal({ skinId, onEquip, onClose }: SkinUnlockModalPro
           className="mb-3 text-[12px] tracking-wider uppercase"
           style={{ color: tierTheme.text }}
         >
-          NEW SKIN UNLOCKED
+          {t.newSkinUnlocked}
         </h3>
 
         {/* Sprite Preview Frame */}
@@ -137,12 +140,12 @@ export function SkinUnlockModal({ skinId, onEquip, onClose }: SkinUnlockModalPro
             backgroundColor: tierTheme.bg,
           }}
         >
-          <span className="relative top-px">{skin.tier}</span>
+          <span className="relative top-px">{getTierName(skin.tier, lang)}</span>
         </span>
 
         {/* Unlock Requirement Info */}
         <p className="mb-4 text-[8px] text-[var(--ui-muted)] sm:text-[10px]">
-          {skin.unlock.desc || 'UNLOCKED'}
+          {skin.unlock.desc || t.unlocked}
         </p>
 
         {/* Actions */}
@@ -151,14 +154,14 @@ export function SkinUnlockModal({ skinId, onEquip, onClose }: SkinUnlockModalPro
             onClick={handleEquip}
             className="w-full py-3 text-[10px]"
           >
-            EQUIP
+            {t.equip}
           </PixelButton>
           <PixelButton
             variant="ghost"
             onClick={handleClose}
             className="w-full py-2.5 text-[10px]"
           >
-            LATER
+            {t.later}
           </PixelButton>
         </div>
       </div>
