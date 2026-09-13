@@ -72,7 +72,7 @@ export function drawPlayerSprite(
     flashing = false,
     flashAmount = 0,
     jumpShoes = false,
-    vx = 2.1,
+    vx = 1.88,
     scale = 1,
   } = opts;
 
@@ -578,7 +578,7 @@ export function drawPlayerSprite(
       f(1, 3, 9, 2, tint('#ced4da'));
       f(0, -3, 11, 1, tint('#1864ab'));
 
-      const slosh = clamp(Math.round((vx - 2.1) * 0.4 + (air ? -1 : 0)), -2, 2);
+      const slosh = clamp(Math.round((vx - 1.88) * 0.4 + (air ? -1 : 0)), -2, 2);
       f(1 + Math.max(0, -slosh), -2, 9, 4, tint('#ff922b'));
       f(2 + slosh, -2, 7, 2, tint('#f76707'));
 

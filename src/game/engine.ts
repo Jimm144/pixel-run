@@ -579,10 +579,11 @@ export class Game implements GenHost, RenderHost {
       this.pressDive();
       return;
     }
-    if (this.phase !== 'playing' || this.countdown > 0) return;
     const p = this.localPlayers[idx];
     if (!p || !p.isAlive) return;
     p.diveHeld = true;
+    p.diveBuf = 6;
+    if ((this.phase !== 'playing' && this.phase !== 'ready') || this.countdown > 0) return;
     if (!p.onGround && p.vy > -3) {
       p.diving = true;
       p.padFlight = 0;
@@ -600,6 +601,7 @@ export class Game implements GenHost, RenderHost {
     const p = this.localPlayers[idx];
     if (!p) return;
     p.diveHeld = false;
+    p.diveBuf = 0;
   }
   setPlayerMove(idx: number, d: number) {
     if (idx === 0) {
@@ -791,11 +793,12 @@ export class Game implements GenHost, RenderHost {
     const ultra = this.distance > 15000 ? Math.min(0.5, Math.log10(1 + (this.distance - 15000) / 30000)) : 0;
     return Math.min(1.5, base + ultra);
   }
-  runSpeed() {
-    if (this.phase === 'ready') return 2.1;
-    const base = 2.1 + 1.4 * Math.min(1, this.distance / 15000);
-    const late = clamp((this.distance - 10500) / 15000, 0, 0.8);
-    const ultra = this.distance > 25000 ? Math.min(0.9, Math.log10(1 + (this.distance - 25000) / 40000) * 1.5) : 0;
+  runSpeed(d?: number) {
+    if (this.phase === 'ready') return 1.88;
+    const dist = d !== undefined ? d : this.distance;
+    const base = 1.88 + 1.62 * Math.min(1, dist / 15000);
+    const late = clamp((dist - 10500) / 15000, 0, 0.8);
+    const ultra = dist > 25000 ? Math.min(0.9, Math.log10(1 + (dist - 25000) / 40000) * 1.5) : 0;
     return base + late + ultra;
   }
   mult() {
@@ -913,6 +916,11 @@ export class Game implements GenHost, RenderHost {
       if (this.countdown === 0) {
         this.goTimer = 30;
         if (this.countdownTicks) sfx.play('start'); // GO
+        if (this.isLocalBattle) {
+          for (const lp of this.localPlayers) {
+            if (lp.jumpHeld) lp.jumpBuf = BUFFER;
+          }
+        }
       } else if (this.countdownTicks && this.countdown % 60 === 0) {
         sfx.play('ui'); // 2, 1 ticks
       }
@@ -924,8 +932,13 @@ export class Game implements GenHost, RenderHost {
     // Local battle: P1 dead means spectate. Stop integrating the main body
     // (it must not run on, drag the camera, or collect anything), but keep
     // teammates and the world alive.
-    if (this.isLocalBattle && this.localPlayers[0] && !this.localPlayers[0].isAlive) {
+    if (this.isLocalBattle && this.phase === 'playing' && this.localPlayers[0] && !this.localPlayers[0].isAlive) {
       for (let i = 1; i < this.localPlayers.length; i++) this.stepLocalPlayer(this.localPlayers[i], i);
+      for (let i = 1; i < this.localPlayers.length; i++) {
+        const lp = this.localPlayers[i];
+        if (lp.isAlive) this.distance = Math.max(this.distance, lp.distance);
+      }
+      this.updateEntities(false, false, 0, 0);
       this.particles.update(1);
       this.texts.update();
       const camAlive = this.multiCamTarget();
@@ -982,7 +995,7 @@ export class Game implements GenHost, RenderHost {
     if (this.phase === 'playing') {
       this.updateBiomeEvent();
       const currentSpeed = Math.abs(this.vx) || this.runSpeed();
-      const speedScale = currentSpeed / 2.1;
+      const speedScale = currentSpeed / 1.88;
       sfx.setMusic(this.zone.bg, this.diff(), speedScale);
       if (this.frame % 300 === 0) {
         this.flushLifetimeStats();
@@ -990,7 +1003,7 @@ export class Game implements GenHost, RenderHost {
     }
 
     /* ---- horizontal motion */
-    let target = this.runSpeed();
+    let target = this.runSpeed(this.distance);
     if (this.phase === 'ready') target *= 0.82;
     if (this.phase === 'playing' && this.eventTimer > 0) {
       const rampIn = Math.min(1, (this.eventMax - this.eventTimer) / 60);
@@ -1012,7 +1025,7 @@ export class Game implements GenHost, RenderHost {
     if (this.jumpBuf > 0) this.jumpBuf--;
     if (this.diveBuf > 0) this.diveBuf--;
     if (this.coyote > 0) this.coyote--;
-    if (this.jumpBuf > 0) {
+    if (this.jumpBuf > 0 && this.padFlight <= 0) {
       if (this.onGround || this.coyote > 0) {
         this.doJump(false);
       } else if (this.jumps < (this.tripleJump > 0 ? 3 : 2)) {
@@ -1091,6 +1104,41 @@ export class Game implements GenHost, RenderHost {
       this.emitTrail(true);
     }
 
+    /* ---- local battle multi-player update */
+    if (this.isLocalBattle && this.localPlayers.length > 0) {
+      if (this.localPlayers[0] && this.localPlayers[0].isAlive) {
+        const lp0 = this.localPlayers[0];
+        lp0.px = this.px;
+        lp0.py = this.py;
+        lp0.vx = this.vx;
+        lp0.vy = this.vy;
+        lp0.score = this.score;
+        lp0.distance = this.distance;
+        lp0.onGround = this.onGround;
+        lp0.diving = this.diving;
+        lp0.padFlight = this.padFlight;
+        lp0.cut = this.cut;
+        lp0.jumps = this.jumps;
+        lp0.coyote = this.coyote;
+        lp0.spin = this.spin;
+        lp0.sx = this.sx;
+        lp0.sy = this.sy;
+        lp0.invuln = this.invuln;
+        lp0.shielded = this.shielded;
+        lp0.jumpShoes = this.jumpShoes;
+        lp0.tripleJump = this.tripleJump;
+        lp0.propellerHat = this.propellerHat;
+        lp0.magnet = this.magnet;
+      }
+      for (let i = 1; i < this.localPlayers.length; i++) {
+        this.stepLocalPlayer(this.localPlayers[i], i);
+      }
+      for (let i = 0; i < this.localPlayers.length; i++) {
+        const lp = this.localPlayers[i];
+        if (lp.isAlive) this.distance = Math.max(this.distance, lp.distance);
+      }
+    }
+
     /* ---- world */
     const survivedEntities = this.updateEntities(wasAirborne, wasDiving, preVy, prevBottom);
     // Collision handlers can end the run before the normal score section.
@@ -1108,21 +1156,6 @@ export class Game implements GenHost, RenderHost {
 
     this.worldGen.generate(this.camX + VW * 2.2);
     if (this.frame % 20 === 0) this.cull();
-
-    /* ---- local battle multi-player update */
-    if (this.isLocalBattle && this.localPlayers.length > 0) {
-      if (this.localPlayers[0] && this.localPlayers[0].isAlive) {
-        this.localPlayers[0].px = this.px;
-        this.localPlayers[0].py = this.py;
-        this.localPlayers[0].vx = this.vx;
-        this.localPlayers[0].vy = this.vy;
-        this.localPlayers[0].score = this.score;
-        this.localPlayers[0].distance = this.distance;
-      }
-      for (let i = 1; i < this.localPlayers.length; i++) {
-        this.stepLocalPlayer(this.localPlayers[i], i);
-      }
-    }
 
     /* ---- score */
     if (this.phase === 'playing') {
@@ -1471,8 +1504,8 @@ export class Game implements GenHost, RenderHost {
         const lp = this.localPlayers[i];
         if (lp && lp.isAlive) {
           const r = runners[nRunners++];
-          r.px = lp.px;
-          r.py = lp.py;
+          r.px = i === 0 ? this.px : lp.px;
+          r.py = i === 0 ? this.py : lp.py;
           r.isMain = i === 0;
           r.playerIdx = i;
         }
@@ -1540,6 +1573,7 @@ export class Game implements GenHost, RenderHost {
             }
             this.addRunnerScore(runner.playerIdx, GEM_PTS);
             if (runner.isMain) this.addCombo(c.x, c.y - 6, GEM_PTS, 'GEM');
+            else this.texts.popText(c.x, c.y - 6, 'GEM +' + GEM_PTS, '#7ef7ff');
             this.particles.burst(c.x, c.y, 14, ['#7ef7ff', '#ffffff', '#3ef2c8'], 2.2, 0.05);
             this.addShake(0.14);
             sfx.play('gem');
@@ -1553,6 +1587,7 @@ export class Game implements GenHost, RenderHost {
             }
             this.addRunnerScore(runner.playerIdx, COIN_PTS);
             if (runner.isMain) this.addCombo(c.x, c.y - 4, COIN_PTS);
+            else this.texts.popText(c.x, c.y - 4, '+' + COIN_PTS, '#ffd166');
             this.particles.burst(c.x, c.y, 6, ['#ffd166', '#ffffff'], 1.7, 0.04);
             sfx.play('coin');
           }
@@ -1683,8 +1718,10 @@ export class Game implements GenHost, RenderHost {
     let stompedThisFrame = false;
     let shieldTriggered = false;
     const isDiving = this.diving || wasDiving;
+    const p1Active = !this.isLocalBattle || !!this.localPlayers[0]?.isAlive;
 
-    for (const e of this.enemies) {
+    if (p1Active) {
+      for (const e of this.enemies) {
       if (e.dead) continue;
       if (e.x < this.camX - 40 || e.x > this.camX + VW + 90) continue;
       if (this.invuln > 0) continue;
@@ -1699,12 +1736,19 @@ export class Game implements GenHost, RenderHost {
         this.texts.popText(e.x, e.y - 24, 'DIVE TO SMASH!', '#ffd166', 1.2);
       }
 
-      // Generous downward sweep when diving so diving reliably crushes enemies without fatal clipping
+      // Generous downward sweep when diving or falling so stomping/diving reliably crushes enemies
       const isDiveSweep = isDiving && (
         pxc + pw > e.x - 2 &&
         pxc < e.x + e.w + 2 &&
         pyc + ph >= e.y &&
         prevBottom <= e.y + e.h + 12
+      );
+
+      const isFallSweep = (wasAirborne || preVy > 0 || this.vy > 0) && (
+        pxc + pw > e.x - 1 &&
+        pxc < e.x + e.w + 1 &&
+        pyc + ph >= e.y &&
+        prevBottom <= e.y + e.h + 8
       );
 
       const isNormalOverlap =
@@ -1713,9 +1757,9 @@ export class Game implements GenHost, RenderHost {
         pyc + ph > e.y + hPadTop &&
         pyc < e.y + e.h - hPadBottom;
 
-      if (isDiveSweep || isNormalOverlap) {
-        if (isDiving) {
-          this.killEnemy(e, SLAM_PTS, e.kind === 'spiker' ? 'SMASH' : 'SLAM');
+      if (isDiveSweep || isFallSweep || isNormalOverlap) {
+        if (isDiving || this.padFlight > 0) {
+          this.killEnemy(e, SLAM_PTS, this.padFlight > 0 ? 'ROCKET' : (e.kind === 'spiker' ? 'SMASH' : 'SLAM'));
           stompedThisFrame = true;
         } else if (e.kind === 'spiker') {
           if (!stompedThisFrame) {
@@ -1730,12 +1774,12 @@ export class Game implements GenHost, RenderHost {
           }
         } else {
           // Stomp vs Side-hit detection:
-          // A hit is a lethal side-collision ONLY if the player was already running/walking
-          // on flat ground into the enemy WITHOUT jumping/falling, OR if the player jumped
-          // upward from beneath and hit the enemy with their head while rising fast.
-          // In all other cases (falling, landing from jump, mid-air touch, flyer touch), it is a STOMP!
+          // A hit is a lethal side-collision ONLY if:
+          // 1. The player was already walking horizontally on the ground without jumping/falling.
+          // 2. OR the player jumped upward from beneath a solid platform and bumped head into enemy bottom.
+          // In all other cases (falling, landing from jump, airborne touch, dive, flyer touch), it is a STOMP!
           const isGroundedWalkHit = !wasAirborne && this.onGround && preVy <= 0 && this.vy <= 0 && !isDiving;
-          const isUpwardHeadBump = (preVy < -2.5 || this.vy < -2.5) && (pyc + ph > e.y + e.h - 1);
+          const isUpwardHeadBump = e.kind !== 'flyer' && (preVy < -2.5 || this.vy < -2.5) && (pyc >= e.y + e.h - 3);
 
           const stomping =
             stompedThisFrame ||
@@ -1759,20 +1803,19 @@ export class Game implements GenHost, RenderHost {
     }
     if (stompedThisFrame) {
       this.vy = -(this.jumpHeld ? 8.2 : 6.4);
-      this.onGround = false;
-      this.coyote = 0;
       this.diving = false;
       this.jumps = Math.min(this.jumps, 1);
       this.cut = false;
-      this.sx = 1.12;
-      this.sy = 0.9;
+      this.sx = 1.35;
+      this.sy = 0.7;
+      this.freeze = 4;
+      this.addShake(0.34);
     }
 
     /* spikes */
     if (!shieldTriggered && this.invuln === 0) {
       for (const s of this.spikes) {
         if (s.x > this.camX + VW + 20 || s.x + s.n * 8 < this.camX - 20) continue;
-        // Volcano/hell geysers erupt on a cycle — only lethal while blowing
         if (this.isCampaign && (this.zone.bg === 'volcano' || this.zone.bg === 'hell')) {
           const cyc = (this.frame + Math.floor(s.x * 0.21)) % 240;
           if (cyc >= 110) continue; // 110 erupting, 130 cooling
@@ -1793,6 +1836,7 @@ export class Game implements GenHost, RenderHost {
         }
       }
     }
+    }
 
     /* local battle: enemy + spike contact for players 2-4. */
     if (this.isLocalBattle) {
@@ -1802,81 +1846,214 @@ export class Game implements GenHost, RenderHost {
         const lx = lp.px;
         const ly = lp.py;
         let dead = false;
+        const lpAirborne = lp.wasAirborne ?? !lp.onGround;
+        const lpDiving = lp.diving || (lp.wasDiving ?? false);
+        const lpPreVy = lp.preVy ?? lp.vy;
+        const lpPrevBottom = lp.prevBottom ?? (ly + ph);
+
         for (const e of this.enemies) {
           if (e.dead) continue;
           if (e.x < this.camX - 40 || e.x > this.camX + VW + 90) continue;
           const hPadTop = e.kind === 'flyer' ? 2 : 1;
           const hPadBottom = e.kind === 'flyer' ? 4 : 0;
           const xPad = e.kind === 'flyer' ? 2 : 1;
-          if (
+
+          const isLpDiveSweep = lpDiving && (
+            lx + pw > e.x - 2 &&
+            lx < e.x + e.w + 2 &&
+            ly + ph >= e.y &&
+            lpPrevBottom <= e.y + e.h + 12
+          );
+          const isLpFallSweep = (lpAirborne || lpPreVy > 0 || lp.vy > 0) && (
+            lx + pw > e.x - 1 &&
+            lx < e.x + e.w + 1 &&
+            ly + ph >= e.y &&
+            lpPrevBottom <= e.y + e.h + 8
+          );
+          const isLpNormalOverlap =
             lx + pw > e.x + xPad &&
             lx < e.x + e.w - xPad &&
             ly + ph > e.y + hPadTop &&
-            ly < e.y + e.h - hPadBottom
-          ) {
-            const isLocalGroundedWalkHit = lp.onGround && lp.vy === 0 && !lp.diving;
-            const isLocalUpwardHeadBump = lp.vy < -2.5 && ly + ph > e.y + e.h - 1;
-            const landingStomp = e.kind !== 'spiker' && !isLocalGroundedWalkHit && !isLocalUpwardHeadBump;
-            const smash = e.kind === 'spiker' && lp.diving;
-            if (landingStomp || smash) {
+            ly < e.y + e.h - hPadBottom;
+
+          if (isLpDiveSweep || isLpFallSweep || isLpNormalOverlap) {
+            const isLpRocket = !!(lp.padFlight && lp.padFlight > 0);
+            if (lpDiving || isLpRocket) {
               e.dead = true;
-              this.lpBonus[i] = (this.lpBonus[i] || 0) + (smash ? SLAM_PTS : STOMP_PTS);
+              this.kills++;
+              this.questEnemies++;
+              const isSmash = e.kind === 'spiker' || isLpRocket;
+              this.lpBonus[i] = (this.lpBonus[i] || 0) + (isSmash ? SLAM_PTS : STOMP_PTS);
+              this.texts.popText(e.x + e.w / 2, e.y - 8, isLpRocket ? 'ROCKET +' + SLAM_PTS : (isSmash ? 'SMASH +' + SLAM_PTS : 'SLAM +' + SLAM_PTS), '#ffd166');
               lp.vy = -(lp.jumpHeld ? 8.2 : 6.4);
               lp.onGround = false;
               lp.coyote = 0;
               lp.diving = false;
+              lp.jumps = Math.min(lp.jumps, 1);
+              lp.cut = false;
+              lp.sx = 1.12;
+              lp.sy = 0.9;
+              lp.wasAirborne = true;
+              lp.preVy = lp.vy;
+              lp.wasDiving = false;
               this.particles.burst(e.x + e.w / 2, e.y + e.h / 2, 14, [this.zone.slimeBody, this.zone.accent, '#ffffff'], 2.6, 0.16);
               sfx.play(e.kind === 'spiker' ? 'slam' : 'stomp');
+              if (e.kind === 'spiker') haptics.diveSlam();
+              else haptics.stomp();
+              this.freeze = Math.max(this.freeze, e.kind === 'spiker' ? 5 : 3);
               this.addShake(0.2);
               break;
+            } else if (e.kind === 'spiker') {
+              if (lp.shielded) {
+                lp.shielded = false;
+                lp.invuln = 60;
+                lp.vy = -5.4;
+                sfx.play('shield');
+                break;
+              }
+              this.killLocalPlayer(i, 'spike');
+              dead = true;
+              break;
+            } else {
+              const isLocalGroundedWalkHit = !lpAirborne && lp.onGround && lpPreVy <= 0 && lp.vy <= 0 && !lpDiving;
+              const isLocalUpwardHeadBump = e.kind !== 'flyer' && (lpPreVy < -2.5 || lp.vy < -2.5) && (ly >= e.y + e.h - 3);
+              const landingStomp = !isLocalGroundedWalkHit && !isLocalUpwardHeadBump;
+
+              if (landingStomp) {
+                e.dead = true;
+                this.kills++;
+                this.questEnemies++;
+                this.lpBonus[i] = (this.lpBonus[i] || 0) + STOMP_PTS;
+                this.texts.popText(e.x + e.w / 2, e.y - 8, '+' + STOMP_PTS, '#ffd166');
+                lp.vy = -(lp.jumpHeld ? 8.2 : 6.4);
+                lp.onGround = false;
+                lp.coyote = 0;
+                lp.diving = false;
+                lp.jumps = Math.min(lp.jumps, 1);
+                lp.cut = false;
+                lp.sx = 1.12;
+                lp.sy = 0.9;
+                lp.wasAirborne = true;
+                lp.preVy = lp.vy;
+                lp.wasDiving = false;
+                this.particles.burst(e.x + e.w / 2, e.y + e.h / 2, 14, [this.zone.slimeBody, this.zone.accent, '#ffffff'], 2.6, 0.16);
+                sfx.play('stomp');
+                haptics.stomp();
+                this.freeze = Math.max(this.freeze, 3);
+                this.addShake(0.2);
+                break;
+              } else {
+                if (lp.shielded) {
+                  lp.shielded = false;
+                  lp.invuln = 60;
+                  lp.vy = -5.4;
+                  sfx.play('shield');
+                  break;
+                }
+                this.killLocalPlayer(i, 'hit');
+                dead = true;
+                break;
+              }
             }
-            this.killLocalPlayer(i, e.kind === 'spiker' ? 'spike' : 'hit');
-            dead = true;
-            break;
           }
         }
         if (dead || !lp.isAlive) continue;
         for (const s of this.spikes) {
           if (s.x > this.camX + VW + 20 || s.x + s.n * 8 < this.camX - 20) continue;
-      if (
-        lx + pw - 2 > s.x + 1 &&
-        lx + 2 < s.x + s.n * 8 - 1 &&
-        ly + ph > s.y + 5 &&
-        ly < s.y + 10
-      ) {
-        // Same 5px/3px landing grace the main player gets.
-        if (lp.vy >= 0 && ly + ph - (s.y + 5) < 3) continue;
-        this.killLocalPlayer(i, 'spike');
-        break;
-      }
+          if (
+            lx + pw - 2 > s.x + 1 &&
+            lx + 2 < s.x + s.n * 8 - 1 &&
+            ly + ph > s.y + 5 &&
+            ly < s.y + 10
+          ) {
+            // Same 5px/3px landing grace the main player gets.
+            if (lp.vy >= 0 && ly + ph - (s.y + 5) < 3) continue;
+            if (lp.shielded) {
+              lp.shielded = false;
+              lp.invuln = 60;
+              lp.vy = -5.4;
+              sfx.play('shield');
+              break;
+            }
+            this.killLocalPlayer(i, 'spike');
+            break;
+          }
         }
       }
     }
 
     /* springs */
     for (const sp of this.springs) {
-      // Skip off-screen pads entirely — don't tick their press animation.
-      if (sp.x > this.camX + VW + 20 || sp.x + 14 < this.camX - 20) continue;
       if (sp.press > 0) sp.press--;
-      const padY = sp.y + (sp.press > 0 ? 4 : 0);
-      if (
-        this.vy >= 0 &&
-        pxc + pw > sp.x &&
-        pxc < sp.x + (sp.mega ? 18 : 14) &&
-        pyc + ph > padY &&
-        pyc + ph < padY + 12
-      ) {
-        this.py = padY - ph;
-        this.vy = sp.mega ? -MEGA_PAD_V : -PAD_V;
-        this.vx = sp.launchVx;
-        this.padFlight = 90;
-        this.jumps = 0;
-        this.cut = true; // a pad launch is never chopped by releasing jump
-        this.jumpBuf = 0; // a buffered press mid-arc would cancel padFlight
-        this.diving = false;
-        sp.press = sp.mega ? 16 : 14;
-        this.sx = 0.6;
-        this.sy = 1.6;
+      let springTriggered = false;
+      for (let ri = 0; ri < nRunners; ri++) {
+        const runner = runners[ri];
+        const isMain = runner.isMain;
+        const lp = isMain ? (this.isLocalBattle ? this.localPlayers[0] : null) : this.localPlayers[runner.playerIdx];
+        const rpx = isMain ? this.px : (lp ? lp.px : runner.px);
+        const rpy = isMain ? this.py : (lp ? lp.py : runner.py);
+        const rvy = isMain ? this.vy : (lp ? lp.vy : 0);
+
+        if (
+          rvy >= 0 &&
+          rpx + pw > sp.x &&
+          rpx < sp.x + (sp.mega ? 18 : 14) &&
+          rpy + ph >= sp.y &&
+          rpy + ph <= sp.y + 14
+        ) {
+          const launchY = sp.y - ph;
+          const launchVy = sp.mega ? -MEGA_PAD_V : -PAD_V;
+          const launchVx = sp.launchVx;
+          const flight = 90;
+
+          if (isMain) {
+            this.py = launchY;
+            this.vy = launchVy;
+            this.vx = launchVx;
+            this.padFlight = flight;
+            this.jumps = 0;
+            this.onGround = false;
+            this.coyote = 0;
+            this.cut = true;
+            this.jumpBuf = 0;
+            this.diving = false;
+            this.sx = 0.6;
+            this.sy = 1.6;
+            if (lp) {
+              lp.py = launchY;
+              lp.vy = launchVy;
+              lp.vx = launchVx;
+              lp.padFlight = flight;
+              lp.jumps = 0;
+              lp.onGround = false;
+              lp.coyote = 0;
+              lp.cut = true;
+              lp.jumpBuf = 0;
+              lp.diving = false;
+              lp.sx = 0.6;
+              lp.sy = 1.6;
+            }
+          } else if (lp) {
+            lp.py = launchY;
+            lp.vy = launchVy;
+            lp.vx = launchVx;
+            lp.padFlight = flight;
+            lp.jumps = 0;
+            lp.onGround = false;
+            lp.coyote = 0;
+            lp.cut = true;
+            lp.jumpBuf = 0;
+            lp.diving = false;
+            lp.sx = 0.6;
+            lp.sy = 1.6;
+          }
+
+          sp.press = sp.mega ? 16 : 14;
+          springTriggered = true;
+        }
+      }
+
+      if (springTriggered) {
         this.addShake(sp.mega ? 0.55 : 0.38);
         sfx.play(sp.mega ? 'slam' : 'spring');
         const n = sp.mega ? 20 : 12;
@@ -2176,7 +2353,15 @@ export class Game implements GenHost, RenderHost {
     if (p.magnet && p.magnet > 0) p.magnet--;
 
     /* horizontal motion */
-    let target = this.runSpeed();
+    let target = this.runSpeed(p.distance);
+    if (this.eventTimer > 0) {
+      const rampIn = Math.min(1, (this.eventMax - this.eventTimer) / 60);
+      const rampOut = Math.min(1, this.eventTimer / 60);
+      const weight = Math.min(rampIn, rampOut);
+      if (this.eventKind === 'jungle') target *= 1 + 0.04 * weight;
+      else if (this.eventKind === 'desert') target *= 1 - 0.04 * weight;
+      else if (this.eventKind === 'tundra') target *= 1 - 0.18 * weight;
+    }
     if (p.padFlight <= 0) {
       if (p.moveDir > 0) target *= 1.35;
       else if (p.moveDir < 0) target *= 0.7;
@@ -2191,16 +2376,14 @@ export class Game implements GenHost, RenderHost {
     if (p.jumpBuf > 0) p.jumpBuf--;
     if (p.diveBuf > 0) p.diveBuf--;
     if (p.coyote > 0) p.coyote--;
-    if (p.diveBuf > 0 && !p.onGround && p.vy > -3 && !p.diving) {
+    if ((p.diveHeld || p.diveBuf > 0) && !p.onGround && !p.diving && p.vy > 0.5) {
       p.diving = true;
-      p.padFlight = 0;
-      p.vy = Math.max(p.vy, 6.5);
+      p.diveBuf = 0;
       p.spin = 0;
       p.sx = 0.8;
       p.sy = 1.25;
-      p.diveBuf = 0;
     }
-    if (p.jumpBuf > 0) {
+    if (p.jumpBuf > 0 && p.padFlight <= 0) {
       if (p.onGround || p.coyote > 0) {
         p.jumpBuf = 0;
         p.cut = false;
@@ -2217,6 +2400,7 @@ export class Game implements GenHost, RenderHost {
         p.cut = false;
         p.diving = false;
         p.vy = -DJUMP_V * jumpScale;
+        p.padFlight = 0;
         p.jumps++;
         p.onGround = false;
         p.sx = 0.7;
@@ -2231,41 +2415,66 @@ export class Game implements GenHost, RenderHost {
     }
 
     /* gravity */
-    if (p.diveHeld && !p.onGround && !p.diving && p.vy > 0.5) {
-      p.diving = true;
-      p.spin = 0;
-      p.sx = 0.8;
-      p.sy = 1.25;
-    }
+    const preGravVy = p.vy;
+    const hasPropeller = (p.propellerHat && p.propellerHat > 0) && !p.onGround && !p.diving && p.padFlight <= 0;
     let g = GRAV_FALL;
     if (p.diving) g = GRAV_DIVE;
-    else if (p.jumpHeld && p.vy < 0) g = GRAV_HOLD;
-    else if (p.jumpHeld && p.vy > 0 && p.propellerHat && p.propellerHat > 0) g = 0.16;
-    p.vy = Math.min(MAX_FALL, p.vy + g);
+    else if (hasPropeller) {
+      if (p.jumpHeld) {
+        g = p.vy > 0 ? 0.12 : 0.22;
+      } else {
+        g = p.vy > 0 ? 0.32 : 0.40;
+      }
+    } else if (this.eventTimer > 0 && this.eventKind === 'desert' && p.padFlight <= 0) {
+      g = p.vy < 0 ? 0.3 : 0.48;
+    } else if (p.vy < 0) {
+      g = p.padFlight > 0 ? GRAV : p.jumpHeld ? GRAV_HOLD : GRAV;
+    }
+    p.vy = Math.min(MAX_FALL + (p.diving ? 5 : 0), p.vy + g);
+    if (hasPropeller) {
+      const maxPropFall = p.jumpHeld ? 2.2 : 4.6;
+      if (p.vy > maxPropFall) p.vy = maxPropFall;
+    }
 
     /* integrate */
+    const wasAirborne = !p.onGround;
+    const wasDiving = p.diving;
+    const preVy = preGravVy;
     const prevBottom = p.py + PLAYER_H;
+    p.wasAirborne = wasAirborne;
+    p.wasDiving = wasDiving;
+    p.preVy = preVy;
+    p.prevBottom = prevBottom;
     p.px += p.vx;
 
     // Platform collisions X
     for (const plat of this.platforms) {
       if (plat.float) continue;
       const bh = GROUND_BOTTOM - plat.y;
-      if (p.px + PLAYER_W > plat.x && p.px < plat.x + plat.w && p.py + PLAYER_H > plat.y + 3 && p.py < plat.y + bh) {
+      if (
+        p.px + PLAYER_W > plat.x + WALL_MARGIN &&
+        p.px < plat.x + plat.w - WALL_MARGIN &&
+        p.py + PLAYER_H > plat.y + 3 &&
+        p.py < plat.y + bh
+      ) {
         if (p.vx > 0) {
+          if (p.invuln && p.invuln > 0) {
+            p.px = plat.x - PLAYER_W - 1;
+            p.vx = 0;
+            continue;
+          }
           if (p.shielded) {
             p.shielded = false;
             p.invuln = 60;
             p.px = plat.x - PLAYER_W - 1;
-            p.vx = -1.5;
-            p.vy = -3;
-          } else if (p.invuln && p.invuln > 0) {
-            p.px = plat.x - PLAYER_W - 1;
             p.vx = 0;
-          } else {
-            this.killLocalPlayer(idx, 'wall');
-            return;
+            continue;
           }
+          this.killLocalPlayer(idx, 'wall');
+          return;
+        } else if (p.vx < 0) {
+          p.px = plat.x + plat.w;
+          p.vx = 0;
         }
       }
     }
@@ -2274,12 +2483,16 @@ export class Game implements GenHost, RenderHost {
     p.py += p.vy;
     p.onGround = false;
     let landing: Platform | null = null;
+    let bonked = false;
     for (const plat of this.platforms) {
       if (p.px + PLAYER_W <= plat.x || p.px >= plat.x + plat.w) continue;
       const bh = plat.float ? 8 : GROUND_BOTTOM - plat.y;
       if (p.py + PLAYER_H >= plat.y && p.py < plat.y + bh) {
         if (p.vy >= 0 && prevBottom <= plat.y + Math.max(3, p.vy + 1)) {
           if (!landing || plat.y < landing.y) landing = plat;
+        } else if (!plat.float && p.vy < 0 && !bonked) {
+          p.vy = 0;
+          bonked = true;
         }
       }
     }
@@ -2292,41 +2505,8 @@ export class Game implements GenHost, RenderHost {
       p.coyote = COYOTE;
       p.diving = false;
       p.spin = 0;
-    }
-
-    // Spikes collision
-    if (!p.invuln || p.invuln === 0) {
-      for (const sp of this.spikes) {
-        if (p.px + PLAYER_W - 4 > sp.x + 2 && p.px + 4 < sp.x + sp.n * 8 - 2 && p.py + PLAYER_H > sp.y + 5 && p.py < sp.y + 10) {
-          if (p.shielded) {
-            p.shielded = false;
-            p.invuln = 60;
-            p.vy = -5.4;
-            break;
-          }
-          this.killLocalPlayer(idx, 'spike');
-          return;
-        }
-      }
-    }
-
-    // Springs collision
-    for (const spr of this.springs) {
-      const padY = spr.y + (spr.press > 0 ? 4 : 0);
-      if (p.vy >= 0 && p.px + PLAYER_W > spr.x && p.px < spr.x + (spr.mega ? 18 : 14) && p.py + PLAYER_H > padY && p.py + PLAYER_H < padY + 12) {
-        p.py = padY - PLAYER_H;
-        p.vy = spr.mega ? -MEGA_PAD_V : -PAD_V;
-        p.vx = spr.launchVx;
-        p.padFlight = 90;
-        p.jumps = 0;
-        p.cut = true;
-        p.jumpBuf = 0; // a buffered press mid-arc would cancel padFlight
-        p.diving = false;
-        spr.press = spr.mega ? 16 : 14;
-        p.sx = 0.6;
-        p.sy = 1.6;
-        sfx.play(spr.mega ? 'slam' : 'spring');
-      }
+    } else if (p.vy > 0 && p.coyote === 0 && p.jumps === 0) {
+      p.jumps = 1;
     }
 
     // Distance & Score

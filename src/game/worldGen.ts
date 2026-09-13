@@ -92,7 +92,7 @@ export class WorldGen {
   // different live engine speeds and build different launch gaps.
   private plannedRunSpeed(x: number) {
     const distance = Math.max(0, x - this.h.startX);
-    const base = 2.1 + 1.4 * Math.min(1, distance / 15000);
+    const base = 1.88 + 1.62 * Math.min(1, distance / 15000);
     const late = clamp((distance - 10500) / 15000, 0, 0.8);
     const ultra = distance > 25000 ? Math.min(0.9, Math.log10(1 + (distance - 25000) / 40000) * 1.5) : 0;
     return base + late + ultra;
@@ -171,7 +171,9 @@ export class WorldGen {
     });
   }
 
-  private addFlyer(x: number, y: number, range = 32) {
+  private addFlyer(x: number, y: number, range = 32, minBound?: number, maxBound?: number) {
+    const minX = minBound !== undefined ? minBound : x - range;
+    const maxX = maxBound !== undefined ? maxBound : x + range;
     this.h.enemies.push({
       kind: 'flyer',
       x,
@@ -181,8 +183,8 @@ export class WorldGen {
       vx: -0.32,
       vy: 0,
       jt: 0,
-      minX: x - range,
-      maxX: x + range,
+      minX,
+      maxX,
       t: this.genCount * 0.4,
       baseY: y,
       dead: false,
@@ -369,7 +371,10 @@ export class WorldGen {
       case PAT.FLYER:
       default: {
         const droneY = clamp(Math.min(prevY, p.y) - this.ri(30, 46), 66, BASE_VH - 54);
-        this.addFlyer(center, droneY, this.ri(28, 40));
+        const range = this.ri(22, 32);
+        const minBound = Math.max(center - range, p.x + 8);
+        const maxBound = Math.min(center + range, p.x + p.w - 8);
+        this.addFlyer(center, droneY, range, minBound, maxBound);
         if (this.rand() < 0.4) this.addCoinLine(center - 22, center + 22, p.y - 16, 3);
         break;
       }
@@ -405,12 +410,14 @@ export class WorldGen {
       vy = Math.min(MAX_FALL, vy + (vy < 0 ? GRAV : GRAV_FALL));
       x += vx;
       py += vy;
-      if (f % 2 === 0) pts.push(x, py + PLAYER_H / 2);
+      pts.push(x, py + PLAYER_H / 2);
       if (vy > 0 && py + PLAYER_H >= landingY) break;
     }
-    const count = Math.min(n, pts.length >> 1);
+    const numPts = pts.length >> 1;
+    const count = Math.min(n, numPts);
     for (let i = 0; i < count; i++) {
-      const idx = Math.floor(((i + 0.5) / count) * (pts.length >> 1));
+      const t = (i + 1) / (count + 1);
+      const idx = Math.min(numPts - 1, Math.max(0, Math.round(t * (numPts - 1))));
       const cx = pts[idx * 2];
       const cy = pts[idx * 2 + 1];
       this.h.pickups.push({
@@ -456,7 +463,10 @@ export class WorldGen {
       const doubleLaunch =
         (pick === PAT.LAUNCH || pick === PAT.MEGA) &&
         (this.lastPattern === PAT.LAUNCH || this.lastPattern === PAT.MEGA);
-      if (!tooRepeated && !doubleLaunch) {
+      const flyerAfterLaunch =
+        pick === PAT.FLYER &&
+        (this.lastPattern === PAT.LAUNCH || this.lastPattern === PAT.MEGA);
+      if (!tooRepeated && !doubleLaunch && !flyerAfterLaunch) {
         this.patternRepeat = pick === this.lastPattern ? this.patternRepeat + 1 : 0;
         this.lastPattern = pick;
         return pick;
@@ -496,7 +506,7 @@ export class WorldGen {
       let gap = 0;
       let launchLandingWidth = 0;
       if (this.genCount === 0) gap = 0;
-      else if (intro) gap = 30 + this.genCount * 8;
+      else if (intro) gap = 26 + this.genCount * 7;
       else if (pattern === PAT.LAUNCH) {
         const vx = this.plannedRunSpeed(this.genX);
         const reach = this.padReach(prevY, y, PAD_V, vx);
@@ -559,9 +569,11 @@ export class WorldGen {
         for (let i = this.h.spikes.length - 1; i >= 0; i--)
           if (this.h.spikes[i].x + this.h.spikes[i].n * 8 > depX - 12)
             this.h.spikes.splice(i, 1);
-        for (let i = this.h.enemies.length - 1; i >= 0; i--)
-          if (this.h.enemies[i].x + this.h.enemies[i].w > depX - 12)
+        for (let i = this.h.enemies.length - 1; i >= 0; i--) {
+          const e = this.h.enemies[i];
+          if (e.x + e.w > depX - 12 && e.x < x + w + 40)
             this.h.enemies.splice(i, 1);
+        }
 
         this.h.springs.push({ x: sx, y: prevY - 9, press: 0, mega, launchVx });
         this.addPadArc(sx, prevY, y, v, launchVx, mega ? 6 : 4);

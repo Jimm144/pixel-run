@@ -98,6 +98,10 @@ export interface LocalPlayerState {
   tripleJump?: number;
   propellerHat?: number;
   magnet?: number;
+  wasAirborne?: boolean;
+  wasDiving?: boolean;
+  preVy?: number;
+  prevBottom?: number;
 }
 
 export type PartyClientMessage =

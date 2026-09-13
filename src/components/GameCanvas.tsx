@@ -18,12 +18,13 @@ interface Props {
   onMenu?: () => void;
   onQuestProgress: (stats: QuestRunStats) => void;
   onMatchEnd?: (res: MatchResult) => void;
+  onFirstJumpCleared?: () => void;
   ui: UI;
   showTouch: boolean;
   modalOpen?: boolean;
 }
 
-export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onToggleMute, onRestartHint, onRestart, onMenu, onQuestProgress, onMatchEnd, ui, showTouch, modalOpen }: Props) {
+export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onToggleMute, onRestartHint, onRestart, onMenu, onQuestProgress, onMatchEnd, onFirstJumpCleared, ui, showTouch, modalOpen }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   /** Zone accent for the touch pause button — follows the biome. */
@@ -33,10 +34,15 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
   const [counting, setCounting] = useState(false);
   const countingRef = useRef(false);
   const questProgressRef = useRef(onQuestProgress);
+  const firstJumpClearedRef = useRef(onFirstJumpCleared);
 
   useEffect(() => {
     questProgressRef.current = onQuestProgress;
   }, [onQuestProgress]);
+
+  useEffect(() => {
+    firstJumpClearedRef.current = onFirstJumpCleared;
+  }, [onFirstJumpCleared]);
 
   useEffect(() => {
     if (gameRef.current) {
@@ -118,6 +124,9 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
         // The scan allocates a stats snapshot, so only run it when a tracked
         // stat actually changed since the last scan.
         if (game.phase === 'playing' && game.mode === 'solo') {
+          if (game.distance > 460 || game.px > 500) {
+            firstJumpClearedRef.current?.();
+          }
           const sig = game.questScanSig();
           if (sig !== lastQuestSig) {
             lastQuestSig = sig;

@@ -919,6 +919,17 @@ function PixelShareIcon({ className = 'h-[14px] w-[14px]' }: { className?: strin
   );
 }
 
+function PixelInfoIcon({ className = 'h-3 w-3' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 8 8" className={className} fill="currentColor" shapeRendering="crispEdges" aria-hidden="true">
+      <rect x="3" y="1" width="2" height="1" />
+      <rect x="3" y="3" width="2" height="3" />
+      <rect x="2" y="3" width="1" height="1" />
+      <rect x="2" y="6" width="4" height="1" />
+    </svg>
+  );
+}
+
 /* ---------------------------------------------------------------- game over */
 export function GameOverScreen({
   stats,
@@ -930,6 +941,7 @@ export function GameOverScreen({
   touch,
   hideRetry = false,
   lang = 'en',
+  firstJumpHelp = false,
 }: {
   stats: Stats;
   best: number;
@@ -940,6 +952,7 @@ export function GameOverScreen({
   touch: boolean;
   hideRetry?: boolean;
   lang?: SupportedLanguage;
+  firstJumpHelp?: boolean;
 }) {
   const t = getTranslations(lang);
   const causeMap: Record<string, string> = {
@@ -950,6 +963,14 @@ export function GameOverScreen({
     hit: t.deathHit,
   };
   const causeLabel = (stats.cause && causeMap[stats.cause]) || t.deathDefault;
+
+  const isGamepad =
+    typeof document !== 'undefined' &&
+    (document.body.classList.contains('gamepad-active') ||
+      (typeof navigator !== 'undefined' && Boolean(navigator.getGamepads?.()?.some((gp) => gp?.connected))));
+  const jumpButtons = touch ? t.firstJumpTouchButtons : isGamepad ? t.firstJumpGamepadButtons : t.firstJumpKeyButtons;
+  const jumpHold = touch ? t.firstJumpTouchHold : isGamepad ? t.firstJumpGamepadHold : t.firstJumpKeyHold;
+  const jumpDouble = touch ? t.firstJumpTouchDouble : isGamepad ? t.firstJumpGamepadDouble : t.firstJumpKeyDouble;
 
   return (
     <div
@@ -987,6 +1008,19 @@ export function GameOverScreen({
             <Stat label={t.combo} value={'X' + stats.combo} color="var(--ui-purple)" />
           </div>
         </Panel>
+        {firstJumpHelp && (
+          <Panel className="w-full border-2 border-[var(--ui-accent)] bg-[var(--ui-panel)] p-3 text-center shadow-[3px_3px_0_var(--ui-bg)]">
+            <div className="mb-2 flex items-center justify-center gap-1.5 font-pixel text-[9px] uppercase tracking-wider text-[var(--ui-accent)] tablet:text-[11px]">
+              <PixelInfoIcon className="h-3 w-3 inline-block" />
+              <span>{t.firstJumpHelpTitle}</span>
+            </div>
+            <div className="flex flex-col gap-1 font-pixel text-[8px] tablet:text-[9px]">
+              <p className="font-bold text-[var(--ui-gold)] uppercase">{jumpButtons}</p>
+              <p className="text-[var(--ui-muted)] uppercase">{jumpHold}</p>
+              <p className="text-[var(--ui-accent)] uppercase">{jumpDouble}</p>
+            </div>
+          </Panel>
+        )}
         <div className="flex w-full max-w-[380px] flex-col items-center gap-2 tablet:max-w-[460px]">
           <div className="flex w-full gap-2">
             {!hideRetry && (

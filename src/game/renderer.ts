@@ -2290,9 +2290,20 @@ export class Renderer {
         }
         continue;
       }
-      // wiggle only when a player is close enough to be threatened
-      const nearX = this.g.localPlayers && this.g.localPlayers.length > 0 ? this.g.localPlayers[0].px : this.g.px;
-      const near = Math.abs(s.x + (s.n * 8) / 2 - nearX) < 140;
+      // Wiggle only during live play when an alive player is close
+      let near = false;
+      if (this.g.phase === 'playing' || this.g.phase === 'ready') {
+        if (this.g.isLocalBattle && this.g.localPlayers && this.g.localPlayers.length > 0) {
+          for (const lp of this.g.localPlayers) {
+            if (lp && lp.isAlive && Math.abs(s.x + (s.n * 8) / 2 - lp.px) < 140) {
+              near = true;
+              break;
+            }
+          }
+        } else {
+          near = Math.abs(s.x + (s.n * 8) / 2 - this.g.px) < 140;
+        }
+      }
       const wiggle = near && (this.g.frame & 3) < 2 ? 1 : 0;
       for (let i = 0; i < s.n; i++) {
         const x = x0 + i * 8;

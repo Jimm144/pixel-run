@@ -241,6 +241,8 @@ export function App() {
   }, []);
 
   const [touch, setTouch] = useState(false);
+  const [firstJumpHelp, setFirstJumpHelp] = useState(false);
+  const firstJumpDeathsRef = useRef(0);
   const [live, setLive] = useState<Stats>({ score: 0, meters: 0, gems: 0, coins: 0, kills: 0, combo: 0 });
   const [questRecord, setQuestRecord] = useState(() => loadQuestRecord());
   const [questRun, setQuestRun] = useState<QuestRunStats>(() => emptyQuestRunStats());
@@ -850,12 +852,20 @@ export function App() {
     sfx.play('ui');
     setUi('start');
     setBest(bestScore());
+    setFirstJumpHelp(false);
     if (pendingFeedbackPromptRef.current) {
       pendingFeedbackPromptRef.current = false;
       saveLastFeedbackPromptRun(pendingFeedbackRunCountRef.current);
       setShowFeedbackModal(true);
     }
   }, [commitQuestRun, finalizeActiveRun]);
+
+  const handleFirstJumpCleared = useCallback(() => {
+    if (firstJumpDeathsRef.current > 0 || firstJumpHelp) {
+      firstJumpDeathsRef.current = 0;
+      setFirstJumpHelp(false);
+    }
+  }, [firstJumpHelp]);
 
   const handleDeath = useCallback((s: Stats) => {
     const g = gameRef.current;
@@ -865,6 +875,22 @@ export function App() {
     if (runFinalizedRef.current) return;
     runFinalizedRef.current = true;
     persistRunResult(s);
+
+    const isSolo = g && g.mode === 'solo' && !g.isLocalBattle && !g.isMultiplayer;
+    if (isSolo) {
+      // Platform 0 ends at x = 380. Landing on platform 1 reaches distance > 450 (meters > 45).
+      const diedAtFirstJump = s.meters <= 45;
+      if (diedAtFirstJump) {
+        firstJumpDeathsRef.current += 1;
+        if (firstJumpDeathsRef.current >= 2) {
+          setFirstJumpHelp(true);
+        }
+      } else {
+        firstJumpDeathsRef.current = 0;
+        setFirstJumpHelp(false);
+      }
+    }
+
     setUi('over');
   }, [persistRunResult]);
 
@@ -954,6 +980,7 @@ export function App() {
           onMenu={toMenu}
           onQuestProgress={handleQuestProgress}
           onMatchEnd={handleMatchEnd}
+          onFirstJumpCleared={handleFirstJumpCleared}
           modalOpen={battleModalOpen || showFeedbackModal || skinsModalOpen || !!unlockedSkinPopup || !!saveLoadModal || updateModalOpen}
         />
         {ui === 'start' && !skinsModalOpen && !updateModalOpen && (
@@ -1025,7 +1052,30 @@ export function App() {
             hideRetry={gameRef.current?.mode === 'online'}
             touch={touch}
             lang={lang}
+            firstJumpHelp={firstJumpHelp}
           />
+        )}
+        {firstJumpHelp && ui === 'playing' && (
+          <div className="pointer-events-none absolute top-14 left-1/2 z-30 flex -translate-x-1/2 max-w-[90vw] flex-col items-center gap-1 border-2 border-[var(--ui-accent)] bg-[var(--ui-panel)]/95 px-3 py-1.5 text-center font-pixel shadow-[3px_3px_0_var(--ui-bg)]">
+            <span className="text-[8px] text-[var(--ui-gold)] uppercase tracking-wider tablet:text-[10px]">
+              {touch
+                ? t.firstJumpTouchButtons
+                : typeof document !== 'undefined' &&
+                  (document.body.classList.contains('gamepad-active') ||
+                    (typeof navigator !== 'undefined' && Boolean(navigator.getGamepads?.()?.some((gp) => gp?.connected))))
+                ? t.firstJumpGamepadButtons
+                : t.firstJumpKeyButtons}
+            </span>
+            <span className="text-[7px] text-[var(--ui-accent)] uppercase tracking-wide tablet:text-[9px]">
+              {touch
+                ? t.firstJumpTouchHud
+                : typeof document !== 'undefined' &&
+                  (document.body.classList.contains('gamepad-active') ||
+                    (typeof navigator !== 'undefined' && Boolean(navigator.getGamepads?.()?.some((gp) => gp?.connected))))
+                ? t.firstJumpGamepadHud
+                : t.firstJumpKeyHud}
+            </span>
+          </div>
         )}
         {questToast.length > 0 && <QuestCompletionToast quests={quests} completed={questToast} touch={touch} lang={lang} />}
         {skinToast && (

@@ -94,6 +94,21 @@ export interface TranslationStrings {
   deathHit: string;
   deathDefault: string;
 
+  // First Jump Tutorial
+  firstJumpHelpTitle: string;
+  firstJumpKeyButtons: string;
+  firstJumpKeyHold: string;
+  firstJumpKeyDouble: string;
+  firstJumpKeyHud: string;
+  firstJumpTouchButtons: string;
+  firstJumpTouchHold: string;
+  firstJumpTouchDouble: string;
+  firstJumpTouchHud: string;
+  firstJumpGamepadButtons: string;
+  firstJumpGamepadHold: string;
+  firstJumpGamepadDouble: string;
+  firstJumpGamepadHud: string;
+
   // Quests UI
   quests: string;
   dailyQuests: string;
@@ -234,6 +249,20 @@ export const TRANSLATIONS: Record<SupportedLanguage, TranslationStrings> = {
     deathHit: 'DEFEATED BY ENEMY',
     deathDefault: 'RUN TERMINATED',
 
+    firstJumpHelpTitle: 'HOW TO MAKE THE JUMP',
+    firstJumpKeyButtons: 'BUTTONS: SPACE OR W / UP',
+    firstJumpKeyHold: 'HOLD KEY TO JUMP HIGHER AND FARTHER',
+    firstJumpKeyDouble: 'PRESS AGAIN IN MID-AIR TO DOUBLE JUMP',
+    firstJumpKeyHud: 'HOLD [SPACE / W]: LONG JUMP | PRESS IN AIR: DOUBLE JUMP',
+    firstJumpTouchButtons: 'BUTTON: TAP SCREEN',
+    firstJumpTouchHold: 'HOLD TOUCH TO JUMP HIGHER AND FARTHER',
+    firstJumpTouchDouble: 'TAP AGAIN IN MID-AIR TO DOUBLE JUMP',
+    firstJumpTouchHud: 'HOLD TOUCH: LONG JUMP | TAP IN AIR: DOUBLE JUMP',
+    firstJumpGamepadButtons: 'BUTTON: (A) / (X)',
+    firstJumpGamepadHold: 'HOLD BUTTON TO JUMP HIGHER AND FARTHER',
+    firstJumpGamepadDouble: 'PRESS AGAIN IN MID-AIR TO DOUBLE JUMP',
+    firstJumpGamepadHud: 'HOLD (A): LONG JUMP | PRESS IN AIR: DOUBLE JUMP',
+
     quests: 'QUESTS',
     dailyQuests: 'DAILY QUESTS',
     complete: 'COMPLETE',
@@ -367,6 +396,20 @@ export const TRANSLATIONS: Record<SupportedLanguage, TranslationStrings> = {
     deathSpiker: 'ΑΓΚΑΘΙ (ΒΟΥΤΙΑ ΓΙΑ ΣΥΝΤΡΙΒΗ)',
     deathHit: 'ΗΤΤΑ ΑΠΟ ΕΧΘΡΟ',
     deathDefault: 'ΤΕΡΜΑΤΙΣΜΟΣ ΠΟΡΕΙΑΣ',
+
+    firstJumpHelpTitle: 'ΟΔΗΓΙΕΣ ΓΙΑ ΤΟ ΑΛΜΑ',
+    firstJumpKeyButtons: 'ΠΛΗΚΤΡΑ: SPACE Η W / UP',
+    firstJumpKeyHold: 'ΚΡΑΤΗΣΤΕ ΠΑΤΗΜΕΝΟ ΓΙΑ ΜΕΓΑΛΥΤΕΡΟ ΑΛΜΑ',
+    firstJumpKeyDouble: 'ΠΑΤΗΣΤΕ ΞΑΝΑ ΣΤΟΝ ΑΕΡΑ ΓΙΑ ΔΙΠΛΟ ΑΛΜΑ',
+    firstJumpKeyHud: 'ΚΡΑΤΗΣΤΕ [SPACE / W]: ΜΕΓΑΛΟ ΑΛΜΑ | ΣΤΟΝ ΑΕΡΑ: ΔΙΠΛΟ ΑΛΜΑ',
+    firstJumpTouchButtons: 'ΚΟΥΜΠΙ: ΠΑΤΗΣΤΕ ΤΗΝ ΟΘΟΝΗ',
+    firstJumpTouchHold: 'ΚΡΑΤΗΣΤΕ ΤΟ ΑΓΓΙΓΜΑ ΓΙΑ ΜΕΓΑΛΥΤΕΡΟ ΑΛΜΑ',
+    firstJumpTouchDouble: 'ΠΑΤΗΣΤΕ ΞΑΝΑ ΣΤΟΝ ΑΕΡΑ ΓΙΑ ΔΙΠΛΟ ΑΛΜΑ',
+    firstJumpTouchHud: 'ΚΡΑΤΗΣΤΕ ΑΓΓΙΓΜΑ: ΜΕΓΑΛΟ ΑΛΜΑ | ΣΤΟΝ ΑΕΡΑ: ΔΙΠΛΟ ΑΛΜΑ',
+    firstJumpGamepadButtons: 'ΚΟΥΜΠΙ: (A) / (X)',
+    firstJumpGamepadHold: 'ΚΡΑΤΗΣΤΕ ΤΟ ΚΟΥΜΠΙ ΓΙΑ ΜΕΓΑΛΥΤΕΡΟ ΑΛΜΑ',
+    firstJumpGamepadDouble: 'ΠΑΤΗΣΤΕ ΞΑΝΑ ΣΤΟΝ ΑΕΡΑ ΓΙΑ ΔΙΠΛΟ ΑΛΜΑ',
+    firstJumpGamepadHud: 'ΚΡΑΤΗΣΤΕ (A): ΜΕΓΑΛΟ ΑΛΜΑ | ΣΤΟΝ ΑΕΡΑ: ΔΙΠΛΟ ΑΛΜΑ',
 
     quests: 'ΑΠΟΣΤΟΛΕΣ',
     dailyQuests: 'ΗΜΕΡΗΣΙΕΣ ΑΠΟΣΤΟΛΕΣ',
@@ -502,6 +545,20 @@ export const TRANSLATIONS: Record<SupportedLanguage, TranslationStrings> = {
     deathHit: 'DERROTADO POR ENEMIGO',
     deathDefault: 'CARRERA TERMINADA',
 
+    firstJumpHelpTitle: 'COMO SALTAR EL ABISMO',
+    firstJumpKeyButtons: 'BOTONES: ESPACIO O W / UP',
+    firstJumpKeyHold: 'MANTEN PULSADO PARA SALTAR MAS LEJOS',
+    firstJumpKeyDouble: 'PULSA DE NUEVO EN EL AIRE PARA DOBLE SALTO',
+    firstJumpKeyHud: 'MANTEN [ESPACIO / W]: SALTO LARGO | EN EL AIRE: DOBLE SALTO',
+    firstJumpTouchButtons: 'BOTON: TOCA LA PANTALLA',
+    firstJumpTouchHold: 'MANTEN EL TOQUE PARA SALTAR MAS LEJOS',
+    firstJumpTouchDouble: 'TOCA DE NUEVO EN EL AIRE PARA DOBLE SALTO',
+    firstJumpTouchHud: 'MANTEN TOQUE: SALTO LARGO | EN EL AIRE: DOBLE SALTO',
+    firstJumpGamepadButtons: 'BOTON: (A) / (X)',
+    firstJumpGamepadHold: 'MANTEN EL BOTON PARA SALTAR MAS LEJOS',
+    firstJumpGamepadDouble: 'PULSA DE NUEVO EN EL AIRE PARA DOBLE SALTO',
+    firstJumpGamepadHud: 'MANTEN (A): SALTO LARGO | EN EL AIRE: DOBLE SALTO',
+
     quests: 'MISIONES',
     dailyQuests: 'MISIONES DIARIAS',
     complete: 'COMPLETADO',
@@ -635,6 +692,20 @@ export const TRANSLATIONS: Record<SupportedLanguage, TranslationStrings> = {
     deathSpiker: 'TOUCHÉ (PLONGEZ POUR ÉCRASER)',
     deathHit: 'VAINCU PAR UN ENNEMI',
     deathDefault: 'COURSE TERMINÉE',
+
+    firstJumpHelpTitle: 'COMMENT REUSSIR LE SAUT',
+    firstJumpKeyButtons: 'TOUCHES : ESPACE OU W / UP',
+    firstJumpKeyHold: 'MAINTENEZ POUR SAUTER PLUS LOIN',
+    firstJumpKeyDouble: 'REAPPUYEZ EN L\'AIR POUR UN DOUBLE SAUT',
+    firstJumpKeyHud: 'MAINTENEZ [ESPACE / W] : SAUT LONG | EN L\'AIR : DOUBLE SAUT',
+    firstJumpTouchButtons: 'COMMANDE : TOUCHER L\'ECRAN',
+    firstJumpTouchHold: 'MAINTENEZ LE DOIGT POUR SAUTER PLUS LOIN',
+    firstJumpTouchDouble: 'TOUCHEZ EN L\'AIR POUR UN DOUBLE SAUT',
+    firstJumpTouchHud: 'MAINTENEZ : SAUT LONG | EN L\'AIR : DOUBLE SAUT',
+    firstJumpGamepadButtons: 'BOUTON : (A) / (X)',
+    firstJumpGamepadHold: 'MAINTENEZ LE BOUTON POUR SAUTER PLUS LOIN',
+    firstJumpGamepadDouble: 'REAPPUYEZ EN L\'AIR POUR UN DOUBLE SAUT',
+    firstJumpGamepadHud: 'MAINTENEZ (A) : SAUT LONG | EN L\'AIR : DOUBLE SAUT',
 
     quests: 'QUÊTES',
     dailyQuests: 'QUÊTES DU JOUR',
@@ -770,6 +841,20 @@ export const TRANSLATIONS: Record<SupportedLanguage, TranslationStrings> = {
     deathHit: 'VOM GEGNER BESIEGT',
     deathDefault: 'LAUF BEENDET',
 
+    firstJumpHelpTitle: 'TIPPS FUER DEN SPRUNG',
+    firstJumpKeyButtons: 'TASTEN: LEERTASTE ODER W / UP',
+    firstJumpKeyHold: 'GEDRUECKT HALTEN FUER WEITE SPRUENGE',
+    firstJumpKeyDouble: 'IN DER LUFT ERNEUT DRUECKEN FUER DOPPELSPRUNG',
+    firstJumpKeyHud: 'HALTEN [LEERTASTE / W]: WEITER SPRUNG | IN DER LUFT: DOPPELSPRUNG',
+    firstJumpTouchButtons: 'STEUERUNG: BILDSCHIRM TIPPEN',
+    firstJumpTouchHold: 'FINGER HALTEN FUER WEITE SPRUENGE',
+    firstJumpTouchDouble: 'IN DER LUFT TIPPEN FUER DOPPELSPRUNG',
+    firstJumpTouchHud: 'HALTEN: WEITER SPRUNG | IN DER LUFT: DOPPELSPRUNG',
+    firstJumpGamepadButtons: 'TASTE: (A) / (X)',
+    firstJumpGamepadHold: 'TASTE HALTEN FUER WEITE SPRUENGE',
+    firstJumpGamepadDouble: 'IN DER LUFT ERNEUT DRUECKEN FUER DOPPELSPRUNG',
+    firstJumpGamepadHud: 'HALTEN (A): WEITER SPRUNG | IN DER LUFT: DOPPELSPRUNG',
+
     quests: 'QUESTS',
     dailyQuests: 'TÄGLICHE QUESTS',
     complete: 'FERTIG',
@@ -903,6 +988,20 @@ export const TRANSLATIONS: Record<SupportedLanguage, TranslationStrings> = {
     deathSpiker: 'ESPINHADO (MERGULHE P/ DESTRUIR)',
     deathHit: 'DERROTADO POR INIMIGO',
     deathDefault: 'CORRIDA FINALIZADA',
+
+    firstJumpHelpTitle: 'COMO PASSAR DO PRIMEIRO PULO',
+    firstJumpKeyButtons: 'BOTOES: ESPACO OU W / UP',
+    firstJumpKeyHold: 'SEGURE A TECLA PARA PULAR MAIS LONGE',
+    firstJumpKeyDouble: 'PRESSIONE DE NOVO NO AR PARA PULO DUPLO',
+    firstJumpKeyHud: 'SEGURE [ESPACO / W]: PULO LONGO | NO AR: PULO DUPLO',
+    firstJumpTouchButtons: 'BOTAO: TOQUE NA TELA',
+    firstJumpTouchHold: 'SEGURE O TOQUE PARA PULAR MAIS LONGE',
+    firstJumpTouchDouble: 'TOQUE DE NOVO NO AR PARA PULO DUPLO',
+    firstJumpTouchHud: 'SEGURE O TOQUE: PULO LONGO | NO AR: PULO DUPLO',
+    firstJumpGamepadButtons: 'BOTAO: (A) / (X)',
+    firstJumpGamepadHold: 'SEGURE O BOTAO PARA PULAR MAIS LONGE',
+    firstJumpGamepadDouble: 'PRESSIONE DE NOVO NO AR PARA PULO DUPLO',
+    firstJumpGamepadHud: 'SEGURE (A): PULO LONGO | NO AR: PULO DUPLO',
 
     quests: 'MISSÕES',
     dailyQuests: 'MISSÕES DIÁRIAS',
