@@ -1,6 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
+import { fileURLToPath, pathToFileURL } from 'url';
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const pubDir = path.resolve(scriptDir, '..', 'public');
 
 function createPNG(width, height, rgbaBuffer) {
   const crcTable = [];
@@ -253,7 +257,11 @@ function generatePreviewCard() {
   const buf = Buffer.alloc(W * H * 4);
 
   // Load the authentic in-game screenshot
-  const shotFile = path.resolve('public/screenshots/jungle.png');
+  const shotFile = path.resolve(pubDir, 'screenshots', 'jungle.png');
+  if (!fs.existsSync(shotFile)) {
+    console.error(`generate_assets: missing source screenshot: ${shotFile}`);
+    process.exit(1);
+  }
   const shot = decodePNG(fs.readFileSync(shotFile));
 
   // Sample screenshot with 1:1 pixel aspect ratio (scale = 0.75)
@@ -406,12 +414,18 @@ function generatePreviewCard() {
   return createPNG(W, H, buf);
 }
 
-const pubDir = path.resolve('public');
-const previewBuf = generatePreviewCard();
-fs.writeFileSync(path.join(pubDir, 'icon-192.png'), generateSquareAppIcon(192));
-fs.writeFileSync(path.join(pubDir, 'icon-512.png'), generateSquareAppIcon(512));
-fs.writeFileSync(path.join(pubDir, 'apple-touch-icon.png'), generateSquareAppIcon(180));
-fs.writeFileSync(path.join(pubDir, 'preview.png'), previewBuf);
-fs.writeFileSync(path.join(pubDir, 'og-image.png'), previewBuf);
+function main() {
+  const previewBuf = generatePreviewCard();
+  fs.writeFileSync(path.join(pubDir, 'icon-192.png'), generateSquareAppIcon(192));
+  fs.writeFileSync(path.join(pubDir, 'icon-512.png'), generateSquareAppIcon(512));
+  fs.writeFileSync(path.join(pubDir, 'apple-touch-icon.png'), generateSquareAppIcon(180));
+  fs.writeFileSync(path.join(pubDir, 'preview.png'), previewBuf);
+  fs.writeFileSync(path.join(pubDir, 'og-image.png'), previewBuf);
 
-console.log('Successfully regenerated clean preview banner!');
+  console.log('Successfully regenerated clean preview banner!');
+}
+
+const entryUrl = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : '';
+if (entryUrl && import.meta.url === entryUrl) {
+  main();
+}

@@ -2,14 +2,33 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="refresh" content="0; url=/" />
     <title>PIXEL RUN</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      html { background: #08040f; }
+      body {
+        color: #e8ecff;
+        font-family: "Press Start 2P", ui-monospace, "Courier New", monospace;
+        text-align: center;
+        padding: 24px;
+        line-height: 1.9;
+      }
+      a { color: #3ef2c8; }
+    </style>
     <script>
-      // Seamlessly route any legacy subpaths (e.g. /pixel-run or /pixel-run/index.html) to clean root /
-      window.location.replace('/');
+      // One-shot redirect for legacy subpaths (e.g. /pixel-run) to the app root.
+      // Guarded so this page can never loop if it is also served as the fallback at /.
+      (function () {
+        try {
+          if (sessionStorage.getItem('pixel-run-404') === window.location.pathname) return;
+          sessionStorage.setItem('pixel-run-404', window.location.pathname);
+          window.location.replace('./');
+        } catch (e) {}
+      })();
     </script>
   </head>
   <body>
-    <p>Redirecting to <a href="/">PIXEL RUN</a>...</p>
+    <p>Page not found.</p>
+    <p><a href="./">Play PIXEL RUN</a></p>
   </body>
 </html>

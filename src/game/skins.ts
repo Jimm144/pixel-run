@@ -591,9 +591,12 @@ export function loadUnlockedSkins(): SkinId[] {
       arr.push('gladiator');
     }
 
-    try {
-      localStorage.setItem(UNLOCKED_KEY, JSON.stringify(arr));
-    } catch {}
+    const next = JSON.stringify(arr);
+    if (next !== raw) {
+      try {
+        localStorage.setItem(UNLOCKED_KEY, next);
+      } catch {}
+    }
 
     return arr;
   } catch {

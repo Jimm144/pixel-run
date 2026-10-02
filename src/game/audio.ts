@@ -190,6 +190,9 @@ for (let i = 0; i < SEMI.length; i++) SEMI[i] = Math.pow(2, (i - 16) / 12);
 const COMBO_SCALES = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
 
 export class Sfx {
+  private static readonly MASTER_VOL = 0.5;
+  private static readonly MUSIC_VOL = 0.45;
+  private static readonly TONE_POOL_CAP = 24;
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private musicGain: GainNode | null = null;
@@ -213,8 +216,6 @@ export class Sfx {
   musicMuted = false;
   sfxMuted = false;
   private muffled = false;
-  private static readonly MASTER_VOL = 0.5;
-  private static readonly MUSIC_VOL = 0.45;
 
   init() {
     if (this.ctx) {
@@ -505,6 +506,22 @@ export class Sfx {
     return { osc, gain, freeAt: 0 };
   }
 
+  private releaseTone(n: PooledTone) {
+    if (this.musicTonePool.length < Sfx.TONE_POOL_CAP) {
+      this.musicTonePool.push(n);
+      return;
+    }
+    try {
+      n.osc.onended = () => {
+        try {
+          n.osc.disconnect();
+          n.gain.disconnect();
+        } catch {}
+      };
+      n.osc.stop(n.freeAt + 0.05);
+    } catch {}
+  }
+
   private musicTone(
     type: OscillatorType,
     f0: number,
@@ -530,7 +547,7 @@ export class Sfx {
       n.gain.gain.linearRampToValueAtTime(vol, t + 0.01);
       n.gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
       n.freeAt = t + dur + 0.03;
-      this.musicTonePool.push(n);
+      this.releaseTone(n);
     } catch {}
   }
 
@@ -553,7 +570,7 @@ export class Sfx {
           n.gain.gain.setValueAtTime(0.45, t);
           n.gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
           n.freeAt = t + 0.15;
-          this.musicTonePool.push(n);
+          this.releaseTone(n);
         } catch {}
       }
     } else if (type === 'snare') {
@@ -569,6 +586,11 @@ export class Sfx {
       src.connect(filt);
       filt.connect(gain);
       gain.connect(this.musicGain);
+      src.onended = () => {
+        src.disconnect();
+        filt.disconnect();
+        gain.disconnect();
+      };
       src.start(t);
       src.stop(t + 0.12);
       const osc = ctx.createOscillator();
@@ -581,6 +603,10 @@ export class Sfx {
       oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
       osc.connect(oscGain);
       oscGain.connect(this.musicGain);
+      osc.onended = () => {
+        osc.disconnect();
+        oscGain.disconnect();
+      };
       osc.start(t);
       osc.stop(t + 0.07);
     } else if (type === 'hihat') {
@@ -596,6 +622,11 @@ export class Sfx {
       src.connect(filt);
       filt.connect(gain);
       gain.connect(this.musicGain);
+      src.onended = () => {
+        src.disconnect();
+        filt.disconnect();
+        gain.disconnect();
+      };
       src.start(t);
       src.stop(t + 0.07);
     }
@@ -677,6 +708,10 @@ export class Sfx {
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
       osc.connect(g);
       g.connect(this.sfxFilter);
+      osc.onended = () => {
+        osc.disconnect();
+        g.disconnect();
+      };
       osc.start(t);
       osc.stop(t + dur + 0.02);
     } catch {}
@@ -699,6 +734,11 @@ export class Sfx {
     src.connect(filt);
     filt.connect(g);
     g.connect(this.sfxFilter);
+    src.onended = () => {
+      src.disconnect();
+      filt.disconnect();
+      g.disconnect();
+    };
     src.start(t);
     src.stop(t + dur + 0.02);
   }

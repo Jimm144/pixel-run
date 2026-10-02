@@ -153,6 +153,7 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
               <button
                 type="button"
                 onClick={finalizeClose}
+                aria-label="Close"
                 className="font-pixel text-[8px] text-[var(--ui-muted)] hover:text-[#ffffff]"
               >
                 [X]
@@ -194,6 +195,7 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
               <button
                 type="button"
                 onClick={finalizeClose}
+                aria-label="Close"
                 className="font-pixel text-[8px] text-[var(--ui-muted)] hover:text-[#ffffff]"
               >
                 [X]
@@ -268,6 +270,7 @@ export function FeedbackModal({ onClose }: FeedbackModalProps) {
                 value={issueText}
                 onChange={(e) => setIssueText(e.target.value)}
                 onKeyDown={(e) => e.stopPropagation()}
+                aria-label="What happened or what can be improved?"
                 placeholder="What happened or what can be improved?"
                 rows={3}
                 className="w-full resize-none border border-[var(--ui-border3)] bg-[var(--ui-panel3)] p-1.5 font-pixel text-[8px] text-[#ffffff] placeholder-[var(--ui-muted)] outline-none focus:border-[var(--ui-accent)]"

@@ -32,7 +32,12 @@ export function SkinUnlockModal({ skinId, onEquip, onClose, lang = 'en' }: SkinU
     if (!ctx) return;
 
     let frame = 0;
-    const render = () => {
+    let last = 0;
+    const render = (now: number) => {
+      animRef.current = requestAnimationFrame(render);
+      if (document.hidden) return;
+      if (now - last < 33) return;
+      last = now;
       frame++;
       ctx.clearRect(0, 0, cv.width, cv.height);
       ctx.imageSmoothingEnabled = false;
@@ -48,8 +53,6 @@ export function SkinUnlockModal({ skinId, onEquip, onClose, lang = 'en' }: SkinU
         onGround: true,
         run: Math.floor(frame / 6) % 4,
       });
-
-      animRef.current = requestAnimationFrame(render);
     };
 
     animRef.current = requestAnimationFrame(render);

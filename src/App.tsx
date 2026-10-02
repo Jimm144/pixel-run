@@ -289,6 +289,8 @@ export function App() {
     skinToastTimer.current = window.setTimeout(() => setSkinToast(null), 3500);
   }, []);
 
+  useEffect(() => () => window.clearTimeout(skinToastTimer.current), []);
+
   const pendingFeedbackPromptRef = useRef(false);
   const pendingFeedbackRunCountRef = useRef(0);
   const runFinalizedRef = useRef(false);
@@ -569,7 +571,6 @@ export function App() {
    *  unlocks, run count, cookie backup. Shared by death, retry and menu. */
   const persistRunResult = useCallback((s: Stats) => {
     commitQuestRun();
-    setQuestRecord(loadQuestRecord());
     setStats(s);
     const entry = { score: s.score, meters: s.meters, coins: s.coins ?? 0, ts: Date.now() };
     saveLastRun(entry);
@@ -734,7 +735,7 @@ export function App() {
     } finally {
       scoreShareBusyRef.current = false;
     }
-  }, [stats, best, newBest]);
+  }, [stats, newBest]);
 
   const start = useCallback(() => {
     commitQuestRun();
@@ -955,7 +956,7 @@ export function App() {
   }, [handleMatchEnd]);
 
   return (
-    <div className="fixed inset-0 h-full h-[100dvh] w-full w-[100dvw] flex min-h-0 min-w-0 items-center justify-center overflow-hidden bg-[var(--ui-bg)] font-pixel">
+    <div className="fixed inset-0 h-[100dvh] w-[100dvw] flex min-h-0 min-w-0 items-center justify-center overflow-hidden bg-[var(--ui-bg)] font-pixel">
       <div className="relative h-full min-h-0 min-w-0 w-full">
         <GameCanvas
           gameRef={gameRef}
@@ -1056,7 +1057,7 @@ export function App() {
           />
         )}
         {firstJumpHelp && ui === 'playing' && (
-          <div className="pointer-events-none absolute top-14 left-1/2 z-30 flex -translate-x-1/2 max-w-[90vw] flex-col items-center gap-1 border-2 border-[var(--ui-accent)] bg-[var(--ui-panel)]/95 px-3 py-1.5 text-center font-pixel shadow-[3px_3px_0_var(--ui-bg)]">
+          <div role="status" aria-live="polite" className="pointer-events-none absolute top-14 left-1/2 z-30 flex -translate-x-1/2 max-w-[90vw] flex-col items-center gap-1 border-2 border-[var(--ui-accent)] bg-[var(--ui-panel)]/95 px-3 py-1.5 text-center font-pixel shadow-[3px_3px_0_var(--ui-bg)]">
             <span className="text-[8px] text-[var(--ui-gold)] uppercase tracking-wider tablet:text-[10px]">
               {touch
                 ? t.firstJumpTouchButtons
@@ -1079,7 +1080,7 @@ export function App() {
         )}
         {questToast.length > 0 && <QuestCompletionToast quests={quests} completed={questToast} touch={touch} lang={lang} />}
         {skinToast && (
-          <div className="fixed top-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 border-2 border-[var(--ui-accent)] bg-[var(--ui-panel)]/95 px-4 py-2 font-pixel text-[var(--ui-accent)] shadow-[4px_4px_0_var(--ui-bg)]">
+          <div role="status" aria-live="polite" className="fixed top-5 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 border-2 border-[var(--ui-accent)] bg-[var(--ui-panel)]/95 px-4 py-2 font-pixel text-[var(--ui-accent)] shadow-[4px_4px_0_var(--ui-bg)]">
             <span className="text-[8px] tablet:text-[10px] uppercase">{skinToast}</span>
           </div>
         )}
@@ -1158,7 +1159,7 @@ export function App() {
           <button
             type="button"
             onClick={toMenu}
-            className="fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] right-[max(0.75rem,env(safe-area-inset-right))] z-40 border-2 border-[var(--ui-danger)] bg-[var(--ui-panel)]/90 px-3 py-1.5 font-pixel text-[8px] text-[var(--ui-danger)] shadow-[3px_3px_0_var(--ui-bg)] transition-colors hover:bg-[var(--ui-danger)]/20 tablet:text-[10px]"
+            className="fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] right-[max(0.75rem,env(safe-area-inset-right))] z-40 border-2 border-[var(--ui-danger)] bg-[var(--ui-panel)]/90 px-4 py-2 min-h-[28px] min-w-[28px] font-pixel text-[8px] text-[var(--ui-danger)] shadow-[3px_3px_0_var(--ui-bg)] transition-colors hover:bg-[var(--ui-danger)]/20 tablet:text-[10px]"
           >
             {t.leaveMatch}
           </button>

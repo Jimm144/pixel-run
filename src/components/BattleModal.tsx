@@ -111,22 +111,25 @@ export function BattleModal({
         const cleaned = saved.replace(/[^\x20-\x7E]/g, '');
         if (cleaned) return cleaned;
       }
-      localStorage.setItem(ONLINE_NAME_KEY, fallback);
     } catch {}
     return fallback || localName;
   });
 
+  const persistOnlineName = (name: string) => {
+    try {
+      localStorage.setItem(ONLINE_NAME_KEY, name);
+    } catch {}
+  };
+
   const updateOnlineName = (v: string) => {
     const cleaned = v.replace(/[^\x20-\x7E]/g, '');
     setOnlineName(cleaned);
-    try {
-      localStorage.setItem(ONLINE_NAME_KEY, cleaned);
-    } catch {}
+    persistOnlineName(cleaned);
     party.rename(cleaned);
   };
 
   // Local Battle 2-4 Players — persisted across matches and sessions
-  const savedCfg = useRef<LocalBattleConfig | null>(loadLocalConfig()).current;
+  const [savedCfg] = useState(() => loadLocalConfig());
   const [playerCount, setPlayerCount] = useState<2 | 3 | 4>(savedCfg?.count ?? 2);
   const [playerNames, setPlayerNames] = useState<string[]>(savedCfg?.names ?? [
     'PLAYER 1',
@@ -165,14 +168,18 @@ export function BattleModal({
    *  fires onStartOnlineBattle after the player left the room. */
   const countdownTimerRef = useRef(0);
   const countdownIntervalRef = useRef(0);
+  const copiedTimerRef = useRef(0);
 
   roomCodeRef.current = roomCode;
+
+  useEffect(() => () => window.clearTimeout(copiedTimerRef.current), []);
 
   const hasAutoJoinHash = () =>
     typeof window !== 'undefined' && window.location.hash.startsWith('#battle=');
 
   // Initialize Host Room
   const initHost = useCallback(async () => {
+    persistOnlineName(onlineName);
     const code = await party.host(onlineName, localSkin, false);
     if (party.role !== 'host' || party.roomId !== code) return;
     setRoomCode(code);
@@ -314,7 +321,12 @@ export function BattleModal({
   useEffect(() => {
     let animId = 0;
     let frame = 0;
-    const render = () => {
+    let last = 0;
+    const render = (now: number) => {
+      animId = requestAnimationFrame(render);
+      if (document.hidden) return;
+      if (now - last < 33) return;
+      last = now;
       frame++;
 
       if (tab === 'local') {
@@ -368,7 +380,6 @@ export function BattleModal({
           }
         });
       }
-      animId = requestAnimationFrame(render);
     };
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
@@ -402,6 +413,7 @@ export function BattleModal({
     // No UI-side timeout here: partyManager's own ~105s join watchdog bails
     // with 'ROOM NOT FOUND - IT MAY HAVE CLOSED' if the room never proves
     // it exists, and the onStatusMsg handler resets isJoining on it.
+    persistOnlineName(onlineName);
     const joinedRoom = await party.join(code, onlineName, localSkin);
     if (attempt !== joinAttemptRef.current) return;
     if (!joinedRoom) {
@@ -447,7 +459,8 @@ export function BattleModal({
     if (ok) {
       setCopied(true);
       sfx.play('ui');
-      setTimeout(() => setCopied(false), 2200);
+      window.clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = window.setTimeout(() => setCopied(false), 2200);
     }
   };
 
@@ -616,9 +629,13 @@ export function BattleModal({
           /* 3. LOBBY & HOST/JOIN/LOCAL TABS */
           <div className="flex w-full flex-col items-center overflow-y-auto py-1.5">
             {/* Primary Mode Tabs */}
-            <div className="mb-4 flex w-full max-w-md border border-[var(--ui-border2)] bg-[var(--ui-bg)]">
+            <div role="tablist" aria-label="Battle mode" className="mb-4 flex w-full max-w-md border border-[var(--ui-border2)] bg-[var(--ui-bg)]">
               <button
                 type="button"
+                role="tab"
+                id="battle-tab-host"
+                aria-selected={tab === 'host'}
+                aria-controls="battle-panel-host"
                 onClick={() => {
                   if (hostInitInFlightRef.current) return;
                   joinAttemptRef.current++;
@@ -641,6 +658,10 @@ export function BattleModal({
               </button>
               <button
                 type="button"
+                role="tab"
+                id="battle-tab-join"
+                aria-selected={tab === 'join'}
+                aria-controls="battle-panel-join"
                 onClick={() => {
                   joinAttemptRef.current++;
                   setTab('join');
@@ -660,6 +681,10 @@ export function BattleModal({
               </button>
               <button
                 type="button"
+                role="tab"
+                id="battle-tab-local"
+                aria-selected={tab === 'local'}
+                aria-controls="battle-panel-local"
                 onClick={() => {
                   joinAttemptRef.current++;
                   setTab('local');
@@ -703,7 +728,7 @@ export function BattleModal({
 
             {/* HOST SECTION */}
             {tab === 'host' && (
-              <div className="flex flex-col items-center gap-3 mb-4 w-full px-2 sm:px-4">
+              <div id="battle-panel-host" role="tabpanel" aria-labelledby="battle-tab-host" className="flex flex-col items-center gap-3 mb-4 w-full px-2 sm:px-4">
                 <div className="flex items-center gap-2">
                   <span className="text-[8px] text-[var(--ui-muted)]">ROOM CODE:</span>
                   <div className="border border-[var(--ui-gold)] bg-[var(--ui-gold-dim)] px-3 py-1 text-[12px] tracking-widest text-[var(--ui-gold)]">
@@ -722,7 +747,7 @@ export function BattleModal({
 
             {/* JOIN SECTION */}
             {tab === 'join' && (
-              <div className="flex flex-col items-center gap-2.5 mb-4 w-full max-w-md px-2 sm:px-4">
+              <div id="battle-panel-join" role="tabpanel" aria-labelledby="battle-tab-join" className="flex flex-col items-center gap-2.5 mb-4 w-full max-w-md px-2 sm:px-4">
                 <div className="flex w-full gap-2">
                   <input
                     type="text"
@@ -757,7 +782,7 @@ export function BattleModal({
 
             {/* LOCAL BATTLE (2 - 4 PLAYERS) */}
             {tab === 'local' && (
-              <div className="flex flex-col items-center gap-4 mb-4 w-full px-3 py-1 sm:px-6">
+              <div id="battle-panel-local" role="tabpanel" aria-labelledby="battle-tab-local" className="flex flex-col items-center gap-4 mb-4 w-full px-3 py-1 sm:px-6">
                 {/* Player count buttons */}
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-[8px] text-[var(--ui-muted)]">PLAYERS:</span>

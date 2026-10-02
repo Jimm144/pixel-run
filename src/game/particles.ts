@@ -9,6 +9,8 @@ import { P_CAP, ri, rnd, VW, type Particle } from './types';
 export class ParticleSystem {
   private alive: Particle[] = [];
   private free: Particle[] = [];
+  private evictIdx = 0;
+  private overflowScans = 0;
 
   reset() {
     this.free.push(...this.alive);
@@ -26,15 +28,19 @@ export class ParticleSystem {
     grav = 0.14,
     drag = 1,
   ) {
-    // Hard cap: recycle the particle with the lowest remaining life
+    // Hard cap: recycle a short-lived particle (lowest-life scan every 8th overflow)
     if (this.alive.length >= P_CAP) {
-      let minIdx = 0;
-      let minLife = this.alive[0].life;
-      for (let i = 1; i < this.alive.length; i++) {
-        if (this.alive[i].life < minLife) {
-          minLife = this.alive[i].life;
-          minIdx = i;
+      let minIdx = this.evictIdx;
+      if ((this.overflowScans++ & 7) === 0) {
+        minIdx = 0;
+        let minLife = this.alive[0].life;
+        for (let i = 1; i < this.alive.length; i++) {
+          if (this.alive[i].life < minLife) {
+            minLife = this.alive[i].life;
+            minIdx = i;
+          }
         }
+        this.evictIdx = minIdx;
       }
       const recycled = this.alive[minIdx];
       this.alive[minIdx] = this.alive[this.alive.length - 1];
@@ -62,11 +68,18 @@ export class ParticleSystem {
     for (let i = 0; i < n; i++) {
       const a = rnd(0, Math.PI * 2);
       const s = rnd(power * 0.35, power);
+      const dx = Math.cos(a) * s;
+      const dy = Math.sin(a) * s - power * 0.25;
+      // Seed each particle with a little radial offset along its own velocity.
+      // Spawned dead-centre they all stack on one pixel, so a hit-stop frame -
+      // which deliberately freezes particles - showed a single dot instead of
+      // the impact flash. Offsetting by speed gives the burst volume from the
+      // very first frame without changing where it ends up.
       this.spawnP(
-        x,
-        y,
-        Math.cos(a) * s,
-        Math.sin(a) * s - power * 0.25,
+        x + dx * 1.2,
+        y + dy * 1.2,
+        dx,
+        dy,
         ri(16, 34),
         Math.random() < 0.3 ? 2 : 1,
         cols[ri(0, cols.length - 1)],

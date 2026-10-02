@@ -21,7 +21,7 @@ import {
   GRAV_FALL,
   GRAV_HOLD,
   GROUND_BOTTOM,
-  JUMP_V,
+JUMP_V,
   MAX_FALL,
   MEGA_PAD_V,
   PAD_V,
@@ -231,8 +231,6 @@ export class Game implements GenHost, RenderHost {
   coyote!: number;
   jumps!: number;
   cut!: boolean;
-  aiJumpFrame!: number;
-  aiCutAt!: number;
   aiDoublePending!: boolean;
   aiPitJumpTtl!: number;
   aiPadRide!: boolean;
@@ -376,8 +374,6 @@ export class Game implements GenHost, RenderHost {
       coyote: 0,
       jumps: 0,
       cut: false,
-      aiJumpFrame: 0,
-      aiCutAt: 0,
       aiDoublePending: false,
       aiPitJumpTtl: 0,
       aiPadRide: false,
@@ -584,7 +580,7 @@ export class Game implements GenHost, RenderHost {
     p.diveHeld = true;
     p.diveBuf = 6;
     if ((this.phase !== 'playing' && this.phase !== 'ready') || this.countdown > 0) return;
-    if (!p.onGround && p.vy > -3) {
+    if (!p.onGround && p.vy > 0.5) {
       p.diving = true;
       p.padFlight = 0;
       p.vy = Math.max(p.vy, 6.5);
@@ -616,6 +612,28 @@ export class Game implements GenHost, RenderHost {
   /** Called when the canvas size changes — drops size-dependent art caches. */
   invalidateViewport() {
     this.renderer.invalidateViewport();
+  }
+
+  /** Called right after setViewportSize() changed VW. anchorX() moves with the
+   *  view width, so a mid-run resize (desktop window drag, phone rotation)
+   *  would otherwise snap the camera by the anchor delta and shift the
+   *  pre-generated horizon in from under the player. Shifting every world-space
+   *  position by the same delta keeps the player at the same screen column and
+   *  the visible slice of already-generated level identical. */
+  reanchorAfterResize(prevVW: number) {
+    const delta = anchorX() - Math.round(prevVW * 0.28);
+    if (delta === 0) return;
+    this.px += delta;
+    this.startX += delta;
+    this.camX = Math.max(0, this.camX + delta);
+    if (this.camX < 0) this.camX = 0;
+    for (const p of this.platforms) p.x += delta;
+    for (const s of this.springs) s.x += delta;
+    for (const sp of this.spikes) sp.x += delta;
+    for (const e of this.enemies) e.x += delta;
+    for (const u of this.powerups) u.x += delta;
+    for (const t of this.worldGen.eventTriggers) t.x += delta;
+    for (const k of this.pickups) k.x += delta;
   }
 
   /** HUD zoom (1 on desktop) — larger on phones where the canvas is scaled up. */
@@ -741,11 +759,12 @@ export class Game implements GenHost, RenderHost {
   }
   releaseJump() {
     this.jumpHeld = false;
-    // A tap released during the countdown must not fire at GO — clearing the
-    // buffer here cancels any buffered jump (held input survives via
-    // jumpHeld, which resume()/the countdown re-buffers at GO).
-    this.jumpBuf = 0;
-    this.diveBuf = 0;
+    // A tap released during the countdown or a rocket ride stays buffered so
+    // it still fires at GO / when the flight ends.
+    if (this.countdown <= 0 && this.padFlight <= 0) {
+      this.jumpBuf = 0;
+      this.diveBuf = 0;
+    }
     if (this.phase === 'paused') {
       this.savedJumpHeld = false;
       this.savedJumpBuf = 0;
@@ -760,7 +779,7 @@ export class Game implements GenHost, RenderHost {
     }
     this.diveHeld = true;
     this.diveBuf = 6;
-    if (!this.onGround && this.vy > -3) {
+    if (!this.onGround && this.vy > 0.5) {
       this.diving = true;
       this.padFlight = 0;
       this.vy = Math.max(this.vy, 6.5);
@@ -771,7 +790,7 @@ export class Game implements GenHost, RenderHost {
   }
   releaseDive() {
     this.diveHeld = false;
-    this.diveBuf = 0;
+    if (this.countdown <= 0) this.diveBuf = 0;
     if (this.phase === 'paused') this.savedDiveHeld = false;
   }
   setMove(d: number) {
@@ -905,6 +924,26 @@ export class Game implements GenHost, RenderHost {
 
     if (this.freeze > 0) {
       this.freeze--;
+      // Hit-stop holds the ANIMATION, not the juice. The frame counter and
+      // the particles must stay frozen or the impact read collapses: g.frame
+      // drives every sprite cycle/flicker/spin in the renderer, so advancing it
+      // here made the world keep animating while the sim was stopped, and
+      // letting the burst particles advance dispersed the hit spark on the very
+      // frame it was spawned. Camera shake and the flash decay above this
+      // block, so they keep moving and carry the punch instead.
+      //
+      // What must keep ticking is anything the player would notice as a stall:
+      // the combo window and the death slow-mo pacing (otherwise a freeze on
+      // the death frame pushes the death report out by the hit-stop length).
+      if (this.comboT > 0) {
+        this.comboT--;
+        if (this.comboT === 0) this.combo = 0;
+      }
+      if (this.phase === 'dead') {
+        this.deathTimer++;
+        this.slowAcc += this.deathTimer < 40 ? 0.35 : 1;
+        if (this.slowAcc >= 1) this.slowAcc -= 1;
+      }
       return;
     }
 
@@ -941,6 +980,23 @@ export class Game implements GenHost, RenderHost {
       this.updateEntities(false, false, 0, 0);
       this.particles.update(1);
       this.texts.update();
+      // Keep the HUD alive while spectating: score, combo timer and the weather
+      // follow the leading teammate instead of freezing at the death point.
+      let leadX = -Infinity;
+      let leadY = this.py;
+      for (let i = 1; i < this.localPlayers.length; i++) {
+        const lp = this.localPlayers[i];
+        if (lp.isAlive && lp.px > leadX) {
+          leadX = lp.px;
+          leadY = lp.py;
+        }
+      }
+      this.updateBiomeEvent(leadX, leadY);
+      this.syncDistanceScore();
+      if (this.comboT > 0) {
+        this.comboT--;
+        if (this.comboT === 0) this.combo = 0;
+      }
       const camAlive = this.multiCamTarget();
       if (camAlive !== null) {
         this.camX += (camAlive - this.camX) * 0.22;
@@ -949,6 +1005,28 @@ export class Game implements GenHost, RenderHost {
       this.worldGen.generate(this.camX + VW * 2.2);
       if (this.frame % 20 === 0) this.cull();
       return;
+    }
+
+    // campaign win lap: the runner sprints past the flag trailing confetti
+    // for a beat before the victory screen takes over. invuln is pinned so
+    // nothing can kill during the celebration.
+    if (this.winT > 0) {
+      this.winT--;
+      // Pinned above the remaining lap so the invuln tick in
+      // updatePowerUpTimers can never drain it before the lap ends.
+      this.invuln = Math.max(this.invuln, this.winT + 1);
+      if (this.winT % 6 === 0) {
+        this.confettiTick();
+      }
+      if (this.winT === 0) {
+        this.invuln = 0;
+        // A real death always wins the race — never let the celebration
+        // overwrite a phase='dead' with a campaign win.
+        if (this.phase !== 'dead') {
+          this.phase = 'over';
+          this.onCampaignWin?.(this.campaignLevel, Math.floor(this.distance / 10));
+        }
+      }
     }
 
     // death slow-mo
@@ -971,20 +1049,6 @@ export class Game implements GenHost, RenderHost {
       this.updateSpectatorCamera();
       this.updateEntities(false, false, 0, this.py + PLAYER_H);
       return;
-    }
-
-    // campaign win lap: the runner sprints past the flag trailing confetti
-    // for a beat before the victory screen takes over. invuln is pinned so
-    // nothing can kill during the celebration.
-    if (this.winT > 0) {
-      this.winT--;
-      if (this.winT % 6 === 0) {
-        this.confettiTick();
-      }
-      if (this.winT === 0) {
-        this.phase = 'over';
-        this.onCampaignWin?.(this.campaignLevel, Math.floor(this.distance / 10));
-      }
     }
 
     const alive = this.phase === 'playing' || this.phase === 'ready';
@@ -1022,7 +1086,7 @@ export class Game implements GenHost, RenderHost {
     }
 
     /* ---- jumping */
-    if (this.jumpBuf > 0) this.jumpBuf--;
+    if (this.jumpBuf > 0 && this.padFlight <= 0) this.jumpBuf--;
     if (this.diveBuf > 0) this.diveBuf--;
     if (this.coyote > 0) this.coyote--;
     if (this.jumpBuf > 0 && this.padFlight <= 0) {
@@ -1032,6 +1096,10 @@ export class Game implements GenHost, RenderHost {
         this.doJump(true);
       }
     }
+    // Variable jump height: releasing early clamps the leftover rise to a fixed
+    // ceiling rather than scaling the velocity down. Scaling (vy *= 0.5) made a
+    // tap worth ~13px against a ~57px hold - a cliff with no usable in-between.
+    // The clamp gives ~24px..~57px, so height tracks how long jump is held.
     if (!this.jumpHeld && this.vy < -3 && !this.cut) {
       this.vy *= 0.52;
       this.cut = true;
@@ -1048,7 +1116,9 @@ export class Game implements GenHost, RenderHost {
       this.sx = 0.8;
       this.sy = 1.25;
     }
-    const hasPropeller = (this.propellerHat > 0 || this.propellerFlashing) && !this.onGround && !this.diving && this.padFlight <= 0;
+    // Same form as the local-battle runners (stepLocalPlayer): the hat itself
+    // is the timer, the expiry flash is only the warning.
+    const hasPropeller = this.propellerHat > 0 && !this.onGround && !this.diving && this.padFlight <= 0;
     let g = GRAV_FALL;
     if (this.diving) g = GRAV_DIVE;
     else if (hasPropeller) {
@@ -1074,12 +1144,18 @@ export class Game implements GenHost, RenderHost {
     const prevBottom = this.py + PLAYER_H;
     this.prevFeet = prevBottom;
     this.px += this.vx;
-    if (!this.resolveX()) {
+    // A wall death ends the run, not the frame: the vertical step, entities,
+    // camera and world upkeep below still run once so the death frame matches
+    // every other one.
+    const wallHit = !this.resolveX();
+    if (!wallHit) {
+      this.py += this.vy;
+      this.resolveY(prevBottom);
+    } else {
+      // Keep the distance from the death frame in the final score (the score
+      // section below only runs while phase is 'playing').
       this.syncDistanceScore();
-      return;
     }
-    this.py += this.vy;
-    this.resolveY(prevBottom);
 
     /* ---- squash & spin */
     this.sx += (1 - this.sx) * 0.18;
@@ -1343,6 +1419,9 @@ export class Game implements GenHost, RenderHost {
         this.py < p.y + bh
       ) {
         if (this.vx > 0) {
+          // Rocket ride: the pad arc is planned through the gap, so wall contact
+          // can't end the run — same immunity as the enemy sweep below.
+          if (this.padFlight > 0) continue;
           // Invulnerability protects first — a freshly collected shield must
           // not be consumed while the invuln window is still active.
           if (this.invuln > 0) {
@@ -1777,13 +1856,19 @@ export class Game implements GenHost, RenderHost {
           // A hit is a lethal side-collision ONLY if:
           // 1. The player was already walking horizontally on the ground without jumping/falling.
           // 2. OR the player jumped upward from beneath a solid platform and bumped head into enemy bottom.
-          // In all other cases (falling, landing from jump, airborne touch, dive, flyer touch), it is a STOMP!
+          // 3. OR the rising jump arc grazed the enemy's flank — wasAirborne is
+          //    already true for the whole ascent, so without this every jump
+          //    would wipe out whatever it passed on the way up.
+          // In all other cases (falling, landing from jump, dive, flyer touch), it is a STOMP!
           const isGroundedWalkHit = !wasAirborne && this.onGround && preVy <= 0 && this.vy <= 0 && !isDiving;
           const isUpwardHeadBump = e.kind !== 'flyer' && (preVy < -2.5 || this.vy < -2.5) && (pyc >= e.y + e.h - 3);
+          // Only a downward contact (feet descending onto the top) is a stomp;
+          // flyers keep crushing on any touch, they have no top to land on.
+          const isRisingSideHit = e.kind !== 'flyer' && preVy <= 0 && this.vy <= 0;
 
           const stomping =
             stompedThisFrame ||
-            (!isGroundedWalkHit && !isUpwardHeadBump);
+            (!isGroundedWalkHit && !isUpwardHeadBump && !isRisingSideHit);
 
           if (stomping) {
             this.killEnemy(e, STOMP_PTS);
@@ -1808,7 +1893,9 @@ export class Game implements GenHost, RenderHost {
       this.cut = false;
       this.sx = 1.35;
       this.sy = 0.7;
-      this.freeze = 4;
+      // Never shorten the hit-stop killEnemy already set — stomping a spiker
+      // (5f) used to get knocked back down to 4f by this assignment.
+      this.freeze = Math.max(this.freeze, 4);
       this.addShake(0.34);
     }
 
@@ -1917,7 +2004,10 @@ export class Game implements GenHost, RenderHost {
             } else {
               const isLocalGroundedWalkHit = !lpAirborne && lp.onGround && lpPreVy <= 0 && lp.vy <= 0 && !lpDiving;
               const isLocalUpwardHeadBump = e.kind !== 'flyer' && (lpPreVy < -2.5 || lp.vy < -2.5) && (ly >= e.y + e.h - 3);
-              const landingStomp = !isLocalGroundedWalkHit && !isLocalUpwardHeadBump;
+              // Same rule as P1: only a downward contact onto the top is a
+              // landing stomp, a rising flank brush is a hit.
+              const isLocalRisingSideHit = e.kind !== 'flyer' && lpPreVy <= 0 && lp.vy <= 0;
+              const landingStomp = !isLocalGroundedWalkHit && !isLocalUpwardHeadBump && !isLocalRisingSideHit;
 
               if (landingStomp) {
                 e.dead = true;
@@ -2005,13 +2095,16 @@ export class Game implements GenHost, RenderHost {
           const launchVy = sp.mega ? -MEGA_PAD_V : -PAD_V;
           const launchVx = sp.launchVx;
           const flight = 90;
+          // The pad counts as the jump that left the ground: one air jump left
+          // after the ride, exactly like a ground jump (jumps=1) — not two.
+          const launchJumps = 1;
 
           if (isMain) {
             this.py = launchY;
             this.vy = launchVy;
             this.vx = launchVx;
             this.padFlight = flight;
-            this.jumps = 0;
+            this.jumps = launchJumps;
             this.onGround = false;
             this.coyote = 0;
             this.cut = true;
@@ -2024,7 +2117,7 @@ export class Game implements GenHost, RenderHost {
               lp.vy = launchVy;
               lp.vx = launchVx;
               lp.padFlight = flight;
-              lp.jumps = 0;
+              lp.jumps = launchJumps;
               lp.onGround = false;
               lp.coyote = 0;
               lp.cut = true;
@@ -2038,7 +2131,7 @@ export class Game implements GenHost, RenderHost {
             lp.vy = launchVy;
             lp.vx = launchVx;
             lp.padFlight = flight;
-            lp.jumps = 0;
+            lp.jumps = launchJumps;
             lp.onGround = false;
             lp.coyote = 0;
             lp.cut = true;
@@ -2090,7 +2183,9 @@ export class Game implements GenHost, RenderHost {
     return true;
   }
 
-  private updateBiomeEvent() {
+  /** `refX`/`refY` is whoever the weather tracks — the local body normally, the
+   *  leading teammate while the local player is dead and spectating. */
+  private updateBiomeEvent(refX = this.px, refY = this.py) {
     if (this.eventTimer > 0) {
       // Biome flipped mid-event: don't cut it off cold. Wind the timer down
       // over a smooth 60-frame window (1 full second) so weather gently dissipates.
@@ -2101,7 +2196,7 @@ export class Game implements GenHost, RenderHost {
       // passed during the current effect are consumed and cannot restart it,
       // but they still count toward the biome-effect quest.
       for (const trigger of this.worldGen.eventTriggers) {
-        if (!trigger.used && this.px + PLAYER_W >= trigger.x - 12) {
+        if (!trigger.used && refX + PLAYER_W >= trigger.x - 12) {
           trigger.used = true;
           if (!this.questBiomeEffects.includes(trigger.kind)) this.questBiomeEffects.push(trigger.kind);
         }
@@ -2115,20 +2210,20 @@ export class Game implements GenHost, RenderHost {
     }
     this.eventMax = 0;
     for (const trigger of this.worldGen.eventTriggers) {
-      if (trigger.used || this.px + PLAYER_W < trigger.x - 12) continue;
+      if (trigger.used || refX + PLAYER_W < trigger.x - 12) continue;
       trigger.used = true;
       this.eventKind = trigger.kind;
       if (!this.questBiomeEffects.includes(trigger.kind)) this.questBiomeEffects.push(trigger.kind);
-      this.eventMax = ri(900, 1500);
+      this.eventMax = this.rng.ri(900, 1500);
       this.eventTimer = this.eventMax;
-      this.eventSeed = ri(1, 99999);
+      this.eventSeed = this.rng.ri(1, 99999);
       const banner =
         this.eventKind === 'tundra'
           ? 'BLIZZARD APPROACHING!'
           : this.eventKind === 'desert'
           ? 'SANDSTORM AHEAD!'
           : 'RAIN INCOMING!';
-      this.texts.popText(this.px + 40, this.py - 24, banner, '#ffd166', 1.4);
+      this.texts.popText(refX + 40, refY - 24, banner, '#ffd166', 1.4);
       break;
     }
   }
@@ -2246,7 +2341,10 @@ export class Game implements GenHost, RenderHost {
     this.questPowerups++;
     const activePowerups = Number(this.shielded) + Number(this.jumpShoes > 0) + Number(this.tripleJump > 0) + Number(this.magnet > 0) + Number(this.propellerHat > 0 || this.propellerFlashing);
     if (activePowerups >= 2) this.questTwoPowerups = true;
-    this.addCombo(x, y - 8, POWERUP_PTS, labels[kind]);
+    // Battle: every runner banks the same flat bonus. A shared combo would let
+    // one player's pickup raise P1's multiplier for the whole table.
+    if (this.isLocalBattle) this.bonus += POWERUP_PTS;
+    else this.addCombo(x, y - 8, POWERUP_PTS, labels[kind]);
     this.texts.popText(x, y - 20, labels[kind], POWERUP_COLORS[kind], 1);
     this.particles.burst(x, y, 14, [POWERUP_COLORS[kind], '#ffffff'], 2.2, 0.04);
     this.flash = 0.24;
@@ -2291,6 +2389,8 @@ export class Game implements GenHost, RenderHost {
   }
 
   private die(cause: string) {
+    // The victory lap owns the run: nothing may end it mid-celebration.
+    if (this.winT > 0) return;
     this.deathCause = cause;
     this.flushLifetimeStats();
     if (this.phase === 'over') return;
@@ -2458,6 +2558,8 @@ export class Game implements GenHost, RenderHost {
         p.py < plat.y + bh
       ) {
         if (p.vx > 0) {
+          // Rocket ride immunity, same as the main body (resolveX).
+          if (p.padFlight > 0) continue;
           if (p.invuln && p.invuln > 0) {
             p.px = plat.x - PLAYER_W - 1;
             p.vx = 0;
@@ -2636,13 +2738,12 @@ export class Game implements GenHost, RenderHost {
 
     // Frame bookkeeping for pad rides + pit recovery.
     if (this.onGround) {
-      this.aiJumpFrame = 0;
-      this.aiCutAt = 0;
+      // Dive is a one-shot: drop the hold on landing so the next jump is a
+      // normal jump instead of an automatic dive on the way down.
+      this.releaseDive();
       this.aiDoublePending = false;
       this.aiPitJumpTtl = 0;
       this.aiPadRide = false;
-    } else if (this.aiJumpFrame > 0) {
-      this.aiJumpFrame++;
     }
     if (this.aiPitJumpTtl > 0) this.aiPitJumpTtl--;
 
@@ -2690,6 +2791,13 @@ export class Game implements GenHost, RenderHost {
       const distX = ex - center;
 
       if (e.kind === 'spiker') {
+        // Dive-smash it once the arc is over the top — the demo is the only
+        // place the SMASH prompt gets demonstrated. Any dive contact kills a
+        // spiker, so it doubles as the safety net for the jump.
+        if (!this.onGround && !this.diving && this.vy > 0.5 && distX > -14 && distX < 22 && this.py + PLAYER_H <= e.y + 2) {
+          this.pressDive();
+          continue;
+        }
         if (distX > 2 && distX < 36) {
           if (this.onGround) wantJump = true;
           else if (this.vy > 0 && this.jumps < 2) wantDoubleJump = true;
@@ -2729,7 +2837,6 @@ export class Game implements GenHost, RenderHost {
     // Execute decisions
     if (wantJump && this.jumpBuf === 0 && this.onGround) {
       this.pressJump();
-      this.aiJumpFrame = 1;
     }
     // The wide-gap double jump fires late (past the apex, while falling) so
     // the two arcs stack into one long crossing instead of a sky-high stack.

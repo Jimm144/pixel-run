@@ -73,7 +73,6 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
   };
 
   const applyMove = (g: Game) => {
-    if (g.phase !== 'playing') return;
     const right = MOVE_RIGHT.some((code) => moveKeys.current.has(code));
     const left = MOVE_LEFT.some((code) => moveKeys.current.has(code));
     g.setMove(right ? 1 : left ? -1 : 0);
@@ -603,6 +602,8 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
     // for them on a slow cadence so P2-P4 controllers still drive.
     const gpProbeId = window.setInterval(() => {
       if (isPollingBattleGp) return;
+      const g = gameRef.current;
+      if (!g || g.phase !== 'playing' || modalOpenRef.current || !g.isLocalBattle) return;
       const pads = navigator.getGamepads?.() ?? [];
       for (const pad of pads) {
         if (pad && pad.connected) {
@@ -627,6 +628,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
         }
         if (state.pausePressed) cbRef.current.onPause();
       } else {
+        if (g && g.phase === 'paused') g.setMove(state.moveRight ? 1 : state.moveLeft ? -1 : 0);
         // The Locker handles its own gamepad navigation and confirm/back.
         if (document.querySelector(OWNS_NAV_SELECTOR)) return;
         if (state.pausePressed) {
@@ -639,7 +641,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
           } else if (u === 'playing') {
             cbRef.current.onPause();
           }
-        } else if (state.jumpPressed || state.confirmPressed) {
+        } else if (state.confirmPressed) {
           document.body.classList.add('gamepad-active');
           const active = document.activeElement as HTMLElement | null;
           if (active && (active.tagName === 'BUTTON' || active.tagName === 'A' || active.tagName === 'SELECT') && active.offsetParent !== null) {
@@ -695,6 +697,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
     return () => {
       cancelAnimationFrame(gpAnimId);
       window.clearInterval(gpProbeId);
+      inputManager.destroy();
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);

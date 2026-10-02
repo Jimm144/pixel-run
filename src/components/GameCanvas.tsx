@@ -97,7 +97,12 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
           acc -= STEP;
           n++;
         }
-        if (acc > STEP) acc = 0;
+        // The loop above can only exit early on the n<5 cap (a long frame), so
+        // discard just the whole-step backlog and keep the sub-step remainder.
+        // Zeroing acc outright threw away up to ~166ms of real time, which
+        // showed up as a visible slow-motion hitch after a GC pause or a
+        // backgrounded tab.
+        if (acc >= STEP) acc %= STEP;
       }
       // A paused run is visually static, so avoid repainting the whole scene
       // at 60 Hz. Render the transition frame once for the pause overlay.
@@ -148,6 +153,12 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
   /* -------------------------------------------------------------- fit size */
   useEffect(() => {
     let fitFrame = 0;
+    // fit() runs on every resize settle; each matchMedia() call allocates a
+    // fresh MediaQueryList, so resolve them once for the effect's lifetime.
+    const portraitMQ =
+      typeof window.matchMedia === 'function' ? window.matchMedia('(orientation: portrait)') : null;
+    const coarseMQ =
+      typeof window.matchMedia === 'function' ? window.matchMedia('(pointer: coarse)') : null;
 
     const fit = () => {
       const wrap = wrapRef.current;
@@ -159,9 +170,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       // Derive the buffer from the wrapper's actual aspect ratio. This keeps
       // desktop resizes and mobile browser-chrome changes in sync instead of
       // relying on a stale orientation bucket.
-      const portrait = typeof window.matchMedia === 'function'
-        ? window.matchMedia('(orientation: portrait)').matches
-        : r.height > r.width;
+      const portrait = portraitMQ ? portraitMQ.matches : r.height > r.width;
       const w = portrait ? 240 : BASE_VW;
       const ratio = portrait
         ? Math.min(2.38, Math.max(1.15, r.height / r.width))
@@ -169,7 +178,9 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       const h = Math.round(w * ratio);
       const sizeChanged = w !== VW || h !== VH;
       if (sizeChanged) {
+        const prevVW = VW;
         setViewportSize(w, h);
+        gameRef.current?.reanchorAfterResize(prevVW);
         cv.width = VW;
         cv.height = VH;
         const ctx = cv.getContext('2d');
@@ -194,8 +205,7 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
       gameRef.current?.setHudScale(1);
       // Mobile layout: compact score, world lifted higher
       // and parallax planes spread out — all desktop views stay untouched.
-      const coarse = window.matchMedia('(pointer: coarse)').matches;
-      gameRef.current?.setMobileView(coarse);
+      gameRef.current?.setMobileView(coarseMQ ? coarseMQ.matches : false);
     };
 
     let settleTimer = 0;
@@ -236,6 +246,8 @@ export function GameCanvas({ gameRef, onDeath, onPause, onResume, onStart, onTog
         ref={canvasRef}
         width={VW}
         height={VH}
+        role="img"
+        aria-label="Pixel Run game view"
         className="absolute block h-full max-h-none max-w-none w-full bg-[var(--ui-bg)]"
         style={{ imageRendering: 'pixelated' }}
       />

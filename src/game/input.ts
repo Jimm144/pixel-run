@@ -67,6 +67,7 @@ class InputManager {
   private prevDive = false;
   private prevPause = false;
   private prevConfirm = false;
+  private prevMenuConfirm = false;
   private prevBack = false;
 
   private prevUp = false;
@@ -78,9 +79,22 @@ class InputManager {
   private touchStartY = 0;
   private lastTapTime = 0;
   private hiddenInput: HTMLInputElement | null = null;
+  private listening = false;
+  private pollRafId = 0;
+  private onKey: (e: KeyboardEvent) => void = () => {};
+  private onTouchStart: (e: TouchEvent) => void = () => {};
+  private onTouchEnd: (e: TouchEvent) => void = () => {};
+  private onHiddenInput: (e: Event) => void = () => {};
+  private onPadConnected: () => void = () => {};
+  private onPadDisconnected: () => void = () => {};
 
   constructor() {
-    if (typeof window === 'undefined') return;
+    this.init();
+  }
+
+  init() {
+    if (this.listening || typeof window === 'undefined') return;
+    this.listening = true;
 
     // Invisible input element for bringing up mobile keyboard on swipe completion
     if (typeof document !== 'undefined') {
@@ -105,95 +119,109 @@ class InputManager {
       }
       this.hiddenInput = input;
 
-      this.hiddenInput.addEventListener('input', (e) => {
+      this.onHiddenInput = (e) => {
         const char = (e as InputEvent).data || this.hiddenInput?.value.slice(-1) || '';
         if (char) {
           this.handleKey(char);
           if (this.hiddenInput) this.hiddenInput.value = '';
         }
-      });
+      };
+      this.hiddenInput.addEventListener('input', this.onHiddenInput);
     }
 
     // Keyboard listener for Konami code
-    window.addEventListener('keydown', (e) => {
+    this.onKey = (e) => {
       this.handleKey(e.key);
-    });
+    };
+    window.addEventListener('keydown', this.onKey);
 
     // Touch listener for mobile swipe Konami code
-    window.addEventListener(
-      'touchstart',
-      (e) => {
-        if (e.touches.length > 0) {
-          this.touchStartX = e.touches[0].clientX;
-          this.touchStartY = e.touches[0].clientY;
-        }
-      },
-      { passive: true },
-    );
+    this.onTouchStart = (e) => {
+      if (e.touches.length > 0) {
+        this.touchStartX = e.touches[0].clientX;
+        this.touchStartY = e.touches[0].clientY;
+      }
+    };
+    window.addEventListener('touchstart', this.onTouchStart, { passive: true });
 
-    window.addEventListener(
-      'touchend',
-      (e) => {
-        if (e.changedTouches.length === 0) return;
-        const dx = e.changedTouches[0].clientX - this.touchStartX;
-        const dy = e.changedTouches[0].clientY - this.touchStartY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+    this.onTouchEnd = (e) => {
+      if (e.changedTouches.length === 0) return;
+      const dx = e.changedTouches[0].clientX - this.touchStartX;
+      const dy = e.changedTouches[0].clientY - this.touchStartY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
 
-        let gesture = '';
-        if (dist > 30) {
-          if (Math.abs(dx) > Math.abs(dy)) {
-            gesture = dx > 0 ? 'right' : 'left';
-          } else {
-            gesture = dy > 0 ? 'down' : 'up';
-          }
+      let gesture = '';
+      if (dist > 30) {
+        if (Math.abs(dx) > Math.abs(dy)) {
+          gesture = dx > 0 ? 'right' : 'left';
         } else {
-          // Tap / Double tap
-          const now = Date.now();
-          if (now - this.lastTapTime < 450) {
-            gesture = 'doubletap';
+          gesture = dy > 0 ? 'down' : 'up';
+        }
+      } else {
+        // Tap / Double tap
+        const now = Date.now();
+        if (now - this.lastTapTime < 450) {
+          gesture = 'doubletap';
+        }
+        this.lastTapTime = now;
+      }
+
+      if (gesture) {
+        if (gesture === 'doubletap' && this.swipeKonamiIndex === this.swipeSequence.length) {
+          this.triggerKonami();
+          this.swipeKonamiIndex = 0;
+          this.konamiIndex = 0;
+          if (this.hiddenInput) {
+            this.hiddenInput.value = '';
+            this.hiddenInput.blur();
           }
-          this.lastTapTime = now;
+          return;
         }
 
-        if (gesture) {
-          if (gesture === 'doubletap' && this.swipeKonamiIndex === this.swipeSequence.length) {
+        if (this.swipeSequence[this.swipeKonamiIndex] === gesture) {
+          this.swipeKonamiIndex++;
+          if (this.swipeKonamiIndex === this.swipeSequence.length) {
             this.triggerKonami();
             this.swipeKonamiIndex = 0;
             this.konamiIndex = 0;
-            if (this.hiddenInput) {
-              this.hiddenInput.value = '';
-              this.hiddenInput.blur();
-            }
-            return;
           }
-
-          if (this.swipeSequence[this.swipeKonamiIndex] === gesture) {
-            this.swipeKonamiIndex++;
-            if (this.swipeKonamiIndex === this.swipeSequence.length) {
-              this.triggerKonami();
-              this.swipeKonamiIndex = 0;
-              this.konamiIndex = 0;
-            }
-          } else {
-            const matchesFirst = this.swipeSequence[0] === gesture;
-            this.swipeKonamiIndex = matchesFirst ? 1 : 0;
-            this.konamiIndex = this.swipeKonamiIndex;
-          }
+        } else {
+          const matchesFirst = this.swipeSequence[0] === gesture;
+          this.swipeKonamiIndex = matchesFirst ? 1 : 0;
+          this.konamiIndex = this.swipeKonamiIndex;
         }
-      },
-      { passive: true },
-    );
+      }
+    };
+    window.addEventListener('touchend', this.onTouchEnd, { passive: true });
 
     // Track connected gamepads and only poll when active
-    if (typeof window !== 'undefined') {
-      window.addEventListener('gamepadconnected', () => {
-        this.startGamepadPolling();
-      });
-      window.addEventListener('gamepaddisconnected', () => {
-        this.checkGamepadConnection();
-      });
+    this.onPadConnected = () => {
+      this.startGamepadPolling();
+    };
+    window.addEventListener('gamepadconnected', this.onPadConnected);
+    this.onPadDisconnected = () => {
       this.checkGamepadConnection();
+    };
+    window.addEventListener('gamepaddisconnected', this.onPadDisconnected);
+    this.checkGamepadConnection();
+  }
+
+  destroy() {
+    if (!this.listening) return;
+    this.listening = false;
+    window.removeEventListener('keydown', this.onKey);
+    window.removeEventListener('touchstart', this.onTouchStart);
+    window.removeEventListener('touchend', this.onTouchEnd);
+    window.removeEventListener('gamepadconnected', this.onPadConnected);
+    window.removeEventListener('gamepaddisconnected', this.onPadDisconnected);
+    if (this.hiddenInput) {
+      this.hiddenInput.removeEventListener('input', this.onHiddenInput);
+      this.hiddenInput.remove();
+      this.hiddenInput = null;
     }
+    cancelAnimationFrame(this.pollRafId);
+    this.pollRafId = 0;
+    this.isPollingGamepads = false;
   }
 
   private isPollingGamepads = false;
@@ -215,7 +243,7 @@ class InputManager {
   private startGamepadPolling() {
     if (this.isPollingGamepads) return;
     this.isPollingGamepads = true;
-    requestAnimationFrame(this.pollGamepads);
+    this.pollRafId = requestAnimationFrame(this.pollGamepads);
   }
 
   private lastKeyTime = 0;
@@ -262,16 +290,19 @@ class InputManager {
   }
 
   onKonami(callback: KonamiCallback) {
+    this.init();
     this.konamiListeners.add(callback);
     return () => this.konamiListeners.delete(callback);
   }
 
   onAction(callback: ActionCallback) {
+    this.init();
     this.actionListeners.add(callback);
     return () => this.actionListeners.delete(callback);
   }
 
   onGamepadUpdate(callback: StateCallback) {
+    this.init();
     this.stateListeners.add(callback);
     return () => this.stateListeners.delete(callback);
   }
@@ -307,6 +338,7 @@ class InputManager {
     if (typeof navigator !== 'undefined' && navigator.getGamepads) {
       const gamepads = navigator.getGamepads();
       let jump = false;
+      let menuConfirm = false;
       let dive = false;
       let moveRight = false;
       let moveLeft = false;
@@ -332,8 +364,9 @@ class InputManager {
           return Boolean(btn && (btn.pressed || btn.value > 0.15));
         };
 
-        // Jump: Cross / A (0), Square / X (2), R1 (5)
-        const curJump = isPressed(0) || isPressed(2) || isPressed(5);
+        // Jump: Cross / A (0), Square / X (2), R1 (5), D-pad Up (12)
+        const curJump = isPressed(0) || isPressed(2) || isPressed(5) || isPressed(12);
+        const curMenuConfirm = isPressed(0) || isPressed(2) || isPressed(5);
 
         // Slam / Dive: Circle / B (1), L1 (4), R2 (7), D-pad Down (13), Left Stick Down (axes[1] > 0.38), Right Stick Down (axes[3] > 0.38)
         const stickDown =
@@ -359,6 +392,7 @@ class InputManager {
         const curBack = isPressed(1);
 
         if (curJump) jump = true;
+        if (curMenuConfirm) menuConfirm = true;
         if (curDive) dive = true;
         if (curRight) { moveRight = true; right = true; }
         if (curLeft) { moveLeft = true; left = true; }
@@ -391,7 +425,7 @@ class InputManager {
       if (confirm && !this.prevConfirm) this.dispatchAction('confirm');
       if (back && !this.prevBack) this.dispatchAction('back');
       if (pause && !this.prevPause) this.dispatchAction('pause');
-      if (jump && !this.prevJump) this.dispatchAction('jump');
+      if (menuConfirm && !this.prevMenuConfirm) this.dispatchAction('jump');
       if (dive && !this.prevDive) this.dispatchAction('dive');
 
       // Continuous Gamepad State Dispatches (for 60 FPS platformer physics)
@@ -406,7 +440,7 @@ class InputManager {
           moveRight,
           moveLeft,
           pausePressed: pause && !this.prevPause,
-          confirmPressed: confirm && !this.prevConfirm,
+          confirmPressed: menuConfirm && !this.prevMenuConfirm,
           backPressed: back && !this.prevBack,
         };
 
@@ -421,6 +455,7 @@ class InputManager {
       this.prevDive = dive;
       this.prevPause = pause;
       this.prevConfirm = confirm;
+      this.prevMenuConfirm = menuConfirm;
       this.prevBack = back;
       this.prevUp = up;
       this.prevDown = down;
@@ -436,7 +471,7 @@ class InputManager {
       }
 
       if (hasActive) {
-        requestAnimationFrame(this.pollGamepads);
+        this.pollRafId = requestAnimationFrame(this.pollGamepads);
       } else {
         this.isPollingGamepads = false;
       }

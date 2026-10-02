@@ -28,11 +28,20 @@ function saveRing() {
   } catch {}
 }
 
+function isTelemetryDisabled(): boolean {
+  try {
+    return localStorage.getItem('telemetryDisabled') === 'true';
+  } catch {
+    return false;
+  }
+}
+
 function capture(detail: Record<string, string>) {
   try {
     const entry = JSON.stringify(detail);
     ring = [...loadRing(), entry].slice(-MAX_ERRORS);
     saveRing();
+    if (isTelemetryDisabled()) return;
     navigator.sendBeacon(
       BEACON_URL,
       JSON.stringify({
@@ -43,14 +52,6 @@ function capture(detail: Record<string, string>) {
       }),
     );
   } catch {}
-}
-
-export function getErrorReport(): string {
-  try {
-    return loadRing().join('\n');
-  } catch {
-    return '';
-  }
 }
 
 export function initErrorTelemetry() {

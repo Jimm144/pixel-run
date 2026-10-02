@@ -5,3 +5,6 @@ vite.dev.log
 
 # PartyKit local dev state
 .partykit/
+
+# Local browser-tool artifacts (screenshots)
+.openchamber/

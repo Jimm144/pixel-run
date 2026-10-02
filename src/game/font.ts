@@ -139,6 +139,26 @@ function atlas(color: string): HTMLCanvasElement {
 
 const metricsCache = new Map<number, { advance: number; width: number; height: number }>();
 
+const LOWER_RE = /[a-z]/;
+const upperCache = new Map<string, string>();
+const UPPER_CAP = 128;
+
+function upperOf(text: string): string {
+  let u = upperCache.get(text);
+  if (u !== undefined) return u;
+  u = LOWER_RE.test(text) ? text.toUpperCase() : text;
+  if (upperCache.size >= UPPER_CAP) {
+    let dropped = 0;
+    const dropCount = upperCache.size >> 1;
+    for (const key of upperCache.keys()) {
+      upperCache.delete(key);
+      if (++dropped >= dropCount) break;
+    }
+  }
+  upperCache.set(text, u);
+  return u;
+}
+
 function glyphMetrics(scale: number) {
   let m = metricsCache.get(scale);
   if (m) return m;
@@ -200,7 +220,7 @@ export function drawText(
   shadow?: string,
   uppercase = true,
 ) {
-  const rendered = uppercase && /[a-z]/.test(text) ? text.toUpperCase() : text;
+  const rendered = uppercase ? upperOf(text) : text;
   const px = Math.round(x);
   const py = Math.round(y);
   if (shadow) blit(ctx, rendered, px, py + Math.max(1, Math.round(scale)), scale, shadow);

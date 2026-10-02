@@ -167,13 +167,13 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess, lang = 'en' }: 
         </div>
 
         {errorMsg && (
-          <div className="mb-3 w-full border border-[var(--ui-danger)] bg-[var(--ui-danger)]/15 p-2 text-[8px] text-[var(--ui-danger)]">
+          <div role="alert" aria-live="assertive" className="mb-3 w-full border border-[var(--ui-danger)] bg-[var(--ui-danger)]/15 p-2 text-[8px] text-[var(--ui-danger)]">
             {errorMsg}
           </div>
         )}
 
         {successMsg && (
-          <div className="mb-3 w-full border border-[var(--ui-accent)] bg-[var(--ui-accent)]/15 p-2 text-[8px] text-[var(--ui-accent)]">
+          <div role="status" aria-live="polite" className="mb-3 w-full border border-[var(--ui-accent)] bg-[var(--ui-accent)]/15 p-2 text-[8px] text-[var(--ui-accent)]">
             {successMsg}
           </div>
         )}
@@ -238,7 +238,7 @@ export function SaveLoadModal({ mode, onClose, onRestoreSuccess, lang = 'en' }: 
                 value={saveCode}
                 onFocus={(e) => e.target.select()}
                 onClick={(e) => (e.target as HTMLTextAreaElement).select()}
-                onChange={() => {}}
+                readOnly
                 className="h-16 w-full resize-none border-2 border-[var(--ui-border)] bg-[var(--ui-panel3)] p-2 font-mono text-[8px] text-[var(--ui-gold)] selection:bg-[var(--ui-accent)] selection:text-[var(--ui-bg)] focus:border-[var(--ui-accent)] focus:outline-none"
               />
             </div>

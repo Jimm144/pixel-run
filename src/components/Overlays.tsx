@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Stats } from '../game/engine';
 import { DailyQuestPanel } from './QuestPanels';
-import { PauseIcon, PixelButton, Panel, Stat } from './ui';
+import { PauseIcon, PixelButton, Panel, PixelArrow, PixelReloadIcon, Stat } from './ui';
 import type { QuestDefinition, QuestRecord, QuestRunStats } from '../game/quests';
 import { sfx } from '../game/audio';
 import {
@@ -108,55 +108,6 @@ function ControlHint({ kind, keys, danger = false }: { kind: ControlIconKind; ke
         {keys}
       </p>
     </div>
-  );
-}
-
-function PixelArrow({ dir, className = '' }: { dir: 'up' | 'down' | 'left' | 'right'; className?: string }) {
-  if (dir === 'up') {
-    return (
-      <svg
-        viewBox="0 0 7 7"
-        className={`inline-block h-[7px] w-[7px] shrink-0 align-middle fill-current ${className}`}
-        shapeRendering="crispEdges"
-        aria-hidden="true"
-      >
-        <path d="M3 0h1v1H3V0z M2 1h3v1H2V1z M1 2h5v1H1V2z M0 3h7v1H0V3z M2 4h3v3H2V4z" />
-      </svg>
-    );
-  }
-  if (dir === 'down') {
-    return (
-      <svg
-        viewBox="0 0 7 7"
-        className={`inline-block h-[7px] w-[7px] shrink-0 align-middle fill-current ${className}`}
-        shapeRendering="crispEdges"
-        aria-hidden="true"
-      >
-        <path d="M2 0h3v3H2V0z M0 3h7v1H0V3z M1 4h5v1H1V4z M2 5h3v1H2V5z M3 6h1v1H3V6z" />
-      </svg>
-    );
-  }
-  if (dir === 'left') {
-    return (
-      <svg
-        viewBox="0 0 7 7"
-        className={`inline-block h-[7px] w-[7px] shrink-0 align-middle fill-current ${className}`}
-        shapeRendering="crispEdges"
-        aria-hidden="true"
-      >
-        <path d="M0 3h1v1H0V3z M1 2h1v3H1V2z M2 1h1v5H2V1z M3 0h1v7H3V0z M4 2h3v3H4V2z" />
-      </svg>
-    );
-  }
-  return (
-    <svg
-      viewBox="0 0 7 7"
-      className={`inline-block h-[7px] w-[7px] shrink-0 align-middle fill-current ${className}`}
-      shapeRendering="crispEdges"
-      aria-hidden="true"
-    >
-      <path d="M6 3h1v1H6V3z M5 2h1v3H5V2z M4 1h1v5H4V1z M3 0h1v7H3V0z M0 2h3v3H0V2z" />
-    </svg>
   );
 }
 
@@ -307,34 +258,6 @@ function PixelGithubIcon({ className = 'h-2.5 w-2.5 tablet:h-3 tablet:w-3' }: { 
   );
 }
 
-function PixelReloadIcon({ className = 'h-2.5 w-2.5 tablet:h-3 tablet:w-3' }: { className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 10 10"
-      className={`inline-block shrink-0 align-middle ${className}`}
-      fill="currentColor"
-      shapeRendering="crispEdges"
-    >
-      {/* Top arrow (clockwise to right) */}
-      <rect x="1" y="3" width="1" height="3" />
-      <rect x="2" y="2" width="1" height="1" />
-      <rect x="3" y="1" width="4" height="1" />
-      {/* Top arrowhead pointing right */}
-      <rect x="6" y="0" width="1" height="3" />
-      <rect x="7" y="1" width="1" height="1" />
-
-      {/* Bottom arrow (clockwise to left) */}
-      <rect x="8" y="4" width="1" height="3" />
-      <rect x="7" y="7" width="1" height="1" />
-      <rect x="3" y="8" width="4" height="1" />
-      {/* Bottom arrowhead pointing left */}
-      <rect x="3" y="7" width="1" height="3" />
-      <rect x="2" y="8" width="1" height="1" />
-    </svg>
-  );
-}
-
 function PixelSwatchIcon({ className = 'h-2.5 w-2.5 tablet:h-3 tablet:w-3' }: { className?: string }) {
   return (
     <svg
@@ -473,7 +396,7 @@ export function StartScreen({
             <span className="animate-title block text-[var(--ui-accent)]">PIXEL</span>
             <span className="animate-title-2 block text-[var(--ui-danger)]">RUN</span>
           </h1>
-          <p className="mt-2 font-pixel text-[8px] tracking-[0.25em] text-[var(--ui-muted)] tablet:text-[10px]">
+          <p className="mt-2 font-pixel text-[8px] tracking-[0.25em] text-[var(--ui-text)] tablet:text-[10px]">
             {t.tagline}
           </p>
         </div>
@@ -499,14 +422,14 @@ export function StartScreen({
                 </>
               )}
             </div>
-            <div className="mt-1 flex w-full items-center justify-center gap-4 border-t-2 border-[var(--ui-border)] pt-3 font-pixel text-[8px] text-[var(--ui-muted)] tablet:text-[10px]">
-              <span>{t.lastRun} <span className="text-[var(--ui-muted)]">{pad(lastRun, 6)}</span></span>
+            <div className="mt-1 flex w-full items-center justify-center gap-4 border-t-2 border-[var(--ui-border)] pt-3 font-pixel text-[8px] text-[var(--ui-text)] tablet:text-[10px]">
+              <span>{t.lastRun} <span className="text-[var(--ui-text)]">{pad(lastRun, 6)}</span></span>
               <span>{t.best} <span className="text-[var(--ui-gold)]">{pad(best, 6)}</span></span>
             </div>
           </div>
         </Panel>
 
-        <DailyQuestPanel quests={quests} record={questRecord} run={questRun} compact decorated={false} onDayRollover={questOnDayRollover} onShare={questOnShare} lang={lang} />
+        <DailyQuestPanel quests={quests} record={questRecord} run={questRun} compact onDayRollover={questOnDayRollover} onShare={questOnShare} lang={lang} />
 
         <div className="flex w-full max-w-[420px] gap-2 tablet:max-w-[500px]">
           <button
@@ -614,7 +537,7 @@ export function StartScreen({
               }}
               className="inline-flex items-center gap-1 cursor-pointer text-[var(--ui-accent)]/80 transition-colors hover:text-[var(--ui-accent)]"
             >
-              <PixelReloadIcon />
+              <PixelReloadIcon className="h-2.5 w-2.5 tablet:h-3 tablet:w-3" />
               <span>{t.update}</span>
             </button>
           )}

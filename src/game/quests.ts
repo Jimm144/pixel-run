@@ -399,14 +399,6 @@ export function formatDuration(ms: number): string {
   return `${s}s`;
 }
 
-/** Share card for finishing all of today's quests. */
-export function questShareText(record: QuestRecord, best: number): string {
-  const time = record.completedAt !== null && record.firstRunAt !== null ? formatDuration(record.completedAt - record.firstRunAt) : '';
-  const tries = Math.max(record.tries, 1);
-  const bestPart = best > 0 ? ` Best score: ${best.toLocaleString()}.` : '';
-  return `PIXEL RUN: I cleared all 4 daily quests in ${tries} ${tries === 1 ? 'try' : 'tries'}${time ? ` (${time})` : ''}!${bestPart} Can you beat me?`;
-}
-
 export function markQuestCompletions(record: QuestRecord, quests: QuestDefinition[], ids: string[]): QuestRecord {
   const next: QuestRecord = {
     ...record,

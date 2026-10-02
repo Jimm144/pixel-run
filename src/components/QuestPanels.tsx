@@ -18,10 +18,25 @@ interface QuestPanelProps {
   run: QuestRunStats;
   compact?: boolean;
   announcement?: boolean;
-  decorated?: boolean;
   onDayRollover?: () => void;
   onShare?: () => void;
   lang?: SupportedLanguage;
+}
+
+const resetListeners = new Set<() => void>();
+let resetTicker = 0;
+
+function startResetTicker() {
+  if (resetTicker !== 0) return;
+  resetTicker = window.setInterval(() => {
+    resetListeners.forEach((tick) => tick());
+  }, 250);
+}
+
+function stopResetTicker() {
+  if (resetListeners.size > 0 || resetTicker === 0) return;
+  window.clearInterval(resetTicker);
+  resetTicker = 0;
 }
 
 function useQuestReset(onDayRollover?: () => void) {
@@ -29,7 +44,6 @@ function useQuestReset(onDayRollover?: () => void) {
   const targetRef = useRef(nextQuestResetAt());
   const onDayRolloverRef = useRef(onDayRollover);
   const rolledOverRef = useRef(false);
-  const intervalRef = useRef(0);
   onDayRolloverRef.current = onDayRollover;
 
   useEffect(() => {
@@ -40,18 +54,19 @@ function useQuestReset(onDayRollover?: () => void) {
         return;
       }
       setRemaining(0);
-      window.clearInterval(intervalRef.current);
       if (!rolledOverRef.current) {
         rolledOverRef.current = true;
         onDayRolloverRef.current?.();
       }
       targetRef.current = nextQuestResetAt();
       rolledOverRef.current = false;
-      intervalRef.current = window.setInterval(tick, 250);
     };
-    window.clearInterval(intervalRef.current);
-    intervalRef.current = window.setInterval(tick, 250);
-    return () => window.clearInterval(intervalRef.current);
+    resetListeners.add(tick);
+    startResetTicker();
+    return () => {
+      resetListeners.delete(tick);
+      stopResetTicker();
+    };
   }, []);
 
   return { remaining: Math.max(0, remaining) };
@@ -115,7 +130,7 @@ function QuestCard({ quest, record, run, compact, lang = 'en' }: { quest: QuestD
 
   return (
     <div
-      className={`min-w-0 border-2 ${compact ? 'p-2' : 'p-2.5'} ${progress.done ? 'shadow-[2px_2px_0_var(--ui-bg)]' : ''}`}
+      className={`min-w-0 select-text border-2 ${compact ? 'p-2' : 'p-2.5'} ${progress.done ? 'shadow-[2px_2px_0_var(--ui-bg)]' : ''}`}
       style={{
         borderColor: `${color}99`,
         backgroundColor: progress.done ? `${color}22` : 'var(--ui-panel3)',
@@ -143,7 +158,7 @@ function QuestCard({ quest, record, run, compact, lang = 'en' }: { quest: QuestD
   );
 }
 
-export function DailyQuestPanel({ quests, record, run, compact = false, announcement = false, decorated = true, onDayRollover, onShare, lang = 'en' }: QuestPanelProps) {
+export function DailyQuestPanel({ quests, record, run, compact = false, announcement = false, onDayRollover, onShare, lang = 'en' }: QuestPanelProps) {
   const { remaining } = useQuestReset(onDayRollover);
   const t = getTranslations(lang);
   const allDone = record.chestOpen;
@@ -151,7 +166,7 @@ export function DailyQuestPanel({ quests, record, run, compact = false, announce
   const elapsed =
     record.completedAt !== null && record.firstRunAt !== null ? formatDuration(record.completedAt - record.firstRunAt) : null;
   return (
-    <Panel decorated={decorated} className={`w-full ${compact ? 'p-2.5' : 'p-4'} border-2 border-[var(--ui-accent)] bg-[var(--ui-panel2)]/95 ${announcement ? 'bg-[var(--ui-panel2)]/80' : ''}`}>
+    <Panel className={`w-full ${compact ? 'p-2.5' : 'p-4'} border-2 border-[var(--ui-accent)] bg-[var(--ui-panel2)]/95 ${announcement ? 'bg-[var(--ui-panel2)]/80' : ''}`}>
       <div className={`${compact ? 'mb-2' : 'mb-3'} flex items-center justify-between gap-2`}>
         <div className="flex items-center gap-2">
           <h2 className="font-pixel text-[12px] text-[var(--ui-accent)]">{announcement ? t.dailyQuests : t.quests}</h2>
@@ -168,7 +183,7 @@ export function DailyQuestPanel({ quests, record, run, compact = false, announce
         {quests.map((quest) => <QuestCard key={quest.id} quest={quest} record={record} run={run} compact={compact} lang={lang} />)}
       </div>
       {!announcement && (
-        <div className={`${compact ? 'mt-2 pt-2' : 'mt-3 pt-3'} border-t-2 border-[var(--ui-border)] font-pixel text-[8px]`}>
+        <div className={`${compact ? 'mt-2 pt-2' : 'mt-3 pt-3'} select-text border-t-2 border-[var(--ui-border)] font-pixel text-[8px]`}>
           <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
             <span style={{ color: QUEST_DIFFICULTY_COLORS.easy }}>{t.easy} {record.completedByDifficulty.easy}</span>
             <span style={{ color: QUEST_DIFFICULTY_COLORS.medium }}>{t.medium} {record.completedByDifficulty.medium}</span>
@@ -203,7 +218,7 @@ export function DailyQuestPanel({ quests, record, run, compact = false, announce
 export function DailyQuestAnnouncement({ quests, record, run, onDayRollover, onShare, lang = 'en' }: Omit<QuestPanelProps, 'compact' | 'announcement'>) {
   return (
     <div className="animate-quest-announcement pointer-events-none absolute top-3 left-1/2 z-30 w-[min(92vw,500px)] -translate-x-1/2 opacity-80">
-      <DailyQuestPanel quests={quests} record={record} run={run} compact announcement decorated={false} onDayRollover={onDayRollover} onShare={onShare} lang={lang} />
+      <DailyQuestPanel quests={quests} record={record} run={run} compact announcement onDayRollover={onDayRollover} onShare={onShare} lang={lang} />
     </div>
   );
 }
@@ -219,7 +234,7 @@ export function QuestCompletionToast({ quests, completed, touch, lang = 'en' }: 
       aria-live="polite"
       className={`animate-quest-announcement pointer-events-none absolute z-30 w-[min(88vw,360px)] -translate-x-1/2 opacity-90 ${touch ? 'top-14 left-1/2' : 'top-14 left-1/2'}`}
     >
-      <Panel decorated={false} className="border-2 bg-[var(--ui-panel2)] p-3 shadow-[3px_3px_0_var(--ui-bg)]">
+      <Panel className="border-2 bg-[var(--ui-panel2)] p-3 shadow-[3px_3px_0_var(--ui-bg)]">
         <p className="font-pixel text-[10px] text-[var(--ui-gold)]">{labels.length > 0 ? t.questComplete : t.share}</p>
         <div className="mt-2 space-y-1">
           {labels.map((quest) => (

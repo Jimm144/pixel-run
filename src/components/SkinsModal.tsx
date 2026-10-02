@@ -338,7 +338,7 @@ export function SkinsModal({
 
     const render = (now: number) => {
       const delta = now - lastTime;
-      if (delta >= FRAME_MS) {
+      if (!document.hidden && delta >= FRAME_MS) {
         lastTime = now - (delta % FRAME_MS);
         frame++;
         ctx.clearRect(0, 0, cv.width, cv.height);
@@ -521,7 +521,7 @@ export function SkinsModal({
         </div>
 
         {/* Tier Tabs (Colored when selected, rarity hover on unselected, no individual counts) */}
-        <div className="mt-2.5 flex flex-wrap gap-1.5 border-b-2 border-[var(--ui-border)] pb-2.5">
+        <div role="tablist" aria-label="Skin tiers" className="mt-2.5 flex flex-wrap gap-1.5 border-b-2 border-[var(--ui-border)] pb-2.5">
           {TIERS.map((tier, idx) => {
             const active = selectedTier === tier;
             const theme = TIER_COLORS[tier];
@@ -532,6 +532,10 @@ export function SkinsModal({
               <button
                 key={tier}
                 type="button"
+                role="tab"
+                id={`skin-tier-tab-${tier}`}
+                aria-selected={active}
+                aria-controls="skin-tier-grid"
                 onClick={() => {
                   setSelectedTierIndex(idx);
                   setFocusSection('tabs');
@@ -649,6 +653,9 @@ export function SkinsModal({
 
           {/* Right: Grid of Skin Cards (3 columns on wide PC, 2 on narrow PC / mobile) */}
           <div
+            id="skin-tier-grid"
+            role="tabpanel"
+            aria-labelledby={`skin-tier-tab-${selectedTier}`}
             className={
               touch
                 ? 'grid min-h-0 min-w-0 flex-1 grid-cols-2 gap-2 overflow-y-auto p-1 pb-4 tablet:max-h-[580px] tablet:grid-cols-3'
@@ -667,6 +674,8 @@ export function SkinsModal({
                   key={skin.id}
                   ref={(el) => { cardRefs.current[idx] = el; }}
                   type="button"
+                  aria-pressed={equipped}
+                  aria-label={`${skin.name}, ${getTierName(skin.tier, lang)}, ${equipped ? t.equipped : unlocked ? t.unlocked : skin.unlock.desc}`}
                   onClick={() => handleCardClick(skin.id, idx, unlocked)}
                   onDoubleClick={() => {
                     if (unlocked) {

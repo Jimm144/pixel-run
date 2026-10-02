@@ -25,13 +25,21 @@
   --ui-text: #e8ecff;
 
   /* Derived tints (computed once per theme change by the browser) */
+  --ui-accent-hi: var(--ui-accent);
   --ui-accent-hi: color-mix(in srgb, var(--ui-accent) 65%, white);
+  --ui-danger-hi: var(--ui-danger);
   --ui-danger-hi: color-mix(in srgb, var(--ui-danger) 70%, white);
+  --ui-gold-hi: var(--ui-gold);
   --ui-gold-hi: color-mix(in srgb, var(--ui-gold) 75%, white);
+  --ui-accent-dim: var(--ui-bg);
   --ui-accent-dim: color-mix(in srgb, var(--ui-accent) 14%, var(--ui-bg));
+  --ui-accent-dim2: var(--ui-panel2);
   --ui-accent-dim2: color-mix(in srgb, var(--ui-accent) 30%, var(--ui-bg));
+  --ui-danger-dim: var(--ui-bg);
   --ui-danger-dim: color-mix(in srgb, var(--ui-danger) 12%, var(--ui-bg));
+  --ui-gold-dim: var(--ui-bg);
   --ui-gold-dim: color-mix(in srgb, var(--ui-gold) 12%, var(--ui-bg));
+  --ui-purple-dim: var(--ui-bg);
   --ui-purple-dim: color-mix(in srgb, var(--ui-purple) 14%, var(--ui-bg));
 }
 
@@ -57,9 +65,14 @@ body {
 }
 
 *:focus,
-*:focus-visible,
 *:active {
   outline: none;
+  box-shadow: none;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: -2px;
   box-shadow: none;
 }
 

@@ -8,6 +8,9 @@ export function PixelButton({
   className,
   style,
   small,
+  disabled,
+  type = 'button',
+  'aria-disabled': ariaDisabled,
 }: {
   children: ReactNode;
   onClick?: () => void;
@@ -15,6 +18,9 @@ export function PixelButton({
   className?: string;
   style?: CSSProperties;
   small?: boolean;
+  disabled?: boolean;
+  type?: 'button' | 'submit' | 'reset';
+  'aria-disabled'?: boolean;
 }) {
   const styles = {
     primary:
@@ -26,8 +32,10 @@ export function PixelButton({
   }[variant];
   return (
     <button
-      type="button"
+      type={type}
       onClick={onClick}
+      disabled={disabled}
+      aria-disabled={ariaDisabled}
       style={style}
       className={cn(
         'font-pixel border-2 uppercase leading-none tracking-wide transition-[transform,box-shadow,background-color,border-color,color] duration-75 active:translate-x-[3px] active:translate-y-[3px] focus-visible:outline-2 focus-visible:outline-[var(--ui-gold)] focus-visible:outline-offset-2',
@@ -147,7 +155,7 @@ export function PixelArrow({ dir, className = '' }: { dir: 'up' | 'down' | 'left
   );
 }
 
-export function Panel({ children, className }: { children: ReactNode; className?: string; decorated?: boolean }) {
+export function Panel({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div
       className={cn(

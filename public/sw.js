@@ -13,6 +13,8 @@ self.addEventListener('install', (event) => {
         'icon-512.png',
         'apple-touch-icon.png',
         'manifest.webmanifest',
+        'vendor/mqtt.min.js',
+        'vendor/peerjs.min.js',
         'https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap',
       ];
       for (const url of urlsToCache) {

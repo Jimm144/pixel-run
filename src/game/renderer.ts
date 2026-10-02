@@ -34,6 +34,9 @@ import {
  *  that the steps read as one smooth fade. */
 const FADE_STEPS = 12;
 
+const PLAT_CACHE_CAP = 48;
+const PLAT_PRUNE_BUDGET = 4;
+
 /** Blood-moon sky stops (drawn only during the final moon phase). Hoisted so
  *  drawSky never allocates the tuple on the day/night frame path. */
 const ECLIPSE_SKY: [string, string, string, string] = ['#0a0208', '#1c0514', '#3d0a24', '#661436'];
@@ -65,11 +68,15 @@ export class Renderer {
    *  crossfades the two, so there are no per-fade-step rebakes. */
   private platI = 0;
   private platNI = 1;
-  /** Platform art keyed by pure zone index (WeakMap<Platform, canvas>) — one
-   *  bake per pure biome per platform. WeakMap keys keep the cache from
-   *  pinning culled platforms and avoid rebuilding a string key per platform
-   *  per frame. */
-  private platformCaches = new Map<number, WeakMap<Platform, HTMLCanvasElement>>();
+  /** Platform art keyed by pure zone index (Map<Platform, canvas>) — one
+   *  bake per pure biome per platform, stamped with the last-use frame and
+   *  LRU-capped so departed platforms are evicted on a budget instead of
+   *  pinning their art. */
+  private platformCaches = new Map<number, Map<Platform, { cv: HTMLCanvasElement; use: number }>>();
+  private platCacheN = 0;
+  private bandOff = new Float64Array(4 * 6);
+  private bandRuns: number[][] = [[], [], [], []];
+  private bandN = 0;
   private stars: [x: number, y: number, phase: number, size: number][] = [];
   private motes: [x: number, y: number, spd: number, phase: number][] = [];
   /** Sun disc, baked whenever the sky palette changes. */
@@ -117,11 +124,13 @@ export class Renderer {
   /** Sun sprite is only rebaked when the lerped sun colours actually change. */
   private sunKey = '';
   private moonBaked = false;
-  /** Star twinkle bucket (0-7, -1 = skipped this frame) + rounded draw
-   *  position, precomputed per frame so globalAlpha changes at most 8 times. */
-  private starBucket = new Int8Array(90);
+  /** Star twinkle bucket (0-7) + rounded draw position, precomputed per frame
+   *  so globalAlpha changes at most 8 times; stars are pre-bucketed into
+   *  starList so the draw passes never rescan the full field. */
   private starX = new Float64Array(90);
   private starY = new Float64Array(90);
+  private starList = new Int16Array(8 * 90);
+  private starCount = new Int8Array(8);
   /** Biome-event particle scratch (tundra flakes are the max count). */
   private evX = new Float64Array(120);
   private evY = new Float64Array(120);
@@ -172,6 +181,7 @@ export class Renderer {
     this.zoneEpoch = 0;
     this.skyKey = -1;
     this.platformCaches.clear();
+    this.platCacheN = 0;
     this.oppSmooth.clear();
   }
 
@@ -180,6 +190,7 @@ export class Renderer {
    *  safety even though its height comes from the constant ground line. */
   invalidateViewport() {
     this.platformCaches.clear();
+    this.platCacheN = 0;
     // Re-seed the motes so a viewport shrink doesn't leave most of them
     // below the visible area (they were sampled once against the old VH),
     // and so a viewport grow doesn't leave them clustered on the old left edge.
@@ -648,31 +659,30 @@ export class Renderer {
       const camOffset = this.g.camX * 0.06;
       const yFactor = (VH * 0.66) / 140;
       const stars = this.stars;
-      const buckets = this.starBucket;
       const xs = this.starX;
       const ys = this.starY;
+      const list = this.starList;
+      const counts = this.starCount;
+      counts.fill(0);
       const n = stars.length;
       for (let i = 0; i < n; i++) {
         const star = stars[i];
         const x = ((star[0] - camOffset) % 1400 + 1400) % 1400;
-        if (x > VW) {
-          buckets[i] = -1;
-          continue;
-        }
+        if (x > VW) continue;
         const tw = Math.sin(baseTw + star[2]);
-        if (tw < -0.4) {
-          buckets[i] = -1;
-          continue;
-        }
+        if (tw < -0.4) continue;
         const twinkle = 0.35 + 0.65 * (tw * 0.5 + 0.5);
-        buckets[i] = Math.round(((twinkle - 0.35) / 0.65) * 7);
+        const b = Math.round(((twinkle - 0.35) / 0.65) * 7);
         xs[i] = Math.round(x);
         ys[i] = Math.round(star[1] * yFactor);
+        list[b * 90 + counts[b]++] = i;
       }
       for (let b = 0; b < 8; b++) {
         c.globalAlpha = starVisibility * (0.35 + 0.65 * (b / 7));
-        for (let i = 0; i < n; i++) {
-          if (buckets[i] !== b) continue;
+        const base = b * 90;
+        const cnt = counts[b];
+        for (let j = 0; j < cnt; j++) {
+          const i = list[base + j];
           c.fillRect(xs[i], ys[i], stars[i][3], stars[i][3]);
         }
       }
@@ -693,29 +703,62 @@ export class Renderer {
     const camOffset = Math.round(this.g.camX * spd);
     const H = VH + 48;
 
-    c.fillStyle = col;
-    // Columns that round to the same top merge into one wider rect — the
-    // painted pixels are identical to the per-column loop, but a band costs
-    // a fraction of the fillRect calls (the silhouette is piecewise-constant
-    // after rounding).
-    let runX = -20;
-    let runTop = -1;
-    for (let screenX = -20; screenX <= VW + 20; screenX++) {
-      const worldX = screenX + camOffset;
-      const wx = worldX * freq + seed;
-      let h =
-        Math.sin(wx) * 0.55 +
-        Math.sin(wx * 2.13 + 1.4) * 0.28 +
-        Math.sin(wx * 4.7 + 0.6) * 0.17;
-      if (sharpness > 0) h = 1 - Math.pow(1 - Math.abs(h), 1 + sharpness);
-      const top = Math.max(0, Math.round(horizon - amp * (h * 0.5 + 0.5)));
-      if (top !== runTop) {
-        if (runTop >= 0) c.fillRect(runX, runTop, screenX - runX, H - runTop);
-        runX = screenX;
-        runTop = top;
+    const off = this.bandOff;
+    let slot = -1;
+    for (let s = 0; s < 4; s++) {
+      const b = s * 6;
+      if (
+        off[b] === camOffset &&
+        off[b + 1] === horizon &&
+        off[b + 2] === amp &&
+        off[b + 3] === freq &&
+        off[b + 4] === sharpness &&
+        off[b + 5] === seed
+      ) {
+        slot = s;
+        break;
       }
     }
-    if (runTop >= 0) c.fillRect(runX, runTop, VW + 21 - runX, H - runTop);
+    if (slot < 0) {
+      slot = this.bandN++ & 3;
+      const b = slot * 6;
+      off[b] = camOffset;
+      off[b + 1] = horizon;
+      off[b + 2] = amp;
+      off[b + 3] = freq;
+      off[b + 4] = sharpness;
+      off[b + 5] = seed;
+      // Columns that round to the same top merge into one wider rect — the
+      // painted pixels are identical to the per-column loop, but a band costs
+      // a fraction of the fillRect calls (the silhouette is piecewise-constant
+      // after rounding).
+      const runs = this.bandRuns[slot];
+      runs.length = 0;
+      let runX = -20;
+      let runTop = -1;
+      for (let screenX = -20; screenX <= VW + 20; screenX++) {
+        const worldX = screenX + camOffset;
+        const wx = worldX * freq + seed;
+        let h =
+          Math.sin(wx) * 0.55 +
+          Math.sin(wx * 2.13 + 1.4) * 0.28 +
+          Math.sin(wx * 4.7 + 0.6) * 0.17;
+        if (sharpness > 0) h = 1 - Math.pow(1 - Math.abs(h), 1 + sharpness);
+        const top = Math.max(0, Math.round(horizon - amp * (h * 0.5 + 0.5)));
+        if (top !== runTop) {
+          if (runTop >= 0) runs.push(runX, runTop, screenX - runX);
+          runX = screenX;
+          runTop = top;
+        }
+      }
+      if (runTop >= 0) runs.push(runX, runTop, VW + 21 - runX);
+    }
+
+    c.fillStyle = col;
+    const runs = this.bandRuns[slot];
+    for (let i = 0; i < runs.length; i += 3) {
+      c.fillRect(runs[i], runs[i + 1], runs[i + 2], H - runs[i + 1]);
+    }
   }
 
   private getShadedLayerColors(Z: Zone, nightT: number, isEclipse: boolean) {
@@ -787,6 +830,7 @@ export class Renderer {
   // One biome's far band + landmark rows. alpha blends the layer over what is
   // already on screen (used to crossfade the old biome out / new one in).
   private drawParallaxLayer(Z: Zone, alpha: number, nightT: number, isEclipse: boolean) {
+    if (alpha <= 0.0019) return;
     const c = this.ctx;
     const bg = Z.bg;
     const colors = this.getShadedLayerColors(Z, nightT, isEclipse);
@@ -827,6 +871,7 @@ export class Renderer {
       c.fillStyle = '#caf0f8';
       for (let k = 0; k < 5; k++) {
         const shx = ((hash(k * 13.1) * (VW + 200) - this.g.camX * 0.1) % (VW + 200) + VW + 200) % (VW + 200) - 100;
+        if (shx >= VW || shx < -34) continue;
         const w2 = 14 + hash(k * 3.3) * 18;
         for (let yy = 0; yy < 90; yy += 3) {
           c.fillRect(Math.round(shx + yy * 0.22), yy, Math.round(w2 * (1 - yy / 110)), 2);
@@ -836,6 +881,7 @@ export class Renderer {
       // fish silhouettes
       for (let k = 0; k < 5; k++) {
         const fx = ((hash(k * 47.3) * (VW + 140) - this.g.camX * 0.16 + this.g.frame * 0.08) % (VW + 140) + VW + 140) % (VW + 140) - 70;
+        if (fx > VW + 3 || fx < -8) continue;
         const fy = 40 + hash(k * 9.1) * 70;
         c.fillStyle = colors.back;
         c.fillRect(Math.round(fx), Math.round(fy), 7, 3);
@@ -877,6 +923,7 @@ export class Renderer {
       // slow cloud puffs (far)
       for (let k = 0; k < 4; k++) {
         const cx3 = ((hash(k * 21.3) * (VW + 180) - this.g.camX * 0.1) % (VW + 180) + VW + 180) % (VW + 180) - 90;
+        if (cx3 >= VW || cx3 < -24) continue;
         const cy3 = 30 + hash(k * 5.5) * 40;
         c.fillStyle = colors.back;
         c.fillRect(Math.round(cx3), Math.round(cy3), 22, 6);
@@ -1841,18 +1888,21 @@ export class Renderer {
   private getPlatformCache(p: Platform, k: number, Z: Zone): HTMLCanvasElement {
     let byZone = this.platformCaches.get(k);
     if (!byZone) {
-      byZone = new WeakMap();
+      byZone = new Map();
       this.platformCaches.set(k, byZone);
     }
-    let cv = byZone.get(p);
-    if (cv) return cv;
+    const hit = byZone.get(p);
+    if (hit) {
+      hit.use = this.g.frame;
+      return hit.cv;
+    }
     const w = Math.max(1, Math.round(p.w) + 1);
     const pad = PLATFORM_CACHE_PAD;
     // Use the full depth so the sides reach the screen bottom with no gap.
     // GROUND_BOTTOM is VH+70, and p.y is typically 98-MAX_PLATFORM_Y, so this is at
     // most ~297px — fine for an offscreen canvas.
     const h = p.float ? 18 : Math.max(8, GROUND_BOTTOM - Math.round(p.y));
-    cv = document.createElement('canvas');
+    const cv = document.createElement('canvas');
     cv.width = w;
     cv.height = h + pad;
     const c = cv.getContext('2d')!;
@@ -2101,14 +2151,33 @@ export class Renderer {
       }
     }
 
-    byZone.set(p, cv);
+    byZone.set(p, { cv, use: this.g.frame });
+    this.platCacheN++;
+    this.prunePlatformCaches();
     return cv;
   }
 
-  /** Drop platform bakes from earlier biomes once a zone boundary passes. */
+  /** Keep the bake cache under its canvas cap, evicting the least-recently
+   *  used entries on a small per-call budget instead of dropping everything
+   *  at once at a zone boundary. */
   private prunePlatformCaches() {
-    for (const zi of this.platformCaches.keys()) {
-      if (zi !== this.platI && zi !== this.platNI) this.platformCaches.delete(zi);
+    let budget = PLAT_PRUNE_BUDGET;
+    while (this.platCacheN > PLAT_CACHE_CAP && budget-- > 0) {
+      let oldK = -1;
+      let oldP: Platform | null = null;
+      let oldUse = Infinity;
+      for (const [k, byZone] of this.platformCaches) {
+        for (const [p, e] of byZone) {
+          if (e.use < oldUse) {
+            oldUse = e.use;
+            oldP = p;
+            oldK = k;
+          }
+        }
+      }
+      if (!oldP) break;
+      this.platformCaches.get(oldK)!.delete(oldP);
+      this.platCacheN--;
     }
   }
 
@@ -2755,19 +2824,6 @@ export class Renderer {
       vx: this.g.vx,
     });
 
-    // Gold Bob Sparkles
-    if (skinId === 'gold_bob' && Math.random() < 0.3) {
-      this.particles.spawnP(
-        this.g.px + rnd(-2, 12),
-        this.g.py + rnd(0, 14),
-        rnd(-0.5, 0.5),
-        -rnd(0.2, 0.8),
-        12,
-        1,
-        '#fff3a3',
-      );
-    }
-
     c.restore();
     this.drawPowerUpEffects(c, cx, cy);
 
@@ -2832,9 +2888,7 @@ export class Renderer {
     if (this.g.mode !== 'online' || !this.g.opponentStates) return;
     const c = this.ctx;
     const cam = Math.round(this.g.camX);
-    if (this.oppSmooth.size > this.g.opponentStates.size + 4) {
-      for (const k of this.oppSmooth.keys()) if (!this.g.opponentStates.has(k)) this.oppSmooth.delete(k);
-    }
+    for (const k of this.oppSmooth.keys()) if (!this.g.opponentStates.has(k)) this.oppSmooth.delete(k);
     const now = Date.now();
     for (const opp of this.g.opponentStates.values()) {
       if (!opp.isAlive || opp.px === undefined || opp.py === undefined) continue;
