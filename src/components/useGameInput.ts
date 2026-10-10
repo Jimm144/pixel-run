@@ -21,6 +21,11 @@ const MOVE_RIGHT = ['ArrowRight', 'KeyD'];
 const MOVE_LEFT = ['ArrowLeft', 'KeyA'];
 const GAME_KEYS = JUMP.concat(DIVE, MOVE_RIGHT, MOVE_LEFT);
 
+function getPlayerForScheme(g: Game, scheme: string): number {
+  const idx = g.playerControls.indexOf(scheme);
+  return idx < g.localPlayers.length ? idx : -1;
+}
+
 export interface GameInputOptions {
   gameRef: RefObject<Game | null>;
   ui: UI;
@@ -225,16 +230,8 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
         e.preventDefault();
       }
       if (g.isLocalBattle) {
-        const getPlayerForScheme = (scheme: string, fallbackIdx: number): number => {
-          if (g.playerControls && Array.isArray(g.playerControls)) {
-            const idx = g.playerControls.indexOf(scheme);
-            if (idx !== -1) return idx;
-          }
-          return fallbackIdx;
-        };
-
         // WASD Scheme
-        const wasdIdx = getPlayerForScheme('wasd', 0);
+        const wasdIdx = getPlayerForScheme(g, 'wasd');
         if (code === 'KeyW') {
           if (!e.repeat) g.pressPlayerJump(wasdIdx);
         } else if (code === 'KeyS') {
@@ -247,7 +244,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
         }
 
         // Arrows Scheme
-        const arrIdx = getPlayerForScheme('arrows', 1);
+        const arrIdx = getPlayerForScheme(g, 'arrows');
         if (code === 'ArrowUp') {
           if (!e.repeat) g.pressPlayerJump(arrIdx);
         } else if (code === 'ArrowDown') {
@@ -260,7 +257,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
         }
 
         // IJKL Scheme
-        const ijklIdx = getPlayerForScheme('ijkl', 2);
+        const ijklIdx = getPlayerForScheme(g, 'ijkl');
         if (code === 'KeyI') {
           if (!e.repeat) g.pressPlayerJump(ijklIdx);
         } else if (code === 'KeyK') {
@@ -273,7 +270,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
         }
 
         // Numpad Scheme
-        const numIdx = getPlayerForScheme('numpad', 3);
+        const numIdx = getPlayerForScheme(g, 'numpad');
         if (code === 'Numpad8') {
           if (!e.repeat) g.pressPlayerJump(numIdx);
         } else if (code === 'Numpad5' || code === 'Numpad2') {
@@ -385,15 +382,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
     if (!g) return;
     const code = e.code;
     if (g.isLocalBattle) {
-      const getPlayerForScheme = (scheme: string, fallbackIdx: number): number => {
-        if (g.playerControls && Array.isArray(g.playerControls)) {
-          const idx = g.playerControls.indexOf(scheme);
-          if (idx !== -1) return idx;
-        }
-        return fallbackIdx;
-      };
-
-      const wasdIdx = getPlayerForScheme('wasd', 0);
+      const wasdIdx = getPlayerForScheme(g, 'wasd');
       if (code === 'KeyW') g.releasePlayerJump(wasdIdx);
       else if (code === 'KeyS') g.releasePlayerDive(wasdIdx);
       else if (code === 'KeyD' || code === 'KeyA') {
@@ -402,7 +391,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
         g.setPlayerMove(wasdIdx, keys?.has('KeyD') ? 1 : keys?.has('KeyA') ? -1 : 0);
       }
 
-      const arrIdx = getPlayerForScheme('arrows', 1);
+      const arrIdx = getPlayerForScheme(g, 'arrows');
       if (code === 'ArrowUp') g.releasePlayerJump(arrIdx);
       else if (code === 'ArrowDown') g.releasePlayerDive(arrIdx);
       else if (code === 'ArrowRight' || code === 'ArrowLeft') {
@@ -411,7 +400,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
         g.setPlayerMove(arrIdx, keys?.has('ArrowRight') ? 1 : keys?.has('ArrowLeft') ? -1 : 0);
       }
 
-      const ijklIdx = getPlayerForScheme('ijkl', 2);
+      const ijklIdx = getPlayerForScheme(g, 'ijkl');
       if (code === 'KeyI') g.releasePlayerJump(ijklIdx);
       else if (code === 'KeyK') g.releasePlayerDive(ijklIdx);
       else if (code === 'KeyL' || code === 'KeyJ') {
@@ -420,7 +409,7 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
         g.setPlayerMove(ijklIdx, keys?.has('KeyL') ? 1 : keys?.has('KeyJ') ? -1 : 0);
       }
 
-      const numIdx = getPlayerForScheme('numpad', 3);
+      const numIdx = getPlayerForScheme(g, 'numpad');
       if (code === 'Numpad8') g.releasePlayerJump(numIdx);
       else if (code === 'Numpad5' || code === 'Numpad2') g.releasePlayerDive(numIdx);
       else if (code === 'Numpad6' || code === 'Numpad4') {
@@ -542,19 +531,13 @@ export function useGameInput({ gameRef, ui, modalOpen, onStart, onPause, onResum
       if (typeof navigator !== 'undefined' && navigator.getGamepads) {
         const gamepads = navigator.getGamepads();
         let connectedCount = 0;
-        const getPlayerForScheme = (scheme: string, fallbackIdx: number): number => {
-          if (g.playerControls && Array.isArray(g.playerControls)) {
-            const idx = g.playerControls.indexOf(scheme);
-            if (idx !== -1) return idx;
-          }
-          return fallbackIdx;
-        };
 
         for (let i = 0; i < 4; i++) {
           const gp = gamepads[i];
           if (!gp || !gp.connected) continue;
           connectedCount++;
-          const pIdx = getPlayerForScheme(`gp${i}`, i);
+          const pIdx = getPlayerForScheme(g, `gp${i}`);
+          if (pIdx < 0) continue;
 
           const stickDown =
             (typeof gp.axes[1] === 'number' && gp.axes[1] > 0.38) ||

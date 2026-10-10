@@ -61,6 +61,13 @@ export class WorldGen {
     Object.assign(this, this.defaults());
   }
 
+  /** Keep future segments aligned with a translated world. */
+  shiftX(delta: number) {
+    this.genX += delta;
+    this.nextPowerUpX += delta;
+    for (const trigger of this.eventTriggers) trigger.x += delta;
+  }
+
   private defaults(): GenState {
     return {
       genX: -60,

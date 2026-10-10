@@ -568,7 +568,9 @@ export class Game implements GenHost, RenderHost {
     const p = this.localPlayers[idx];
     if (!p) return;
     p.jumpHeld = false;
-    p.jumpBuf = 0;
+    if (this.countdown <= 0 && p.padFlight <= 0) {
+      p.jumpBuf = 0;
+    }
   }
   pressPlayerDive(idx: number) {
     if (idx === 0) {
@@ -621,6 +623,8 @@ export class Game implements GenHost, RenderHost {
    *  position by the same delta keeps the player at the same screen column and
    *  the visible slice of already-generated level identical. */
   reanchorAfterResize(prevVW: number) {
+    // Online peers share world coordinates regardless of viewport size.
+    if (this.isMultiplayer) return;
     const delta = anchorX() - Math.round(prevVW * 0.28);
     if (delta === 0) return;
     this.px += delta;
@@ -630,10 +634,18 @@ export class Game implements GenHost, RenderHost {
     for (const p of this.platforms) p.x += delta;
     for (const s of this.springs) s.x += delta;
     for (const sp of this.spikes) sp.x += delta;
-    for (const e of this.enemies) e.x += delta;
+    for (const e of this.enemies) {
+      e.x += delta;
+      e.minX += delta;
+      e.maxX += delta;
+    }
     for (const u of this.powerups) u.x += delta;
-    for (const t of this.worldGen.eventTriggers) t.x += delta;
+    this.worldGen.shiftX(delta);
     for (const k of this.pickups) k.x += delta;
+    for (const player of this.localPlayers) player.px += delta;
+    for (const ghost of this.ghosts) ghost.x += delta;
+    this.particles.shiftX(delta);
+    this.texts.shiftX(delta);
   }
 
   /** HUD zoom (1 on desktop) — larger on phones where the canvas is scaled up. */
@@ -2473,7 +2485,7 @@ export class Game implements GenHost, RenderHost {
     /* jumping */
     const jumpScale = (p.jumpShoes && p.jumpShoes > 0) ? 1.18 : 1;
     const maxJumps = (p.tripleJump && p.tripleJump > 0) ? 3 : 2;
-    if (p.jumpBuf > 0) p.jumpBuf--;
+    if (p.jumpBuf > 0 && p.padFlight <= 0) p.jumpBuf--;
     if (p.diveBuf > 0) p.diveBuf--;
     if (p.coyote > 0) p.coyote--;
     if ((p.diveHeld || p.diveBuf > 0) && !p.onGround && !p.diving && p.vy > 0.5) {

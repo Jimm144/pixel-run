@@ -13,6 +13,10 @@ export class FloatTexts {
     this.texts.length = 0;
   }
 
+  shiftX(delta: number) {
+    for (const text of this.texts) text.x += delta;
+  }
+
   popText(x: number, y: number, text: string, col: string, scale = 1) {
     if (this.texts.length >= T_CAP) {
       const dropped = this.texts.shift();

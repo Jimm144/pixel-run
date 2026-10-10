@@ -9,6 +9,7 @@
     "build": "vite build && node scripts/bump-sw-version.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "test": "node --test scripts/test-regressions.mjs",
     "gen:assets": "node scripts/generate_assets.js"
   },
   "packageManager": "npm@11.12.1",

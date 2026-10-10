@@ -17,6 +17,10 @@ export class ParticleSystem {
     this.alive.length = 0;
   }
 
+  shiftX(delta: number) {
+    for (const particle of this.alive) particle.x += delta;
+  }
+
   spawnP(
     x: number,
     y: number,

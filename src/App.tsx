@@ -617,7 +617,7 @@ export function App() {
     const g = gameRef.current;
     if (!g) return;
     if (g.mode !== 'solo') return;
-    if (g.phase !== 'playing' && g.phase !== 'dead') return;
+    if (g.phase !== 'playing' && g.phase !== 'paused' && g.phase !== 'dead') return;
     const s = g.stats;
     if (s.score <= 0 && s.meters <= 0) return;
     runFinalizedRef.current = true;
